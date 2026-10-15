@@ -101,10 +101,19 @@ h2 { margin-bottom: 5px; font-size: 20px; font-weight: 700; letter-spacing: -.45
 .form-preview-items th { padding: 8px 9px; }
 .form-preview-note { margin: 0 17px 15px; color: #9ba39e; font-size: 9px; }
 .user-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
-.user-form-card { display: grid; align-content: start; justify-items: start; gap: 14px; min-height: 205px; padding: 23px; border: 1px solid var(--line); border-radius: 10px; background: white; }
-.user-form-card h3 { margin: 0; font-size: 15px; font-weight: 700; }
-.user-form-card p { min-height: 38px; margin: 0; color: #78847b; font-size: 11px; line-height: 1.7; }
-.open-form-button { display: inline-flex; align-items: center; gap: 7px; margin-top: auto; }
+.outgoing-group { overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: white; }
+.outgoing-group > summary { display: flex; min-height: 48px; align-items: center; justify-content: space-between; padding: 0 17px; color: var(--green-dark); cursor: pointer; font-size: 12px; font-weight: 700; list-style: none; }
+.outgoing-group > summary::-webkit-details-marker { display: none; }
+.outgoing-group > summary::after { content: "⌄"; color: #78847b; font-size: 15px; transition: transform .2s; }
+.outgoing-group[open] > summary::after { transform: rotate(180deg); }
+.outgoing-group > summary:focus-visible { outline: 2px solid var(--green); outline-offset: -3px; }
+.outgoing-group .user-form-grid { padding: 0 16px 16px; }
+.user-form-card { display: grid; grid-template-columns: auto 1fr; align-content: start; align-items: center; gap: 8px 13px; min-height: 155px; padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: white; color: var(--ink); cursor: pointer; text-align: left; transition: border-color .18s, box-shadow .18s, transform .18s; }
+.user-form-card:hover { transform: translateY(-2px); border-color: #b9d0c2; box-shadow: 0 5px 16px rgb(37 50 46 / 7%); }
+.user-form-card:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.user-form-card .form-name { font-size: 14px; font-weight: 700; }
+.user-form-card .form-description { grid-column: 1 / -1; min-height: 38px; color: #78847b; font-size: 11px; line-height: 1.7; }
+.open-form-button { display: inline-flex; grid-column: 1 / -1; align-items: center; gap: 7px; color: var(--green-dark); font-size: 11px; font-weight: 700; }
 .open-form-button span { font-size: 15px; }
 .setup-details { margin-top: 48px; padding-top: 18px; border-top: 1px solid var(--line); }
 .setup-details > summary { width: fit-content; color: #77837a; cursor: pointer; font-size: 11px; font-weight: 600; list-style-position: inside; }

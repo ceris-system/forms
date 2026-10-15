@@ -40,13 +40,15 @@ function getLocalDate() {
 }
 
 function makeUserFormButton(form) {
-  const card = document.createElement("article");
+  const card = document.createElement("button");
   card.className = "user-form-card";
+  card.type = "button";
+  card.dataset.openForm = form.id;
   card.innerHTML = `
     <span class="form-symbol" aria-hidden="true">${form.symbol}</span>
-    <h3>${form.name}</h3>
-    <p>${form.description}</p>
-    <button class="button button-primary open-form-button" type="button" data-open-form="${form.id}">Open form <span aria-hidden="true">→</span></button>`;
+    <span class="form-name">${form.name}</span>
+    <span class="form-description">${form.description}</span>
+    <span class="open-form-button">Open form <span aria-hidden="true">→</span></span>`;
   return card;
 }
 
