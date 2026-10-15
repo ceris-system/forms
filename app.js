@@ -126,7 +126,7 @@ function makeRequestItemRow(number, product = {}) {
     input.type = field === "Expiration Date" ? "date" : ["Onhand", "Total Onhand", "Cost", "SRP", "Transfer Qty"].includes(field) ? "number" : "text";
     if (["Cost", "SRP"].includes(field)) input.step = "0.01";
     if (["Onhand", "Total Onhand", "Transfer Qty"].includes(field)) input.step = "any";
-    if (!["Transfer Qty", "Remarks"].includes(field)) input.readOnly = true;
+    if (!["Transfer Qty", "Remarks"].includes(field)) input.disabled = true;
     input.setAttribute("aria-label", `Item ${number} ${field}`);
     input.placeholder = field;
     input.value = product[field] || "";

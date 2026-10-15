@@ -31,6 +31,9 @@ button, input { font: inherit; }
 .nav-link { display: flex; min-height: 44px; align-items: center; gap: 12px; padding: 0 13px; border-radius: 8px; color: #737d77; font-weight: 500; text-decoration: none; transition: background .18s, color .18s; }
 .nav-link:hover, .nav-link.active { background: #eff5f1; color: var(--green-dark); }
 .nav-link.active { font-weight: 700; }
+.nav-link-disabled { width: 100%; border: 0; background: transparent; font: inherit; text-align: left; opacity: .7; }
+.nav-link-disabled:disabled { cursor: not-allowed; }
+.nav-link-disabled small { margin-left: auto; color: #9aa19c; font-size: 8px; font-weight: 700; letter-spacing: .5px; }
 .nav-icon { width: 19px; color: #8d9b92; font-size: 19px; text-align: center; }
 .active .nav-icon { color: var(--green); }
 .sidebar-bottom { display: flex; align-items: center; gap: 10px; margin-top: auto; padding: 15px 4px 3px; border-top: 1px solid var(--line); }
@@ -185,7 +188,7 @@ h2 { margin-bottom: 5px; font-size: 20px; font-weight: 700; letter-spacing: -.45
 .request-items-table th:last-child { width: 30px; }
 .request-items-table td { padding: 3px; border: 0; }
 .request-items-table input { width: 100%; min-width: 0; height: 30px; padding: 0 4px; border: 0; border-radius: 0; background: transparent; color: #222; font-size: 8px; }
-.request-items-table input:read-only { background: #f8f8f6; color: #656b67; cursor: default; }
+.request-items-table input:disabled { background: #f8f8f6; color: #656b67; cursor: not-allowed; opacity: 1; }
 .request-items-table input::placeholder { color: #b7b7b7; }
 .add-product-button { padding: 0 12px; background: #171719; color: white; font-size: 9px; }
 .add-product-button:hover { background: #363638; }
