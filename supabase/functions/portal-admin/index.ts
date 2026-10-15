@@ -228,25 +228,15 @@ Deno.serve(async (request: Request) => {
       const userId = typeof body.user_id === "string" ? body.user_id : "";
       if (!/^[0-9a-f-]{36}$/i.test(userId)) return respond({ error: "Choose a valid user account." }, 400);
       const { data: account, error: accountError } = await adminClient
-        .from("login_usernames").select("user_id, username").eq("user_id", userId).maybeSingle();
+        .from("login_usernames").select("user_id, username, department").eq("user_id", userId).maybeSingle();
       if (accountError) throw accountError;
       if (!account) return respond({ error: "That account has no portal username." }, 404);
-
-      const department = typeof body.department === "string" ? body.department.trim() : "";
-      if (!department || department.length > 100) {
-        return respond({ error: "Enter the user's department (up to 100 characters)." }, 400);
-      }
-      const { error: departmentError } = await adminClient
-        .from("login_usernames")
-        .update({ department })
-        .eq("user_id", userId);
-      if (departmentError) throw departmentError;
 
       const outputTab = typeof body.output_tab === "string" ? body.output_tab.trim() : "";
       if (!outputTab) {
         const { error } = await adminClient.from("mw_sheet_assignments").delete().eq("user_id", userId);
         if (error) throw error;
-        return respond({ ok: true, department, output_tab: "" });
+        return respond({ ok: true, department: account.department || "", output_tab: "" });
       }
       const tab = validOutputTab(outputTab);
       const { error } = await adminClient.from("mw_sheet_assignments").upsert({
@@ -257,7 +247,7 @@ Deno.serve(async (request: Request) => {
       }, { onConflict: "user_id" });
       if (error?.code === "23505") return respond({ error: "That output tab is already assigned to another user." }, 409);
       if (error) throw error;
-      return respond({ ok: true, department, output_tab: tab });
+      return respond({ ok: true, department: account.department || "", output_tab: tab });
     }
 
     return respond({ error: "Unknown administration action." }, 400);

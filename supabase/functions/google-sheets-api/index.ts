@@ -206,55 +206,49 @@ async function getPortalUsername(
   return profile.username;
 }
 
-async function appendSubmission(
+async function saveSubmissionDirect(
   adminClient: ReturnType<typeof createClient>,
-  userId: string,
   submittedBy: string,
   spreadsheetId: string,
   assignedOutputTab: string,
   value: unknown,
-): Promise<void> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("The saved request details are missing.");
+): Promise<string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("The submitted request details are missing.");
   const submission = value as Record<string, unknown>;
-  const requestId = requiredText(submission.request_id, "Supabase request ID");
-  if (!/^[0-9a-f-]{36}$/i.test(requestId)) throw new Error("The Supabase request ID is invalid.");
-  const { data: request, error: requestError } = await adminClient
-    .from("requests")
-    .select("id, user_id, form_type, request_number, outgoing_department, incoming_department, supplier, created_at")
-    .eq("id", requestId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (requestError) throw requestError;
-  if (!request) throw new Error("The saved request could not be found for your account.");
-  const formType = requiredText(request.form_type, "Form type");
-  if (!["release-request", "transfer", "pull-out", "purchase-order"].includes(formType)) {
+  const formType = requiredText(submission.form_type, "Form type");
+  const prefix = requestPrefixes[formType];
+  if (!prefix) {
     throw new Error("Unknown request form type.");
   }
   const outputTab = formType === "release-request"
     ? "TRANSFER"
     : requiredText(assignedOutputTab, "Assigned output tab");
-  const requestNumber = requiredText(request.request_number, "Request number");
-  if (!/^(RRF|TRF|PUF|POF)-\d{7,}$/.test(requestNumber)) throw new Error("The request number is invalid.");
-  const sequenceNumber = Number(requestNumber.match(/-(\d+)$/)?.[1]);
-  if (!Number.isSafeInteger(sequenceNumber)) throw new Error("The request sequence number is invalid.");
-  const outgoing = requiredText(request.outgoing_department, "Outgoing department");
-  const incoming = requiredText(request.incoming_department, "Incoming department");
-  const supplier = typeof request.supplier === "string" ? request.supplier.trim() : "";
+  const outgoing = requiredText(submission.outgoing_department, "Outgoing department");
+  const incoming = requiredText(submission.incoming_department, "Incoming department");
+  const supplier = typeof submission.supplier === "string" ? submission.supplier.trim() : "";
   if (formType === "purchase-order" && !supplier) throw new Error("A supplier is required for purchase orders.");
-
-  const { data: savedItems, error: itemsError } = await adminClient
-    .from("request_items")
-    .select("sku_code, product_description, uom, expiration_date, qty_onhand, total_qty_onhand, cost, srp, transfer_qty, remarks")
-    .eq("request_id", requestId)
-    .order("id");
-  if (itemsError) throw itemsError;
-  if (!savedItems?.length) throw new Error("The saved request has no item rows.");
-  if (savedItems.length > 200) throw new Error("A request cannot have more than 200 items.");
-  const items = savedItems.map((item: Record<string, unknown>) => normalizeSavedItem(item));
   const requestDate = requiredText(submission.request_date, "Request date");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(requestDate)) throw new Error("The request date is invalid.");
+  if (!Array.isArray(submission.items) || !submission.items.length || submission.items.length > 200) {
+    throw new Error("A request must contain between 1 and 200 items.");
+  }
+  const items = submission.items.map(item => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) {
+      throw new Error("A submitted request item is invalid.");
+    }
+    return normalizeSavedItem(item as Record<string, unknown>);
+  });
 
   const actualOutputTab = await ensureOutputTab(spreadsheetId, outputTab);
+  const { data: sequenceNumber, error: sequenceError } = await adminClient.rpc("allocate_request_number", {
+    p_form_type: formType,
+  });
+  if (sequenceError) throw sequenceError;
+  const allocatedSequence = Number(sequenceNumber);
+  if (!Number.isSafeInteger(allocatedSequence) || allocatedSequence < 1) {
+    throw new Error("The request sequence allocator returned an invalid number.");
+  }
+  const requestNumber = `${prefix}-${String(allocatedSequence).padStart(7, "0")}`;
   let current = await readValues(spreadsheetId, actualOutputTab, "A:S");
   if (current.length) {
     let existingHeaders = current[0].map(value => String(value ?? ""));
@@ -302,12 +296,7 @@ async function appendSubmission(
       });
     }
     const existingCount = current.slice(1).filter(row => String(row[0] ?? "") === requestNumber).length;
-    if (existingCount) {
-      if (existingCount !== items.length) {
-        throw new Error("A partial copy of this request already exists. Contact your administrator before retrying.");
-      }
-      return;
-    }
+    if (existingCount) throw new Error("The request number already exists in the destination sheet. Contact your administrator before retrying.");
   } else {
     await googleRequest(`spreadsheets/${spreadsheetId}/values/${range(actualOutputTab, "A1:R1")}?valueInputOption=RAW`, {
       method: "PUT",
@@ -318,14 +307,15 @@ async function appendSubmission(
   const rows = items.map(item => [
     requestNumber, formType, requestDate, outgoing, incoming, supplier, submittedBy,
     item.sku_code, item.product_description, item.uom, item.expiration_date,
-    item.qty_onhand, item.total_qty_onhand, item.cost, item.srp, item.transfer_qty,
-    item.remarks, sequenceNumber,
+    item.qty_onhand, item.total_qty_onhand, item.cost, item.srp, item.transfer_qty, item.remarks,
+    allocatedSequence,
   ]);
   const tab = safeTabName(actualOutputTab);
   await googleRequest(
     `spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tab)}!A:R:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
     { method: "POST", body: JSON.stringify({ values: rows }) },
   );
+  return requestNumber;
 }
 
 Deno.serve(async (request: Request) => {
@@ -390,15 +380,14 @@ Deno.serve(async (request: Request) => {
       return respond({ sequence_number: sequenceNumber });
     }
     if (body.action === "submit") {
-      await appendSubmission(
+      const requestNumber = await saveSubmissionDirect(
         adminClient,
-        authData.user.id,
         await getPortalUsername(adminClient, authData.user.id),
         settings.spreadsheet_id,
         assignment?.output_tab || "",
         body.submission,
       );
-      return respond({ ok: true });
+      return respond({ ok: true, request_number: requestNumber });
     }
     return respond({ error: "Unknown spreadsheet action." }, 400);
   } catch (error) {

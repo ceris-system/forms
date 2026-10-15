@@ -142,6 +142,7 @@ h2 { margin-bottom: 5px; font-size: 20px; font-weight: 700; letter-spacing: -.45
 .assignment-row { display: grid; grid-template-columns: minmax(100px, .7fr) minmax(150px, 1fr) minmax(180px, 1fr) auto; align-items: center; gap: 12px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 7px; background: white; }
 .assignment-row strong { font-size: 11px; }
 .assignment-row input { width: 100%; min-width: 0; height: 36px; padding: 0 9px; border: 1px solid #e6e9e5; border-radius: 6px; color: #35423b; font-size: 11px; }
+.assignment-department { color: #67736b; font-size: 10px; }
 .assignment-row button { min-height: 36px; }
 .page-footer { align-items: flex-start; }
 .page-footer #save-status { text-align: right; }

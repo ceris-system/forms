@@ -28,7 +28,6 @@ let supabaseClient = null;
 let currentSession = null;
 let currentUserProfile = { username: "", department: "", status: "active", mustChangePassword: false };
 let authSubscription = null;
-let pendingSheetSync = null;
 let adminAccounts = [];
 let accountAssignments = new Map();
 
@@ -205,7 +204,9 @@ async function loadSequencePreview(formType, outgoingDepartment) {
       || requestDialog.dataset.formType !== formType
       || requestDialog.dataset.sequenceRequest !== String(requestId)
       || outgoing.value !== outgoingDepartment) return;
-    number.textContent = String(result.sequence_number).padStart(7, "0");
+    const prefix = FORM_TYPES.find((form) => form.id === formType)?.prefix;
+    if (!prefix) throw new Error("The selected form has no request number prefix.");
+    number.textContent = `${prefix}-${String(result.sequence_number).padStart(7, "0")}`;
   } catch (error) {
     console.error("Unable to preview the next request sequence.", error);
     if (requestDialog.open
@@ -498,12 +499,9 @@ function renderAssignments() {
     row.className = "assignment-row";
     const username = document.createElement("strong");
     username.textContent = `${account.username} · ${account.status || "active"}`;
-    const departmentInput = document.createElement("input");
-    departmentInput.type = "text";
-    departmentInput.maxLength = 100;
-    departmentInput.placeholder = "User department";
-    departmentInput.value = account.department || "";
-    departmentInput.setAttribute("aria-label", `Department for ${account.username}`);
+    const department = document.createElement("span");
+    department.className = "assignment-department";
+    department.textContent = account.department || "Department not set";
     const input = document.createElement("input");
     input.type = "text";
     input.maxLength = 100;
@@ -516,33 +514,27 @@ function renderAssignments() {
     button.textContent = "Save user";
     button.addEventListener("click", async () => {
       button.disabled = true;
-      document.querySelector("#admin-status").textContent = `Saving department and tab for ${account.username}…`;
+      document.querySelector("#admin-status").textContent = `Saving output tab for ${account.username}…`;
       try {
         const result = await callPortalAdmin({
           action: "save_assignment",
           user_id: account.user_id,
-          department: departmentInput.value.trim(),
           output_tab: input.value.trim(),
         });
-        account.department = result.department;
-        if (currentSession?.user.id === account.user_id) {
-          currentUserProfile.department = result.department;
-          document.querySelector("#account-role").textContent = result.department || "Signed-in user";
-        }
         if (result.output_tab) accountAssignments.set(account.user_id, result.output_tab);
         else accountAssignments.delete(account.user_id);
         username.textContent = `${account.username} · ${account.status || "active"}`;
         document.querySelector("#admin-status").textContent = result.output_tab
-          ? `${account.username}'s department and output tab "${result.output_tab}" are saved.`
-          : `${account.username}'s department is saved; no output tab is assigned.`;
+          ? `${account.username}'s output tab "${result.output_tab}" is saved.`
+          : `${account.username}'s output tab assignment was removed.`;
       } catch (error) {
-        console.error("Unable to save a user sheet assignment.", error);
-        document.querySelector("#admin-status").textContent = `Could not save ${account.username}'s department and tab: ${error.message || "Request failed."}`;
+        console.error("Unable to save a user's output tab.", error);
+        document.querySelector("#admin-status").textContent = `Could not save ${account.username}'s output tab: ${error.message || "Request failed."}`;
       } finally {
         button.disabled = false;
       }
     });
-    row.append(username, departmentInput, input, button);
+    row.append(username, department, input, button);
     list.append(row);
   }
 }
@@ -741,58 +733,25 @@ async function submitRequest(event) {
     return;
   }
   submitButton.disabled = true;
-  document.querySelector("#retry-sheet-sync").hidden = true;
-  setRequestNotice("Submitting request…");
+  setRequestNotice("Submitting request directly to Google Sheets…");
   try {
-    const { data, error } = await supabaseClient.rpc("submit_request", {
-      p_form_type: formType,
-      p_outgoing_department: outgoingDepartment.value.trim(),
-      p_incoming_department: incomingDepartment.value.trim(),
-      p_supplier: supplier || null,
-      p_items: items,
-    });
-    if (error) throw error;
-    const result = Array.isArray(data) ? data[0] : data;
-    if (!result?.request_number) throw new Error("The database saved the request but did not return its request number.");
-    const sequenceMatch = String(result.request_number).match(/-(\d+)$/);
-    requestFormBody.querySelector(".request-number").textContent = sequenceMatch?.[1] || result.request_number;
-    pendingSheetSync = {
-      request_id: result.request_id,
-      request_number: result.request_number,
+    const result = await requestSheetData("submit", {
       form_type: formType,
       request_date: getLocalDate(),
       outgoing_department: outgoingDepartment.value.trim(),
       incoming_department: incomingDepartment.value.trim(),
-      supplier,
+      supplier: supplier || null,
       items,
-    };
-    await syncPendingSheetSubmission();
+    });
+    if (!result?.request_number) throw new Error("Google Sheets did not return the saved request number.");
+    requestFormBody.querySelector(".request-number").textContent = result.request_number;
+    setRequestNotice(`Request ${result.request_number} was saved to Google Sheets.`);
   } catch (error) {
     console.error("Unable to submit request.", error);
-    const errorMessage = error?.code === "PGRST202"
-      ? "The database is missing the latest submit_request function. Run migration 202610150005_assign_request_numbers_on_submit.sql in Supabase, then try again."
-      : error.message || "Supabase returned an unexpected error.";
-    if (pendingSheetSync) {
-      setRequestNotice(`Request ${pendingSheetSync.request_number} is saved in Supabase, but its Google Sheets copy failed: ${errorMessage}`);
-      document.querySelector("#retry-sheet-sync").hidden = false;
-    } else {
-      setRequestNotice(`Request was not submitted: ${errorMessage}`);
-    }
+    setRequestNotice(`Request was not saved to Google Sheets: ${error.message || "Request failed."}`);
   } finally {
-    submitButton.disabled = Boolean(pendingSheetSync);
+    submitButton.disabled = false;
   }
-}
-
-async function syncPendingSheetSubmission() {
-  if (!pendingSheetSync || !currentSession || !supabaseClient) throw new Error("Sign in again before syncing the request to Google Sheets.");
-  const { data, error } = await supabaseClient.auth.getSession();
-  if (error) throw error;
-  if (!data.session?.access_token) throw new Error("Your sign-in session expired. Sign in again before syncing to Google Sheets.");
-  await requestSheetData("submit", pendingSheetSync);
-  setRequestNotice(`Request ${pendingSheetSync.request_number} saved in Supabase and copied to Google Sheets.`);
-  document.querySelector("#retry-sheet-sync").hidden = true;
-  pendingSheetSync = null;
-  document.querySelector(".submit-request-button").disabled = false;
 }
 
 renderUserForms();
@@ -816,18 +775,6 @@ document.querySelector("#reset-request-history").addEventListener("click", async
     console.error("Unable to reset request history.", error);
     document.querySelector("#admin-status").textContent =
       `Could not reset request history: ${error.message || "Request failed."}`;
-  } finally {
-    button.disabled = false;
-  }
-});
-document.querySelector("#retry-sheet-sync").addEventListener("click", async (event) => {
-  const button = event.currentTarget;
-  button.disabled = true;
-  try {
-    await syncPendingSheetSubmission();
-  } catch (error) {
-    console.error("Unable to retry Google Sheets sync.", error);
-    setRequestNotice(`Request ${pendingSheetSync?.request_number || ""} is still saved in Supabase, but Google Sheets sync failed: ${error.message}`);
   } finally {
     button.disabled = false;
   }
