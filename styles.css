@@ -54,6 +54,9 @@ button, input { font: inherit; }
 .button:active { transform: translateY(1px); }
 .button-primary { padding: 0 14px; background: var(--green); color: white; }
 .button-primary:hover { background: var(--green-dark); }
+.button-danger { padding: 0 14px; background: #a3443c; color: white; }
+.button-danger:hover { background: #84352f; }
+.button:disabled { cursor: not-allowed; opacity: .6; }
 .save-button span { padding-left: 7px; font-size: 15px; }
 .view-forms-button { display: inline-flex; align-items: center; margin-top: 15px; text-decoration: none; }
 .view-forms-button span { padding-left: 8px; }

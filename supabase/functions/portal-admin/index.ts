@@ -110,6 +110,16 @@ Deno.serve(async (request: Request) => {
     }
     if (!admin) return respond({ error: "Master Admin access is required." }, 403);
 
+    if (body.action === "reset_request_history") {
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: `Bearer ${token}` } },
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+      const { data: deletedRequests, error } = await userClient.rpc("reset_request_history");
+      if (error) throw error;
+      return respond({ ok: true, deleted_requests: Number(deletedRequests) });
+    }
+
     if (body.action === "state") {
       const [settingsResult, usersResult, assignmentsResult] = await Promise.all([
         adminClient.from("mw_google_settings")

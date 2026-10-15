@@ -799,6 +799,27 @@ renderUserForms();
 setActiveNavigation();
 configureSupabase(buildSettings());
 document.querySelector("#save-workbook").addEventListener("click", saveWorkbook);
+document.querySelector("#reset-request-history").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const confirmation = window.prompt(
+    "This permanently deletes all saved requests and their items from Supabase and resets every form sequence to 1. Type RESET to confirm.",
+  );
+  if (confirmation !== "RESET") return;
+
+  button.disabled = true;
+  document.querySelector("#admin-status").textContent = "Deleting request history and resetting sequences…";
+  try {
+    const result = await callPortalAdmin({ action: "reset_request_history" });
+    document.querySelector("#admin-status").textContent =
+      `Deleted ${result.deleted_requests} saved request(s). All form sequences now restart at 1.`;
+  } catch (error) {
+    console.error("Unable to reset request history.", error);
+    document.querySelector("#admin-status").textContent =
+      `Could not reset request history: ${error.message || "Request failed."}`;
+  } finally {
+    button.disabled = false;
+  }
+});
 document.querySelector("#retry-sheet-sync").addEventListener("click", async (event) => {
   const button = event.currentTarget;
   button.disabled = true;
