@@ -177,7 +177,7 @@ function numberOrBlank(value: unknown): string | number {
   return number;
 }
 
-function normalizeSavedItem(item: Record<string, unknown>): Record<string, unknown> {
+function normalizeSubmittedItem(item: Record<string, unknown>): Record<string, unknown> {
   return {
     sku_code: requiredText(item.sku_code, "SKU code"),
     product_description: requiredText(item.product_description, "Product description"),
@@ -236,24 +236,15 @@ async function saveSubmissionDirect(
     if (!item || typeof item !== "object" || Array.isArray(item)) {
       throw new Error("A submitted request item is invalid.");
     }
-    return normalizeSavedItem(item as Record<string, unknown>);
+    return normalizeSubmittedItem(item as Record<string, unknown>);
   });
 
   const actualOutputTab = await ensureOutputTab(spreadsheetId, outputTab);
-  const { data: sequenceNumber, error: sequenceError } = await adminClient.rpc("allocate_request_number", {
-    p_form_type: formType,
-  });
-  if (sequenceError) throw sequenceError;
-  const allocatedSequence = Number(sequenceNumber);
-  if (!Number.isSafeInteger(allocatedSequence) || allocatedSequence < 1) {
-    throw new Error("The request sequence allocator returned an invalid number.");
-  }
-  const requestNumber = `${prefix}-${String(allocatedSequence).padStart(7, "0")}`;
   let current = await readValues(spreadsheetId, actualOutputTab, "A:S");
   if (current.length) {
     let existingHeaders = current[0].map(value => String(value ?? ""));
     if (requestHeaders.slice(0, 17).some((header, index) => existingHeaders[index] !== header)) {
-      throw new Error(`The "${actualOutputTab}" tab already has different columns from the portal's request format. The request is saved in the portal but was not copied to Sheets.`);
+      throw new Error(`The "${actualOutputTab}" tab has different columns from the request format. No request data was saved.`);
     }
     if (existingHeaders[17] === "Supabase Request ID") {
       await googleRequest(`spreadsheets/${spreadsheetId}/values/${range(actualOutputTab, "R:S")}:clear`, {
@@ -277,10 +268,10 @@ async function saveSubmissionDirect(
       existingHeaders = current[0].map(value => String(value ?? ""));
     }
     if (existingHeaders[17] && existingHeaders[17] !== requestHeaders[17]) {
-      throw new Error(`The "${actualOutputTab}" tab already has different columns from the portal's request format. The request is saved in the portal but was not copied to Sheets.`);
+      throw new Error(`The "${actualOutputTab}" tab has different columns from the request format. No request data was saved.`);
     }
     if (existingHeaders[18]) {
-      throw new Error(`The "${actualOutputTab}" tab already has different columns from the portal's request format. The request is saved in the portal but was not copied to Sheets.`);
+      throw new Error(`The "${actualOutputTab}" tab has extra columns after Sequence Number. No request data was saved.`);
     }
     if (!existingHeaders[17]) {
       const sequenceColumn = [
@@ -295,8 +286,6 @@ async function saveSubmissionDirect(
         body: JSON.stringify({ values: sequenceColumn }),
       });
     }
-    const existingCount = current.slice(1).filter(row => String(row[0] ?? "") === requestNumber).length;
-    if (existingCount) throw new Error("The request number already exists in the destination sheet. Contact your administrator before retrying.");
   } else {
     await googleRequest(`spreadsheets/${spreadsheetId}/values/${range(actualOutputTab, "A1:R1")}?valueInputOption=RAW`, {
       method: "PUT",
@@ -304,6 +293,18 @@ async function saveSubmissionDirect(
     });
   }
 
+  const { data: sequenceNumber, error: sequenceError } = await adminClient.rpc("allocate_request_number", {
+    p_form_type: formType,
+  });
+  if (sequenceError) throw sequenceError;
+  const allocatedSequence = Number(sequenceNumber);
+  if (!Number.isSafeInteger(allocatedSequence) || allocatedSequence < 1) {
+    throw new Error("The request sequence allocator returned an invalid number.");
+  }
+  const requestNumber = `${prefix}-${String(allocatedSequence).padStart(7, "0")}`;
+  if (current.slice(1).some(row => String(row[0] ?? "") === requestNumber)) {
+    throw new Error("The request number already exists in the destination sheet. Clear the sheet or reset the sequence before retrying.");
+  }
   const rows = items.map(item => [
     requestNumber, formType, requestDate, outgoing, incoming, supplier, submittedBy,
     item.sku_code, item.product_description, item.uom, item.expiration_date,

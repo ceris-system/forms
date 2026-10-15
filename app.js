@@ -689,7 +689,7 @@ async function submitRequest(event) {
   event.preventDefault();
   const submitButton = document.querySelector(".submit-request-button");
   if (!currentSession || !supabaseClient) {
-    setRequestNotice("You must be signed in to Supabase to submit a request.");
+    setRequestNotice("You must be signed in to submit a request.");
     return;
   }
   const items = [...requestFormBody.querySelectorAll(".request-item-row")].map((row) => {
@@ -761,16 +761,16 @@ document.querySelector("#save-workbook").addEventListener("click", saveWorkbook)
 document.querySelector("#reset-request-history").addEventListener("click", async (event) => {
   const button = event.currentTarget;
   const confirmation = window.prompt(
-    "This permanently deletes all saved requests and their items from Supabase and resets every form sequence to 1. Type RESET to confirm.",
+    "This permanently deletes legacy requests and their items from Supabase and resets every form sequence to 1. It does not change Google Sheets or user accounts. Type RESET to confirm.",
   );
   if (confirmation !== "RESET") return;
 
   button.disabled = true;
-  document.querySelector("#admin-status").textContent = "Deleting request history and resetting sequences…";
+  document.querySelector("#admin-status").textContent = "Deleting legacy requests and resetting sequences…";
   try {
     const result = await callPortalAdmin({ action: "reset_request_history" });
     document.querySelector("#admin-status").textContent =
-      `Deleted ${result.deleted_requests} saved request(s). All form sequences now restart at 1.`;
+      `Deleted ${result.deleted_requests} legacy request(s). All form sequences now restart at 1.`;
   } catch (error) {
     console.error("Unable to reset request history.", error);
     document.querySelector("#admin-status").textContent =

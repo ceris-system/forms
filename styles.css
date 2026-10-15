@@ -336,7 +336,7 @@ td { padding: 10px 12px; border-top: 1px solid #f0f1ef; color: #536057; font-siz
   .user-form-grid { grid-template-columns: 1fr; }
   .setup-details { margin-top: 32px; }
   .assignment-row { grid-template-columns: 1fr auto; }
-  .assignment-row strong { grid-column: 1 / -1; }
+  .assignment-row strong, .assignment-department { grid-column: 1 / -1; }
   .page-footer #save-status { text-align: left; }
   .request-dialog { padding: 8px; }
   .request-sheet-top { grid-template-columns: 1fr; gap: 10px; padding: 12px 0 16px; }
