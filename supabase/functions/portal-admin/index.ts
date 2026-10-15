@@ -79,6 +79,16 @@ Deno.serve(async (request: Request) => {
     }
 
     if (body.action === "status") return respond({ is_master_admin: Boolean(admin) });
+    if (body.action === "profile") {
+      const { data: profile, error } = await adminClient
+        .from("login_usernames")
+        .select("username, department, status")
+        .eq("user_id", authData.user.id)
+        .maybeSingle();
+      if (error) throw error;
+      if (!profile) return respond({ error: "Your account profile could not be found." }, 404);
+      return respond(profile);
+    }
     if (body.action === "complete_password_change") {
       const password = typeof body.password === "string" ? body.password : "";
       if (password.length < 8 || password.length > 256) {

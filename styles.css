@@ -185,6 +185,7 @@ h2 { margin-bottom: 5px; font-size: 20px; font-weight: 700; letter-spacing: -.45
 .request-items-table th:last-child { width: 30px; }
 .request-items-table td { padding: 3px; border: 0; }
 .request-items-table input { width: 100%; min-width: 0; height: 30px; padding: 0 4px; border: 0; border-radius: 0; background: transparent; color: #222; font-size: 8px; }
+.request-items-table input:read-only { background: #f8f8f6; color: #656b67; cursor: default; }
 .request-items-table input::placeholder { color: #b7b7b7; }
 .add-product-button { padding: 0 12px; background: #171719; color: white; font-size: 9px; }
 .add-product-button:hover { background: #363638; }

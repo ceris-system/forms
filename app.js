@@ -126,6 +126,7 @@ function makeRequestItemRow(number, product = {}) {
     input.type = field === "Expiration Date" ? "date" : ["Onhand", "Total Onhand", "Cost", "SRP", "Transfer Qty"].includes(field) ? "number" : "text";
     if (["Cost", "SRP"].includes(field)) input.step = "0.01";
     if (["Onhand", "Total Onhand", "Transfer Qty"].includes(field)) input.step = "any";
+    if (!["Transfer Qty", "Remarks"].includes(field)) input.readOnly = true;
     input.setAttribute("aria-label", `Item ${number} ${field}`);
     input.placeholder = field;
     input.value = product[field] || "";
@@ -197,6 +198,31 @@ async function edgeFunctionErrorMessage(error) {
     }
   }
   return error?.message || "The server request failed.";
+}
+
+async function refreshUserProfile(session) {
+  if (!supabaseClient || currentSession?.user.id !== session.user.id) return;
+  try {
+    const profile = await callPortalAdmin({ action: "profile" });
+    if (currentSession?.user.id !== session.user.id) return;
+    currentUserProfile = {
+      username: profile.username,
+      department: profile.department,
+      status: profile.status,
+      mustChangePassword: profile.status === "default",
+    };
+    const incomingDepartment = requestFormBody.querySelector("#incoming-department");
+    if (incomingDepartment) {
+      incomingDepartment.replaceChildren(new Option(profile.department || "Department not assigned", profile.department || ""));
+      incomingDepartment.disabled = !profile.department;
+    }
+    updateSessionUi(session, false);
+  } catch (error) {
+    console.error("Unable to load the signed-in user's profile.", error);
+    if (currentSession?.user.id === session.user.id) {
+      saveStatus.textContent = `Could not load your saved account details: ${error.message || "Request failed."}`;
+    }
+  }
 }
 
 function populateSelect(select, values, label) {
@@ -377,6 +403,9 @@ async function configureSupabase(settings) {
     updateSessionUi(data.session, false);
     authSubscription = supabaseClient.auth.onAuthStateChange((event, session) => {
       updateSessionUi(session, event === "SIGNED_IN" || event === "SIGNED_OUT");
+      if (session && event !== "SIGNED_OUT") {
+        setTimeout(() => void refreshUserProfile(session), 0);
+      }
     });
     saveStatus.textContent = "Sign in with your username to start a request.";
   } catch (error) {
@@ -660,7 +689,7 @@ async function submitRequest(event) {
     };
   });
   if (items.some((item) => !item.sku_code || !item.product_description)) {
-    setRequestNotice("Each item needs a SKU code and product description. Select a catalog product or fill those fields in.");
+    setRequestNotice("Select a catalog product for each item before submitting.");
     return;
   }
   const formType = String(requestDialog.dataset.formType || "").trim();
