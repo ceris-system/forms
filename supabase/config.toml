@@ -1,0 +1,8 @@
+[functions.username-login]
+verify_jwt = false
+
+[functions.portal-admin]
+verify_jwt = true
+
+[functions.google-sheets-api]
+verify_jwt = true

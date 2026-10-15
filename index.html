@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f8f6f2">
+    <title>Request Forms | Mother's Wonderland</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body class="user-mode">
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Main navigation">
+        <a class="brand" href="#user-forms" aria-label="Mother's Wonderland request portal home">
+          <img src="assets/mothers-wonderland-logo.png" alt="Mother's Wonderland">
+        </a>
+        <div class="workspace-label">REQUESTS</div>
+        <nav class="nav-list">
+          <a class="nav-link user-only active" href="#user-forms"><span class="nav-icon">♙</span>My forms</a>
+        </nav>
+        <div class="sidebar-bottom">
+          <span class="admin-avatar" id="account-avatar" aria-hidden="true">G</span>
+          <span class="admin-caption"><strong id="account-name">Guest</strong><small id="account-role">Request portal</small></span>
+          <span class="owner-badge" id="account-badge">GUEST</span>
+        </div>
+      </aside>
+
+      <main class="main-content">
+        <header class="topbar">
+          <div class="breadcrumbs">Workspace <span>/</span> <strong id="breadcrumb-page">My forms</strong></div>
+          <div class="topbar-right">
+            <span class="system-status"><span class="status-dot"></span><span id="session-status">Setup workspace</span></span>
+            <button class="button button-secondary" type="button" id="toggle-user-mode">Sign in</button>
+          </div>
+        </header>
+
+        <div class="page-content">
+          <section class="section-block user-only" id="user-forms">
+            <div class="section-heading">
+              <div><p class="eyebrow">MOTHER'S WONDERLAND</p><h1>What do you need today?</h1><p class="section-description">Choose a form to start a request. You can add products and submit once signed in.</p></div>
+              <span class="section-count">4 FORMS</span>
+            </div>
+            <div class="user-form-grid" id="user-form-grid"></div>
+          </section>
+
+          <details class="section-block setup-details admin-tools" id="supabase-connection" hidden>
+            <summary>Master Admin settings</summary>
+            <div class="department-panel">
+            <div class="department-copy">
+              <div class="department-icon" aria-hidden="true">⚙</div>
+              <p class="eyebrow">SHARED WORKBOOK</p>
+              <h2>Spreadsheet setup</h2>
+              <p class="section-description">Connect the shared Google workbook and select lookup tabs for products, each department list, and suppliers. Submitted forms go to each user's assigned tab.</p>
+            </div>
+            <div class="department-fields">
+              <label class="field-label" for="shared-workbook-url">Shared Google spreadsheet URL</label>
+              <div class="input-wrap"><span class="input-icon" aria-hidden="true">↗</span><input id="shared-workbook-url" type="url" placeholder="Paste the Google Sheets URL" autocomplete="url"></div>
+              <p class="field-hint">The workbook must be shared with the Google service account configured by the administrator.</p>
+              <div class="lookup-tab-fields">
+                <label class="field-label" for="products-tab">Products tab name</label>
+                <input id="products-tab" type="text" maxlength="100" value="data" required>
+                <label class="field-label" for="outgoing-departments-tab">Outgoing departments tab name</label>
+                <input id="outgoing-departments-tab" type="text" maxlength="100" value="area" required>
+                <label class="field-label" for="incoming-departments-tab">Incoming departments tab name</label>
+                <input id="incoming-departments-tab" type="text" maxlength="100" value="area" required>
+                <label class="field-label" for="suppliers-tab">Suppliers tab name</label>
+                <input id="suppliers-tab" type="text" maxlength="100" value="dd" required>
+              </div>
+              <p class="field-hint">Products are read by their header row, departments from column A, and suppliers from column B. Use the same tab name for both department lists if they share one list.</p>
+              <button class="button button-primary save-button" type="button" id="save-workbook">Save spreadsheet settings</button>
+              <p class="field-hint" id="admin-status" role="status" aria-live="polite"></p>
+            </div>
+            </div>
+            <div class="section-heading assignment-heading">
+              <div><p class="eyebrow">STAFF ACCOUNTS</p><h2>Add a user</h2><p class="section-description">Create an account with a username, department, initial password, and status. Users set a new password when signing in with Default status.</p></div>
+            </div>
+            <form class="add-user-form" id="add-user-form">
+              <label class="add-user-field" for="new-user-username">Username
+                <input id="new-user-username" name="username" type="text" minlength="3" maxlength="32" pattern="[A-Za-z0-9._-]{3,32}" autocomplete="off" required>
+              </label>
+              <label class="add-user-field" for="new-user-department">Department
+                <input id="new-user-department" name="department" type="text" maxlength="100" required>
+              </label>
+              <label class="add-user-field" for="new-user-password">Temporary password
+                <input id="new-user-password" name="password" type="password" minlength="6" maxlength="256" autocomplete="new-password" required>
+              </label>
+              <label class="add-user-field" for="new-user-status">Status
+                <select id="new-user-status" name="status" required>
+                  <option value="default" selected>Default — change password at first sign-in</option>
+                  <option value="active">Active — no forced password change</option>
+                </select>
+              </label>
+              <button class="button button-primary" id="add-user-button" type="submit">Add user</button>
+              <p class="field-hint add-user-status" id="add-user-status" role="status" aria-live="polite"></p>
+            </form>
+            <div class="section-heading assignment-heading">
+              <div><p class="eyebrow">STAFF OUTPUT TABS</p><h2>Assign a tab to each user</h2><p class="section-description">Each user's four request types will be added to their assigned tab.</p></div>
+            </div>
+            <div class="assignment-list" id="assignment-list" aria-live="polite"></div>
+          </details>
+
+          <footer class="page-footer"><span>Mother's Wonderland <span aria-hidden="true">✦</span> Request portal</span><span id="save-status" role="status" aria-live="polite">Sign in to create and submit a request.</span></footer>
+        </div>
+      </main>
+    </div>
+    <dialog class="request-dialog" id="request-dialog" aria-labelledby="form-dialog-title">
+      <form id="request-form">
+        <div class="request-sheet-header">
+          <button class="dialog-close" id="close-request-dialog" type="button" aria-label="Close form">×</button>
+          <img src="assets/mothers-wonderland-logo.png" alt="Mother's Wonderland">
+          <p class="request-sheet-title" id="form-dialog-title"></p>
+        </div>
+        <div class="request-dialog-body" id="request-form-body"></div>
+        <div class="request-sheet-signatures">
+          <div><strong>RELEASED BY: / DESIGNATION</strong><span></span><small>SIGNATURE OVER PRINTED NAME</small></div>
+          <div><strong>APPROVED BY</strong><span></span><small>APPROVAL SIGNATURE</small></div>
+          <div><strong>RECEIVED BY: / DESIGNATION</strong><span></span><small>SIGNATURE OVER PRINTED NAME</small></div>
+        </div>
+        <div class="request-form-footer"><p class="request-form-notice">Sign in to submit requests.</p><button class="button button-secondary" id="retry-sheet-sync" type="button" hidden>Retry Google Sheets copy</button></div>
+      </form>
+    </dialog>
+    <dialog class="catalog-dialog auth-dialog" id="password-change-dialog" aria-labelledby="password-change-title">
+      <form id="password-change-form">
+        <div class="catalog-dialog-heading">
+          <div><p class="eyebrow">ACCOUNT SECURITY</p><h2 id="password-change-title">Set your password</h2><p class="section-description">Your administrator gave you a temporary password. Choose a new password to continue.</p></div>
+        </div>
+        <label class="catalog-search-label" for="new-password">New password</label>
+        <input class="catalog-search" id="new-password" type="password" autocomplete="new-password" minlength="8" maxlength="256" required>
+        <label class="catalog-search-label auth-password-label" for="confirm-new-password">Confirm new password</label>
+        <input class="catalog-search" id="confirm-new-password" type="password" autocomplete="new-password" minlength="8" maxlength="256" required>
+        <p class="catalog-status" id="password-change-status" role="status" aria-live="polite"></p>
+        <div class="catalog-dialog-actions">
+          <button class="button button-primary" id="save-new-password" type="submit">Save new password</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog class="catalog-dialog" id="catalog-dialog" aria-labelledby="catalog-dialog-title">
+      <div class="catalog-dialog-heading">
+        <div><p class="eyebrow">PRODUCT CATALOG</p><h2 id="catalog-dialog-title">Select products</h2><p class="section-description">Search the catalog, select products, then add them to your request.</p></div>
+        <button class="dialog-close" id="close-catalog-dialog" type="button" aria-label="Close product catalog">×</button>
+      </div>
+      <label class="catalog-search-label" for="catalog-search">Search products</label>
+      <input class="catalog-search" id="catalog-search" type="search" placeholder="Search SKU or product description...">
+      <p class="catalog-status" id="catalog-status" role="status" aria-live="polite"></p>
+      <div class="catalog-table-scroll">
+        <table class="catalog-table">
+          <thead><tr><th scope="col"><input id="select-all-products" type="checkbox" aria-label="Select all visible products"></th><th scope="col">SKU CODE</th><th scope="col">PRODUCT DESCRIPTION</th><th scope="col">UOM</th><th scope="col">COST</th><th scope="col">SRP</th><th scope="col">EXPIRATION DATE</th><th scope="col">QTY ONHAND</th><th scope="col">TOTAL QTY ONHAND</th></tr></thead>
+          <tbody id="catalog-products"></tbody>
+        </table>
+      </div>
+      <div class="catalog-dialog-actions">
+        <button class="button button-secondary" id="cancel-catalog" type="button">Cancel</button>
+        <button class="button button-primary" id="add-selected-products" type="button" disabled>Add selected products</button>
+      </div>
+    </dialog>
+    <dialog class="catalog-dialog auth-dialog" id="auth-dialog" aria-labelledby="auth-dialog-title">
+      <form id="auth-form">
+        <div class="catalog-dialog-heading">
+          <div><p class="eyebrow">WORKSPACE ACCOUNT</p><h2 id="auth-dialog-title">Sign in</h2><p class="section-description">Use the username and password provided by your workspace admin.</p></div>
+          <button class="dialog-close" id="close-auth-dialog" type="button" aria-label="Close sign in">×</button>
+        </div>
+        <label class="catalog-search-label" for="auth-username">Username</label>
+        <input class="catalog-search" id="auth-username" type="text" autocomplete="username" minlength="3" maxlength="32" required>
+        <label class="catalog-search-label auth-password-label" for="auth-password">Password</label>
+        <input class="catalog-search" id="auth-password" type="password" autocomplete="current-password" required>
+        <p class="catalog-status" id="auth-status" role="status" aria-live="polite"></p>
+        <div class="catalog-dialog-actions">
+          <button class="button button-secondary" id="cancel-auth" type="button">Cancel</button>
+          <button class="button button-primary" id="submit-auth" type="submit">Sign in</button>
+        </div>
+      </form>
+    </dialog>
+  </body>
+</html>
