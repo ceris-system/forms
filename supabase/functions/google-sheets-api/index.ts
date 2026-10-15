@@ -10,9 +10,14 @@ const requestHeaders = [
   "Request Number", "Form Type", "Request Date", "Outgoing Department",
   "Incoming Department", "Supplier", "Submitted By", "SKU Code",
   "Product Description", "UOM", "Expiration Date", "Onhand",
-  "Total Onhand", "Cost", "SRP", "Transfer Qty", "Remarks", "Supabase Request ID",
-  "Sequence Number",
+  "Total Onhand", "Cost", "SRP", "Transfer Qty", "Remarks", "Sequence Number",
 ];
+const requestPrefixes: Record<string, string> = {
+  "release-request": "RRF",
+  transfer: "TRF",
+  "pull-out": "PUF",
+  "purchase-order": "POF",
+};
 
 function respond(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -187,6 +192,20 @@ function normalizeSavedItem(item: Record<string, unknown>): Record<string, unkno
   };
 }
 
+async function getPortalUsername(
+  adminClient: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<string> {
+  const { data: profile, error } = await adminClient
+    .from("login_usernames")
+    .select("username")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!profile?.username) throw new Error("The signed-in account does not have a portal username.");
+  return profile.username;
+}
+
 async function appendSubmission(
   adminClient: ReturnType<typeof createClient>,
   userId: string,
@@ -236,29 +255,53 @@ async function appendSubmission(
   if (!/^\d{4}-\d{2}-\d{2}$/.test(requestDate)) throw new Error("The request date is invalid.");
 
   const actualOutputTab = await ensureOutputTab(spreadsheetId, outputTab);
-  const current = await readValues(spreadsheetId, actualOutputTab, "A:S");
+  let current = await readValues(spreadsheetId, actualOutputTab, "A:S");
   if (current.length) {
-    const existingHeaders = current[0].map(value => String(value ?? ""));
-    if (requestHeaders.slice(0, 18).some((header, index) => existingHeaders[index] !== header)) {
+    let existingHeaders = current[0].map(value => String(value ?? ""));
+    if (requestHeaders.slice(0, 17).some((header, index) => existingHeaders[index] !== header)) {
       throw new Error(`The "${actualOutputTab}" tab already has different columns from the portal's request format. The request is saved in the portal but was not copied to Sheets.`);
     }
-    if (existingHeaders[18] && existingHeaders[18] !== requestHeaders[18]) {
-      throw new Error(`The "${actualOutputTab}" tab already has different columns from the portal's request format. The request is saved in the portal but was not copied to Sheets.`);
-    }
-    if (!existingHeaders[18]) {
+    if (existingHeaders[17] === "Supabase Request ID") {
+      await googleRequest(`spreadsheets/${spreadsheetId}/values/${range(actualOutputTab, "R:S")}:clear`, {
+        method: "POST",
+        body: JSON.stringify({}),
+      });
+      current = await readValues(spreadsheetId, actualOutputTab, "A:S");
+      existingHeaders = current[0].map(value => String(value ?? ""));
       const sequenceColumn = [
-        [requestHeaders[18]],
+        [requestHeaders[17]],
         ...current.slice(1).map(row => {
           const match = String(row[0] ?? "").match(/^(?:RRF|TRF|PUF|POF)-(\d+)$/);
           return [match ? Number(match[1]) : ""];
         }),
       ];
-      await googleRequest(`spreadsheets/${spreadsheetId}/values/${range(actualOutputTab, `S1:S${current.length}`)}?valueInputOption=RAW`, {
+      await googleRequest(`spreadsheets/${spreadsheetId}/values/${range(actualOutputTab, `R1:R${sequenceColumn.length}`)}?valueInputOption=RAW`, {
+        method: "PUT",
+        body: JSON.stringify({ values: sequenceColumn }),
+      });
+      current = await readValues(spreadsheetId, actualOutputTab, "A:S");
+      existingHeaders = current[0].map(value => String(value ?? ""));
+    }
+    if (existingHeaders[17] && existingHeaders[17] !== requestHeaders[17]) {
+      throw new Error(`The "${actualOutputTab}" tab already has different columns from the portal's request format. The request is saved in the portal but was not copied to Sheets.`);
+    }
+    if (existingHeaders[18]) {
+      throw new Error(`The "${actualOutputTab}" tab already has different columns from the portal's request format. The request is saved in the portal but was not copied to Sheets.`);
+    }
+    if (!existingHeaders[17]) {
+      const sequenceColumn = [
+        [requestHeaders[17]],
+        ...current.slice(1).map(row => {
+          const match = String(row[0] ?? "").match(/^(?:RRF|TRF|PUF|POF)-(\d+)$/);
+          return [match ? Number(match[1]) : ""];
+        }),
+      ];
+      await googleRequest(`spreadsheets/${spreadsheetId}/values/${range(actualOutputTab, `R1:R${sequenceColumn.length}`)}?valueInputOption=RAW`, {
         method: "PUT",
         body: JSON.stringify({ values: sequenceColumn }),
       });
     }
-    const existingCount = current.slice(1).filter(row => String(row[17] ?? "") === requestId).length;
+    const existingCount = current.slice(1).filter(row => String(row[0] ?? "") === requestNumber).length;
     if (existingCount) {
       if (existingCount !== items.length) {
         throw new Error("A partial copy of this request already exists. Contact your administrator before retrying.");
@@ -266,7 +309,7 @@ async function appendSubmission(
       return;
     }
   } else {
-    await googleRequest(`spreadsheets/${spreadsheetId}/values/${range(actualOutputTab, "A1:S1")}?valueInputOption=RAW`, {
+    await googleRequest(`spreadsheets/${spreadsheetId}/values/${range(actualOutputTab, "A1:R1")}?valueInputOption=RAW`, {
       method: "PUT",
       body: JSON.stringify({ values: [requestHeaders] }),
     });
@@ -276,11 +319,11 @@ async function appendSubmission(
     requestNumber, formType, requestDate, outgoing, incoming, supplier, submittedBy,
     item.sku_code, item.product_description, item.uom, item.expiration_date,
     item.qty_onhand, item.total_qty_onhand, item.cost, item.srp, item.transfer_qty,
-    item.remarks, requestId, sequenceNumber,
+    item.remarks, sequenceNumber,
   ]);
   const tab = safeTabName(actualOutputTab);
   await googleRequest(
-    `spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tab)}!A:S:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+    `spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tab)}!A:R:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
     { method: "POST", body: JSON.stringify({ values: rows }) },
   );
 }
@@ -329,11 +372,28 @@ Deno.serve(async (request: Request) => {
       incoming_departments_tab: settings.incoming_departments_tab || "area",
       suppliers_tab: settings.suppliers_tab || "dd",
     }));
+    if (body.action === "sequence_preview") {
+      const formType = requiredText(body.form_type, "Form type");
+      const prefix = requestPrefixes[formType];
+      if (!prefix) return respond({ error: "Unknown request form type." }, 400);
+      const { data: counter, error } = await adminClient
+        .from("request_counters")
+        .select("last_value")
+        .eq("form_type", formType)
+        .maybeSingle();
+      if (error) throw error;
+      if (!counter) throw new Error("The request sequence counter is not configured.");
+      const sequenceNumber = Number(counter.last_value) + 1;
+      if (!Number.isSafeInteger(sequenceNumber) || sequenceNumber < 1) {
+        throw new Error("The next request sequence number is invalid.");
+      }
+      return respond({ sequence_number: sequenceNumber });
+    }
     if (body.action === "submit") {
       await appendSubmission(
         adminClient,
         authData.user.id,
-        authData.user.user_metadata?.portal_username || authData.user.email,
+        await getPortalUsername(adminClient, authData.user.id),
         settings.spreadsheet_id,
         assignment?.output_tab || "",
         body.submission,

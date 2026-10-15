@@ -16,7 +16,6 @@ const REQUEST_HEADERS = Object.freeze([
   "SRP",
   "Transfer Qty",
   "Remarks",
-  "Supabase Request ID",
   "Sequence Number",
 ]);
 
@@ -176,6 +175,11 @@ function appendSavedSubmission(settings, accessToken, user, context, submission)
   const sequenceMatch = String(request.request_number).match(/^(?:RRF|TRF|PUF|POF)-(\d{7,})$/);
   if (!sequenceMatch) throw new Error("The saved request number is invalid.");
   const sequenceNumber = Number(sequenceMatch[1]);
+  const account = fetchSupabaseRows(settings, accessToken, "login_usernames", {
+    select: "username",
+    user_id: user.id,
+  })[0];
+  const submittedBy = requiredText(account && account.username, "Portal username");
 
   const savedItems = fetchSupabaseRows(settings, accessToken, "request_items", {
     select: "sku_code,product_description,uom,expiration_date,qty_onhand,total_qty_onhand,cost,srp,transfer_qty,remarks",
@@ -201,8 +205,8 @@ function appendSavedSubmission(settings, accessToken, user, context, submission)
     ensureHeaders(sheet);
     const lastRow = sheet.getLastRow();
     if (lastRow > 1) {
-      const copiedIds = sheet.getRange(2, 18, lastRow - 1, 1).getDisplayValues().flat();
-      const existingCount = copiedIds.filter(id => id === submission.request_id).length;
+      const copiedNumbers = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues().flat();
+      const existingCount = copiedNumbers.filter(number => number === request.request_number).length;
       if (existingCount) {
         if (existingCount !== items.length) {
           throw new Error("A partial copy of this request already exists. Contact your administrator before retrying.");
@@ -218,7 +222,7 @@ function appendSavedSubmission(settings, accessToken, user, context, submission)
       outgoing,
       incoming,
       supplier,
-      String(user.email),
+      submittedBy,
       item.sku_code,
       item.product_description,
       item.uom,
@@ -229,7 +233,6 @@ function appendSavedSubmission(settings, accessToken, user, context, submission)
       numberOrBlank(item.srp),
       numberOrBlank(item.transfer_qty),
       item.remarks,
-      submission.request_id,
       sequenceNumber,
     ]);
     sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, REQUEST_HEADERS.length).setValues(rows);
@@ -318,15 +321,32 @@ function ensureHeaders(sheet) {
     sheet.setFrozenRows(1);
     return;
   }
-  const current = sheet.getRange(1, 1, 1, REQUEST_HEADERS.length).getDisplayValues()[0];
-  if (REQUEST_HEADERS.slice(0, 18).some((header, index) => current[index] !== header)) {
+  const current = sheet.getRange(1, 1, 1, Math.max(REQUEST_HEADERS.length + 1, sheet.getLastColumn())).getDisplayValues()[0];
+  if (REQUEST_HEADERS.slice(0, 17).some((header, index) => current[index] !== header)) {
     throw new Error("The '" + sheet.getName() + "' tab already has different columns. Ask the administrator to choose an empty tab.");
   }
-  if (current[18] && current[18] !== REQUEST_HEADERS[18]) {
+  if (current[17] === "Supabase Request ID") {
+    const lastRow = Math.max(sheet.getLastRow(), 1);
+    sheet.getRange(1, 18, lastRow, 2).clearContent();
+    const sequenceColumn = [[REQUEST_HEADERS[17]]];
+    if (lastRow > 1) {
+      const requestNumbers = sheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+      sequenceColumn.push(...requestNumbers.map(([requestNumber]) => {
+        const match = String(requestNumber).match(/^(?:RRF|TRF|PUF|POF)-(\d{7,})$/);
+        return [match ? Number(match[1]) : ""];
+      }));
+    }
+    sheet.getRange(1, 18, sequenceColumn.length, 1).setValues(sequenceColumn);
+    return;
+  }
+  if (current[17] && current[17] !== REQUEST_HEADERS[17]) {
     throw new Error("The '" + sheet.getName() + "' tab already has different columns. Ask the administrator to choose an empty tab.");
   }
-  if (!current[18]) {
-    const sequenceColumn = [[REQUEST_HEADERS[18]]];
+  if (current[18]) {
+    throw new Error("The '" + sheet.getName() + "' tab already has different columns. Ask the administrator to choose an empty tab.");
+  }
+  if (!current[17]) {
+    const sequenceColumn = [[REQUEST_HEADERS[17]]];
     if (sheet.getLastRow() > 1) {
       const requestNumbers = sheet.getRange(2, 1, sheet.getLastRow() - 1, 1).getDisplayValues();
       sequenceColumn.push(...requestNumbers.map(([requestNumber]) => {
@@ -334,7 +354,7 @@ function ensureHeaders(sheet) {
         return [match ? Number(match[1]) : ""];
       }));
     }
-    sheet.getRange(1, 19, sequenceColumn.length, 1).setValues(sequenceColumn);
+    sheet.getRange(1, 18, sequenceColumn.length, 1).setValues(sequenceColumn);
   }
 }
 

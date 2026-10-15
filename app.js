@@ -80,7 +80,7 @@ function openRequestForm(form) {
       </div>
       ` : ""}
       <div class="request-number-date">
-        <p><span>NO.:</span><strong class="request-number">Assigned on submit</strong></p>
+        <p><span>SEQUENCE NO.:</span><strong class="request-number" aria-live="polite">Select outgoing department</strong></p>
         <p><span>DATE:</span><strong>${new Intl.DateTimeFormat(undefined, { month: "long", day: "numeric", year: "numeric" }).format(new Date()).toUpperCase()}</strong></p>
       </div>
     </div>
@@ -104,8 +104,9 @@ function openRequestForm(form) {
   const addProductButton = requestFormBody.querySelector("[data-add-item]");
   outgoingDepartment.addEventListener("change", () => {
     addProductButton.disabled = !outgoingDepartment.value;
+    void loadSequencePreview(form.id, outgoingDepartment.value);
   });
-  document.querySelector(".request-form-notice").textContent = `Signed in as ${currentSession.user.email}.`;
+  document.querySelector(".request-form-notice").textContent = `Signed in as ${currentUserProfile.username || "user"}.`;
   requestDialog.dataset.formType = form.id;
   requestDialog.showModal();
   loadRequestLookups(form.id);
@@ -178,14 +179,43 @@ async function openProductCatalog() {
   }
 }
 
-async function requestSheetData(action, submission) {
+async function requestSheetData(action, payload) {
   if (!supabaseClient || !currentSession) throw new Error("Sign in before accessing the assigned Google spreadsheet.");
   const { data, error } = await supabaseClient.functions.invoke("google-sheets-api", {
-    body: { action, ...(submission ? { submission } : {}) },
+    body: { action, ...(action === "submit" ? { submission: payload } : payload || {}) },
   });
   if (error) throw new Error(await edgeFunctionErrorMessage(error));
   if (data?.error) throw new Error(data.error);
   return data;
+}
+
+async function loadSequencePreview(formType, outgoingDepartment) {
+  const number = requestFormBody.querySelector(".request-number");
+  const outgoing = requestFormBody.querySelector("#outgoing-department");
+  const requestId = Number(requestDialog.dataset.sequenceRequest || 0) + 1;
+  requestDialog.dataset.sequenceRequest = String(requestId);
+  if (!outgoingDepartment) {
+    number.textContent = "Select outgoing department";
+    return;
+  }
+  number.textContent = "Loading…";
+  try {
+    const result = await requestSheetData("sequence_preview", { form_type: formType });
+    if (!requestDialog.open
+      || requestDialog.dataset.formType !== formType
+      || requestDialog.dataset.sequenceRequest !== String(requestId)
+      || outgoing.value !== outgoingDepartment) return;
+    number.textContent = String(result.sequence_number).padStart(7, "0");
+  } catch (error) {
+    console.error("Unable to preview the next request sequence.", error);
+    if (requestDialog.open
+      && requestDialog.dataset.formType === formType
+      && requestDialog.dataset.sequenceRequest === String(requestId)
+      && outgoing.value === outgoingDepartment) {
+      number.textContent = "Unavailable";
+      setRequestNotice(`Could not preview the next sequence number: ${error.message || "Request failed."}`);
+    }
+  }
 }
 
 async function edgeFunctionErrorMessage(error) {
@@ -238,13 +268,13 @@ async function loadRequestLookups(formType) {
   const supplier = document.querySelector("#request-supplier");
   incoming.replaceChildren(new Option(currentUserProfile.department || "Department not assigned", currentUserProfile.department || ""));
   incoming.disabled = !currentUserProfile.department;
-  setRequestNotice(`Signed in as ${currentUserProfile.username || currentSession.user.email}. Loading outgoing departments…`);
+  setRequestNotice(`Signed in as ${currentUserProfile.username || "your account"}. Loading outgoing departments…`);
   try {
     const result = await requestSheetData("lookup");
     if (!requestDialog.open || requestDialog.dataset.formType !== formType) return;
     populateSelect(outgoing, result.outgoing_departments || [], "department");
     if (supplier) populateSelect(supplier, result.suppliers || [], "supplier");
-    setRequestNotice(`Signed in as ${currentUserProfile.username || currentSession.user.email}.`);
+    setRequestNotice(`Signed in as ${currentUserProfile.username || "your account"}.`);
   } catch (error) {
     console.error("Unable to load form lists from Google Sheets.", error);
     if (!requestDialog.open || requestDialog.dataset.formType !== formType) return;
@@ -342,7 +372,7 @@ function updateSessionUi(session, navigate = true) {
     };
   }
   if (!signedIn) currentUserProfile = { username: "", department: "", status: "active", mustChangePassword: false };
-  const accountName = signedIn ? currentUserProfile.username || session.user.email : "Guest";
+  const accountName = signedIn ? currentUserProfile.username || "Signed-in user" : "Guest";
   document.body.classList.add("user-mode");
   document.querySelector("#toggle-user-mode").textContent = signedIn ? "Sign out" : "Sign in";
   document.querySelector("#account-avatar").textContent = signedIn ? accountName.slice(0, 1).toUpperCase() : "G";
@@ -724,7 +754,8 @@ async function submitRequest(event) {
     if (error) throw error;
     const result = Array.isArray(data) ? data[0] : data;
     if (!result?.request_number) throw new Error("The database saved the request but did not return its request number.");
-    requestFormBody.querySelector(".request-number").textContent = result.request_number;
+    const sequenceMatch = String(result.request_number).match(/-(\d+)$/);
+    requestFormBody.querySelector(".request-number").textContent = sequenceMatch?.[1] || result.request_number;
     pendingSheetSync = {
       request_id: result.request_id,
       request_number: result.request_number,
