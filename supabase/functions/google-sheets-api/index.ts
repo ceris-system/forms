@@ -49,6 +49,7 @@ function decodePrivateKey(pem: string): Uint8Array {
 
 let cachedGoogleToken = "";
 let googleTokenExpiresAt = 0;
+const googleReadCache = new Map<string, { expiresAt: number; promise: Promise<unknown[][][]> }>();
 
 async function getGoogleAccessToken(): Promise<string> {
   if (cachedGoogleToken && Date.now() < googleTokenExpiresAt - 60_000) return cachedGoogleToken;
@@ -97,7 +98,12 @@ async function googleRequest(path: string, options: RequestInit = {}): Promise<R
     headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...options.headers },
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error?.message || "Google Sheets request failed.");
+  if (!response.ok) {
+    const error = new Error(result.error?.message || "Google Sheets request failed.") as Error & { status?: number; reason?: string };
+    error.status = response.status;
+    error.reason = String(result.error?.errors?.[0]?.reason || result.error?.status || "");
+    throw error;
+  }
   return result;
 }
 
@@ -122,6 +128,45 @@ async function readValues(spreadsheetId: string, tab: string, cells: string): Pr
     `spreadsheets/${spreadsheetId}/values/${range(tab, cells)}?valueRenderOption=FORMATTED_VALUE`,
   );
   return Array.isArray(result.values) ? result.values : [];
+}
+
+async function readValuesBatch(spreadsheetId: string, ranges: string[]): Promise<unknown[][][]> {
+  const cacheKey = `${spreadsheetId}:${ranges.join("|")}`;
+  const cached = googleReadCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.promise;
+
+  const promise = (async () => {
+    const query = new URLSearchParams({ valueRenderOption: "FORMATTED_VALUE" });
+    ranges.forEach(value => query.append("ranges", value));
+    let result: Record<string, any>;
+    for (let attempt = 0; ; attempt++) {
+      try {
+        result = await googleRequest(`spreadsheets/${spreadsheetId}/values:batchGet?${query}`);
+        break;
+      } catch (error) {
+        const apiError = error as Error & { status?: number; reason?: string };
+        const quotaExceeded = apiError.status === 429
+          || (apiError.status === 403 && /quota|rate.?limit/i.test(`${apiError.reason || ""} ${apiError.message}`));
+        if (!quotaExceeded) throw error;
+        if (attempt >= 2) {
+          throw new InventoryRequestError(
+            "Google Sheets is temporarily limiting read requests. Wait about a minute, then refresh.",
+            429,
+          );
+        }
+        await new Promise(resolve => setTimeout(resolve, 400 * (attempt + 1)));
+      }
+    }
+    const valueRanges = Array.isArray(result.valueRanges) ? result.valueRanges : [];
+    return ranges.map((_, index) => Array.isArray(valueRanges[index]?.values) ? valueRanges[index].values : []);
+  })();
+  googleReadCache.set(cacheKey, { expiresAt: Date.now() + 10_000, promise });
+  try {
+    return await promise;
+  } catch (error) {
+    googleReadCache.delete(cacheKey);
+    throw error;
+  }
 }
 
 function lookupProductRows(rows: unknown[][]): Record<string, string>[] {
@@ -301,19 +346,24 @@ async function loadRequestHistory(
   if (!user.isAdmin && !user.allowedFormTypes.includes(formType)) {
     throw new InventoryRequestError("Your account is not assigned access to this form history.", 403);
   }
-  const { departments } = await loadInventoryValues(spreadsheetId);
-  const department = resolveInventoryDepartment(user, requestedDepartment, departments);
-  if (!department) return { department, departments, rows: [] };
-  const metadata = await getSheetMetadata(spreadsheetId);
   const tabName = requestTabs[formType];
-  const actualTab = (metadata.sheets || []).map((sheet: Record<string, any>) => String(sheet.properties?.title || ""))
-    .find((title: string) => title.toLocaleLowerCase() === tabName.toLocaleLowerCase());
-  if (!actualTab) return { department, departments, rows: [] };
-  const values = await readValues(spreadsheetId, actualTab, "A:Z");
+  if (!user.isAdmin && !user.department.trim()) {
+    throw new InventoryRequestError("Your account has no department assigned. Ask an administrator to set your department.", 403);
+  }
+  if (user.isAdmin && (typeof requestedDepartment !== "string" || !requestedDepartment.trim())) {
+    const [areaValues] = await readValuesBatch(spreadsheetId, [a1Range("AREA", "A1:A")]);
+    return { department: "", departments: uniqueValues(areaValues), rows: [] };
+  }
+  const [areaValues, values] = await readValuesBatch(spreadsheetId, [
+    a1Range("AREA", "A1:A"),
+    a1Range(tabName, "A:Z"),
+  ]);
+  const departments = uniqueValues(areaValues);
+  const department = resolveInventoryDepartment(user, requestedDepartment, departments);
   if (!values.length) return { department, departments, rows: [] };
   const headers = values[0].map(value => String(value ?? "").trim());
   if (requestHeaders.some((header, index) => headers[index] !== header)) {
-    throw new Error(`The "${actualTab}" sheet headers do not match the request history format.`);
+    throw new Error(`The "${tabName}" sheet headers do not match the request history format.`);
   }
   const normalizedDepartment = department.toLocaleLowerCase();
   const rows = values.slice(1).flatMap(row => {
