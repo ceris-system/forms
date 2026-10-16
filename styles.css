@@ -605,7 +605,7 @@ td { padding: 10px 12px; border-top: 1px solid #f0f1ef; color: #536057; font-siz
   body.print-inventory .inventory-print-table th:nth-child(11), body.print-inventory .inventory-print-table td:nth-child(11) { width: 5%; }
   body.print-inventory .inventory-print-table th:nth-child(12), body.print-inventory .inventory-print-table td:nth-child(12) { width: 8%; }
   body.print-inventory .inventory-print-table th,
-  body.print-inventory .inventory-print-table td { padding: 3px 2px; border: 1px solid #999; color: #000; font-size: 6px; line-height: 1.2; white-space: normal; overflow-wrap: anywhere; }
+  body.print-inventory .inventory-print-table td { padding: 3px 2px; border: 1px solid #999; color: #000; font-size: 8px; line-height: 1.2; white-space: normal; overflow-wrap: anywhere; }
 }
 
 @media (prefers-reduced-motion: reduce) {
