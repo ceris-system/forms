@@ -996,7 +996,6 @@ function activatePortalPage(pageId, refresh = true) {
     "pending-release": loadPendingRelease,
     "pending-received": loadPendingReceived,
     notifications: loadNotifications,
-    "reports-history": loadReportsHistory,
   };
   void refreshNotificationCount();
   if (loaders[pageId]) void loaders[pageId]();
@@ -1215,10 +1214,6 @@ async function loadPendingRelease() {
 
 async function loadPendingReceived() {
   await loadWorkflowQueue("pending_received", "pending-received-list", "pending-received-status", "Requests ready to receive");
-}
-
-async function loadReportsHistory() {
-  await loadWorkflowQueue("reports_history", "reports-history-list", "reports-history-status", "Form history");
 }
 
 async function loadWorkflowQueue(action, listId, statusId, emptyMessage) {
@@ -1783,7 +1778,6 @@ document.querySelector("#refresh-my-requests").addEventListener("click", loadMyR
 document.querySelector("#refresh-pending-release").addEventListener("click", loadPendingRelease);
 document.querySelector("#refresh-pending-received").addEventListener("click", loadPendingReceived);
 document.querySelector("#refresh-notifications").addEventListener("click", loadNotifications);
-document.querySelector("#refresh-reports-history").addEventListener("click", loadReportsHistory);
 document.querySelector("#load-more-notifications").addEventListener("click", () => void loadNotifications(true));
 document.querySelector("#mark-all-notifications-read").addEventListener("click", markAllNotificationsRead);
 requestFormBody.addEventListener("input", (event) => {

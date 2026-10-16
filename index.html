@@ -122,11 +122,18 @@
 
           <section class="section-block user-only portal-page" id="reports-history" data-page-section hidden>
             <div class="section-heading">
-              <div><p class="eyebrow">READ-ONLY OVERVIEW</p><h1>Reports &amp; History</h1><p class="section-description">Review completed and in-progress forms available to your account. This page is read-only.</p></div>
-              <button class="button button-secondary" id="refresh-reports-history" type="button">Refresh</button>
+              <div><p class="eyebrow">REPORTS &amp; RECORDS</p><h1>Reports &amp; History</h1><p class="section-description">Choose a section to view its records and reports.</p></div>
             </div>
-            <p class="field-hint" id="reports-history-status" role="status" aria-live="polite"></p>
-            <div class="approval-list" id="reports-history-list"></div>
+            <div class="report-menu-grid" aria-label="Reports and history sections">
+              <button class="report-menu-button" type="button"><span class="report-menu-icon" aria-hidden="true">📦</span><span>Inventory</span></button>
+              <button class="report-menu-button" type="button"><span class="report-menu-icon" aria-hidden="true">📤</span><span>Request and Released History</span></button>
+              <button class="report-menu-button" type="button"><span class="report-menu-icon" aria-hidden="true">🔄</span><span>Transfer History</span></button>
+              <button class="report-menu-button" type="button"><span class="report-menu-icon" aria-hidden="true">↩️</span><span>Pull Out History</span></button>
+              <button class="report-menu-button" type="button"><span class="report-menu-icon" aria-hidden="true">🛒</span><span>P.O History</span></button>
+              <button class="report-menu-button" type="button"><span class="report-menu-icon" aria-hidden="true">📝</span><span>Inventory Form</span></button>
+              <button class="report-menu-button" type="button"><span class="report-menu-icon" aria-hidden="true">📊</span><span>Report Summary</span></button>
+              <button class="report-menu-button" type="button"><span class="report-menu-icon" aria-hidden="true">👥</span><span>User Logs History</span></button>
+            </div>
           </section>
 
           <details class="section-block setup-details admin-tools" id="supabase-connection" hidden>
