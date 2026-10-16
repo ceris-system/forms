@@ -372,10 +372,7 @@ async function loadRequestHistory(
     if (!row[0] || !status || normalizedStatus === "pending") return [];
     const outgoingDepartment = String(row[3] ?? "");
     const incomingDepartment = String(row[4] ?? "");
-    if (
-      outgoingDepartment.trim().toLocaleLowerCase() !== normalizedDepartment
-      && incomingDepartment.trim().toLocaleLowerCase() !== normalizedDepartment
-    ) return [];
+    if (incomingDepartment.trim().toLocaleLowerCase() !== normalizedDepartment) return [];
     return [{
       serial_number: String(row[0] ?? ""),
       outgoing_department: outgoingDepartment,
