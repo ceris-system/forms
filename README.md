@@ -72,6 +72,8 @@ Publish `index.html`, `app.js`, `styles.css`, `manifest.webmanifest`, `sw.js`, `
 
 The portal is installable as a Progressive Web App (PWA) on supported devices. Open the published HTTPS portal and use **Install app** in the login screen or workspace header. In Safari on iPhone or iPad, use **Share → Add to Home Screen**. On desktop browsers that do not show the install prompt, use the browser menu's **Install page** option. The app shell can load from cache when offline, but sign-in, Google Sheets, and other live portal data require an internet connection.
 
+Signed-in sessions are stored for the current browser tab, automatically sign out after 10 minutes without activity, and are cleared when the tab or installed app is closed.
+
 ## Master Admin setup in the portal
 
 1. Sign in using the account granted access through `public.mw_portal_admins`.

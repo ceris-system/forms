@@ -49,6 +49,42 @@ let currentUnreadNotificationCount = 0;
 let adminUserAccounts = [];
 let pendingInstallPrompt = null;
 const workflowLoadIds = new Map();
+const IDLE_SIGN_OUT_DELAY = 10 * 60 * 1000;
+let idleSignOutTimer = null;
+
+function resetIdleSignOutTimer() {
+  clearTimeout(idleSignOutTimer);
+  idleSignOutTimer = null;
+  if (!currentSession || !supabaseClient) return;
+  idleSignOutTimer = setTimeout(async () => {
+    const userId = currentSession?.user.id;
+    if (!userId) return;
+    try {
+      const { error } = await supabaseClient.auth.signOut({ scope: "local" });
+      if (error) throw error;
+      if (!currentSession) saveStatus.textContent = "You were signed out after 10 minutes of inactivity.";
+    } catch (error) {
+      console.error("Automatic sign-out after inactivity failed.", error);
+      saveStatus.textContent = `Automatic sign-out failed: ${error.message || "Request failed."}`;
+      resetIdleSignOutTimer();
+    }
+  }, IDLE_SIGN_OUT_DELAY);
+}
+
+async function signOutOnPageExit() {
+  if (!currentSession || !supabaseClient) return;
+  try {
+    const { error } = await supabaseClient.auth.signOut({ scope: "local" });
+    if (error) throw error;
+  } catch (error) {
+    console.error("Sign-out while leaving the page failed.", error);
+  }
+}
+
+for (const eventName of ["pointerdown", "pointermove", "keydown", "scroll", "touchstart", "click"]) {
+  document.addEventListener(eventName, resetIdleSignOutTimer, { passive: true });
+}
+window.addEventListener("pagehide", () => void signOutOnPageExit());
 
 function setInstallButtonsVisible(visible) {
   for (const button of installAppButtons) button.hidden = !visible;
@@ -474,6 +510,7 @@ function updateSessionUi(session, navigate = true) {
     document.body.classList.remove("master-admin-mode");
   }
   currentSession = session;
+  if (previousUserId !== nextUserId) resetIdleSignOutTimer();
   const signedIn = Boolean(session);
   document.body.classList.toggle("signed-out", !signedIn);
   const metadata = session?.user?.user_metadata || {};
@@ -572,7 +609,9 @@ async function configureSupabase(settings) {
     return;
   }
   try {
-    supabaseClient = window.supabase.createClient(settings.supabase.url, settings.supabase.key);
+    supabaseClient = window.supabase.createClient(settings.supabase.url, settings.supabase.key, {
+      auth: { storage: window.sessionStorage },
+    });
     const { data, error } = await supabaseClient.auth.getSession();
     if (error) throw error;
     document.querySelector("#session-status").textContent = "Ready to sign in";
