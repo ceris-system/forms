@@ -1,8 +1,8 @@
 const FORM_TYPES = [
-  { id: "release-request", name: "Release & Request Form", shortName: "Release & Request", prefix: "RRF", description: "Request or release inventory between departments.", symbol: "↗" },
-  { id: "transfer", name: "Transfer Form", shortName: "Transfer", prefix: "TRF", description: "Record stock transfers between departments.", symbol: "⇄" },
-  { id: "pull-out", name: "Pull Out Form", shortName: "Pull Out", prefix: "PUF", description: "Document items being pulled out of inventory.", symbol: "↙" },
-  { id: "purchase-order", name: "Purchase Order Form", shortName: "Purchase Order", prefix: "POF", description: "Record purchase order requests.", symbol: "▧" },
+  { id: "release-request", name: "Release & Request Form", shortName: "Release & Request", prefix: "RRF", description: "Request or release inventory between departments.", symbol: "📤" },
+  { id: "transfer", name: "Transfer Form", shortName: "Transfer", prefix: "TRF", description: "Record stock transfers between departments.", symbol: "🔄" },
+  { id: "pull-out", name: "Pull Out Form", shortName: "Pull Out", prefix: "PUF", description: "Document items being pulled out of inventory.", symbol: "📦" },
+  { id: "purchase-order", name: "Purchase Order Form", shortName: "Purchase Order", prefix: "POF", description: "Record purchase order requests.", symbol: "🛒" },
 ];
 
 const DEPLOYMENT_SETTINGS = {
@@ -64,7 +64,7 @@ function makeUserFormButton(form) {
     <span class="form-symbol" aria-hidden="true">${form.symbol}</span>
     <span class="form-name">${form.name}</span>
     <span class="form-description">${form.description}</span>
-    <span class="open-form-button">Open form <span aria-hidden="true">→</span></span>`;
+    <span class="open-form-button">Open form <span aria-hidden="true">➡️</span></span>`;
   return card;
 }
 
@@ -105,11 +105,11 @@ function openRequestForm(form) {
       </div>
     </div>
     <div class="request-sheet-actions">
-      <button class="button add-product-button" type="button" data-add-item disabled><span aria-hidden="true">＋</span> Select products</button>
-      <button class="button button-primary submit-request-button" type="submit">▣ Submit</button>
+      <button class="button add-product-button" type="button" data-add-item disabled><span aria-hidden="true">➕</span> Select products</button>
+      <button class="button button-primary submit-request-button" type="submit"><span aria-hidden="true">📤</span> Submit</button>
     </div>
     <p class="request-inline-notice" role="status" aria-live="polite"></p>
-    <div class="approval-status"><strong>STATUS</strong><span>Pending → Approved → Released → Received. Master Admin approves; matching departments release and receive.</span></div>
+    <div class="approval-status"><strong>STATUS</strong><span>Pending ➡️ Approved ➡️ Released ➡️ Received. Master Admin approves; matching departments release and receive.</span></div>
     <div class="request-sheet-items">
       <p class="request-info-label">REQUEST INFORMATION</p>
       <div class="request-table-scroll">
@@ -160,7 +160,7 @@ function makeRequestItemRow(number, product = {}) {
   remove.type = "button";
   remove.dataset.removeItem = "";
   remove.setAttribute("aria-label", `Remove item ${number}`);
-  remove.textContent = "×";
+  remove.textContent = "🗑️";
   actions.append(remove);
   row.append(actions);
   return row;

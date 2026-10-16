@@ -114,7 +114,7 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .approval-category { overflow: hidden; border: 1px solid var(--line); border-radius: 13px; background: white; box-shadow: 0 5px 18px rgb(30 52 39 / 4%); }
 .approval-category-title { display: flex; min-height: 52px; align-items: center; justify-content: space-between; gap: 12px; padding: 0 17px; color: var(--green-dark); cursor: pointer; font-size: 14px; font-weight: 700; list-style: none; }
 .approval-category-title::-webkit-details-marker { display: none; }
-.approval-category-title::after { content: "⌄"; color: #78847b; font-size: 15px; transition: transform .2s; }
+.approval-category-title::after { content: "🔽"; font-size: 12px; transition: transform .2s; }
 .approval-category[open] > .approval-category-title::after { transform: rotate(180deg); }
 .approval-category-title:focus-visible { outline: 2px solid var(--green); outline-offset: -3px; }
 .approval-category-list { display: grid; gap: 10px; padding: 0 12px 12px; }
@@ -203,7 +203,7 @@ h2 { margin-bottom: 5px; font-size: 20px; font-weight: 700; letter-spacing: -.45
 .outgoing-group { overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: white; box-shadow: 0 7px 22px rgb(30 52 39 / 4%); }
 .outgoing-group > summary { display: flex; min-height: 48px; align-items: center; justify-content: space-between; padding: 0 17px; color: var(--green-dark); cursor: pointer; font-size: 12px; font-weight: 700; list-style: none; }
 .outgoing-group > summary::-webkit-details-marker { display: none; }
-.outgoing-group > summary::after { content: "⌄"; color: #78847b; font-size: 15px; transition: transform .2s; }
+.outgoing-group > summary::after { content: "🔽"; font-size: 12px; transition: transform .2s; }
 .outgoing-group[open] > summary::after { transform: rotate(180deg); }
 .outgoing-group > summary:focus-visible { outline: 2px solid var(--green); outline-offset: -3px; }
 .outgoing-group .user-form-grid { padding: 0 16px 16px; }
@@ -263,7 +263,7 @@ h2 { margin-bottom: 5px; font-size: 20px; font-weight: 700; letter-spacing: -.45
 .page-footer { align-items: flex-start; }
 .page-footer #save-status { text-align: right; }
 .request-item-row td { padding: 3px; border: 0; }
-.remove-item-button { width: 25px; height: 29px; border: 0; border-radius: 4px; background: #fbefec; color: #a45e50; cursor: pointer; font-size: 16px; }
+.remove-item-button { width: 30px; height: 29px; border: 0; border-radius: 4px; background: #fbefec; color: #a45e50; cursor: pointer; font-size: 14px; }
 .request-dialog { width: min(1460px, calc(100% - 24px)); max-width: 1460px; height: min(780px, calc(100vh - 24px)); max-height: calc(100vh - 24px); padding: 10px; overflow: auto; border: 0; background: white; color: #171719; box-shadow: 0 20px 70px rgb(30 45 37 / 22%); }
 .request-dialog, .request-dialog * { font-family: "Roboto Mono", monospace; }
 .request-dialog::backdrop { background: rgb(25 37 31 / 58%); }
@@ -271,7 +271,7 @@ h2 { margin-bottom: 5px; font-size: 20px; font-weight: 700; letter-spacing: -.45
 .request-sheet-header { position: relative; display: grid; justify-items: center; padding: 2px 38px 8px; }
 .request-sheet-header > img { width: 150px; max-height: 39px; object-fit: contain; }
 .request-sheet-title { margin: 4px 0 0; font-size: 12px; font-weight: 700; letter-spacing: 1.2px; text-align: center; text-transform: uppercase; }
-.dialog-close { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border: 1px solid var(--line); border-radius: 7px; background: white; color: #68746c; cursor: pointer; font-size: 22px; line-height: 1; }
+.dialog-close { display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border: 1px solid var(--line); border-radius: 7px; background: white; color: #68746c; cursor: pointer; font-size: 15px; line-height: 1; }
 .request-sheet-header .dialog-close { position: absolute; top: 0; right: 0; }
 .request-dialog-body { display: flex; flex: 1; flex-direction: column; gap: 15px; min-height: 0; }
 .request-sheet-top { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr) auto; align-items: center; gap: 14px; padding: 20px 0 30px; }
@@ -322,6 +322,7 @@ h2 { margin-bottom: 5px; font-size: 20px; font-weight: 700; letter-spacing: -.45
 .request-form-notice { margin: 10px 0 0; color: #8a6e4d; font-size: 8px; text-align: center; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 8px; }
 .submit-request-button { min-height: 32px; padding: 0 12px; font-size: 9px; }
+.submit-request-button span { margin-right: 4px; }
 .button-secondary { padding: 0 14px; border: 1px solid var(--line); background: white; color: #68746c; }
 .catalog-dialog { width: min(1100px, calc(100% - 32px)); max-width: 1100px; max-height: min(82vh, 760px); padding: 22px; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; background: white; color: var(--ink); box-shadow: 0 20px 70px rgb(30 45 37 / 22%); }
 .auth-dialog { width: min(460px, calc(100% - 32px)); max-height: 90vh; }
