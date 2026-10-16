@@ -440,7 +440,9 @@ function updateSessionUi(session, navigate = true) {
     void refreshAdminTools();
   }
   if (signedIn && !currentUserProfile.mustChangePassword) {
-    const requestedPage = navigate ? "user-forms" : location.hash.slice(1) || activePageId || "user-forms";
+    const requestedPage = navigate && previousUserId !== nextUserId
+      ? "user-forms"
+      : location.hash.slice(1) || activePageId || "user-forms";
     const validPages = new Set(["user-forms", "my-requests", "approvals", "pending-release", "pending-received"]);
     activatePortalPage(validPages.has(requestedPage) ? requestedPage : "user-forms", false);
   }
@@ -749,6 +751,10 @@ async function loadWorkflowQueue(action, listId, statusId, emptyMessage) {
 }
 
 function renderWorkflowRequests(container, requests, action) {
+  const openCategories = new Set(
+    [...container.querySelectorAll(".approval-category[open] .approval-category-title")]
+      .map(heading => heading.textContent.replace(/\s+\(\d+\)$/, "")),
+  );
   container.replaceChildren();
   for (const form of FORM_TYPES) {
     const categoryRequests = requests.filter(request => request.form_type_id === form.id);
@@ -758,6 +764,7 @@ function renderWorkflowRequests(container, requests, action) {
     const categoryHeading = document.createElement("summary");
     categoryHeading.className = "approval-category-title";
     categoryHeading.textContent = `${form.name} (${categoryRequests.length})`;
+    category.open = openCategories.has(form.name);
     category.append(categoryHeading);
     const categoryList = document.createElement("div");
     categoryList.className = "approval-category-list";
@@ -1042,7 +1049,7 @@ function makeWorkflowRequestCard(request, action) {
   table.append(head, body);
   tableScroll.append(table);
   card.append(heading, details);
-  if (request.approved_by) {
+  if (request.approved_by && action !== "pending_received") {
     const signature = document.createElement("div");
     signature.className = "approval-signature";
     const name = document.createElement("strong");

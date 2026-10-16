@@ -85,7 +85,7 @@ After approval, a request appears under **Pending to release** for a signed-in u
 
 The portal keeps the selected dashboard page in the URL hash so it can be restored after a reload or session refresh. Lookup lists are briefly cached in the signed-in browser session, and workflow requests for the separate form tabs are fetched concurrently.
 
-The next sequence number is recalculated from the matching sheet when the form preview loads and again at submit. Deleting request rows therefore resets numbering to 1 when the corresponding tab has no remaining request rows, or resumes after the highest remaining request number. A per-form lock prevents simultaneous requests from reusing a number during the sheet write. If writing to Sheets fails after allocation, the portal reports the failure; the next preview reconciles the counter with the sheet.
+The next sequence number is recalculated from the matching sheet when the form preview loads and again at submit. Deleting request rows therefore resets numbering to 1 when the corresponding tab has no remaining request rows, or resumes after the highest remaining request number. A per-form lock prevents simultaneous requests from reusing a number during the sheet write. If writing to Sheets fails after allocation, the portal reports the failure; the next preview reconciles the counter with the sheet. Request tabs store status as plain text (without a dropdown) and are resized to the header and request rows in use, without reserving extra blank rows.
 
 ## Staff use
 
