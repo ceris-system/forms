@@ -2115,6 +2115,8 @@ document.querySelector("#inventory-adjustment-form").addEventListener("submit", 
 document.querySelector("#close-inventory-item").addEventListener("click", () => document.querySelector("#inventory-item-dialog").close());
 document.querySelector("#cancel-inventory-adjustment").addEventListener("click", () => document.querySelector("#inventory-item-dialog").close());
 document.querySelector("#print-inventory-form").addEventListener("click", () => {
+  const department = inventoryDepartment || currentUserProfile.department;
+  document.querySelector("#inventory-print-department").textContent = department ? `Department: ${department}` : "Department: Not selected";
   document.body.classList.add("print-inventory");
   window.print();
 });
