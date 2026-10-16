@@ -341,7 +341,7 @@ function renderInventoryRows() {
     const tr = document.createElement("tr");
     for (const value of [row.sku_code, row.description, row.uom, row.cost, row.srp, row.near_expiration, row.on_hand, row.total_on_hand, row.department]) {
       const cell = document.createElement("td");
-      cell.textContent = String(value || "—");
+      cell.textContent = value == null ? "" : String(value);
       tr.append(cell);
     }
     const actionCell = document.createElement("td");
@@ -372,7 +372,7 @@ function renderInventoryFormRows() {
     ];
     for (const value of values) {
       const cell = document.createElement("td");
-      cell.textContent = String(value || "—");
+      cell.textContent = value == null ? "" : String(value);
       tr.append(cell);
     }
     body.append(tr);
@@ -436,7 +436,7 @@ function showInventoryItem(sheetRow) {
     "inventory-item-total": row.total_on_hand,
   };
   for (const [id, value] of Object.entries(detailFields)) {
-    document.querySelector(`#${id}`).textContent = String(value || "—");
+    document.querySelector(`#${id}`).textContent = value == null ? "" : String(value);
   }
   const batches = document.querySelector("#inventory-item-batches");
   batches.replaceChildren();
@@ -450,9 +450,9 @@ function showInventoryItem(sheetRow) {
     const name = document.createElement("strong");
     name.textContent = label;
     const batchDate = document.createElement("span");
-    batchDate.textContent = `Expiration: ${date || "—"}`;
+    batchDate.textContent = date ? `Expiration: ${date}` : "";
     const batchQty = document.createElement("span");
-    batchQty.textContent = `Qty: ${qty || "—"}`;
+    batchQty.textContent = qty ? `Qty: ${qty}` : "";
     batch.append(name, batchDate, batchQty);
     batches.append(batch);
   }
