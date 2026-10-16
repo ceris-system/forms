@@ -1,7 +1,7 @@
 {
   "id": "./",
-  "name": "Mother's Wonderland Request Portal",
-  "short_name": "MW Requests",
+  "name": "MW FORM",
+  "short_name": "MW FORM",
   "description": "Staff requests, approvals, releases, and inventory workflows for Mother's Wonderland.",
   "start_url": "./index.html",
   "scope": "./",

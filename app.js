@@ -74,7 +74,7 @@ async function installPortalApp() {
     const choice = await pendingInstallPrompt.userChoice;
     if (choice.outcome === "accepted") {
       setInstallButtonsVisible(false);
-      showInstallMessage("Installing Mother's Wonderland Requests…");
+      showInstallMessage("Installing MW FORM…");
     } else {
       showInstallMessage("Installation was cancelled. You can install the app later from this button.");
     }
@@ -1762,7 +1762,7 @@ window.addEventListener("beforeinstallprompt", event => {
 window.addEventListener("appinstalled", () => {
   pendingInstallPrompt = null;
   setInstallButtonsVisible(false);
-  showInstallMessage("Mother's Wonderland Requests is installed on this device.");
+  showInstallMessage("MW FORM is installed on this device.");
 });
 installAppButtons.forEach(button => button.addEventListener("click", installPortalApp));
 async function registerPortalServiceWorker() {
