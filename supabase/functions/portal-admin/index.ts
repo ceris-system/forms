@@ -181,6 +181,8 @@ Deno.serve(async (request: Request) => {
       "reset_request_history",
       "state",
       "create_user",
+      "update_user",
+      "delete_user",
       "save_workbook",
       "save_assignment",
     ].includes(String(body.action)) && !isMasterAdmin) {
@@ -198,7 +200,7 @@ Deno.serve(async (request: Request) => {
     }
 
     if (body.action === "state") {
-      const [settingsResult, usersResult, assignmentsResult] = await Promise.all([
+      const [settingsResult, usersResult, assignmentsResult, masterAdminsResult] = await Promise.all([
         adminClient.from("mw_google_settings")
           .select("spreadsheet_url, products_tab, outgoing_departments_tab, incoming_departments_tab, suppliers_tab")
           .eq("singleton", true)
@@ -207,17 +209,23 @@ Deno.serve(async (request: Request) => {
           .select("user_id, username, department, status, role, allowed_form_types")
           .order("username"),
         adminClient.from("mw_sheet_assignments").select("user_id, output_tab"),
+        adminClient.from("mw_portal_admins").select("user_id"),
       ]);
       if (settingsResult.error) throw settingsResult.error;
       if (usersResult.error) throw usersResult.error;
       if (assignmentsResult.error) throw assignmentsResult.error;
+      if (masterAdminsResult.error) throw masterAdminsResult.error;
+      const masterAdminIds = new Set((masterAdminsResult.data || []).map(account => String(account.user_id)));
       return respond({
         spreadsheet_url: settingsResult.data?.spreadsheet_url || "",
         products_tab: settingsResult.data?.products_tab || "data",
         outgoing_departments_tab: settingsResult.data?.outgoing_departments_tab || "area",
         incoming_departments_tab: settingsResult.data?.incoming_departments_tab || "area",
         suppliers_tab: settingsResult.data?.suppliers_tab || "dd",
-        users: usersResult.data || [],
+        users: (usersResult.data || []).map(account => ({
+          ...account,
+          is_master_admin: masterAdminIds.has(String(account.user_id)),
+        })),
         assignments: assignmentsResult.data || [],
       });
     }
@@ -287,6 +295,125 @@ Deno.serve(async (request: Request) => {
       }
 
       return respond({ ok: true, username, department, status, role, allowed_form_types: formTypes, user_id: created.user.id }, 201);
+    }
+
+    if (body.action === "update_user") {
+      const userId = typeof body.user_id === "string" ? body.user_id : "";
+      if (!/^[0-9a-f-]{36}$/i.test(userId)) return respond({ error: "Choose a valid user account." }, 400);
+      const username = typeof body.username === "string" ? body.username.trim().toLowerCase() : "";
+      const department = typeof body.department === "string" ? body.department.trim() : "";
+      const status = body.status === "active" ? "active" : body.status === "default" ? "default" : "";
+      const requestedRole = body.role === "admin" ? "admin" : body.role === "user" ? "user" : "";
+      const password = typeof body.password === "string" ? body.password : "";
+      if (!department || department.length > 100) return respond({ error: "Choose a valid department." }, 400);
+      if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
+        return respond({ error: "Username must be 3–32 letters, numbers, periods, underscores, or hyphens." }, 400);
+      }
+      if (!status) return respond({ error: "Choose Active or Default status." }, 400);
+      if (!requestedRole) return respond({ error: "Choose a valid account role." }, 400);
+      if (password && (password.length < 8 || password.length > 256)) {
+        return respond({ error: "New password must be between 8 and 256 characters." }, 400);
+      }
+
+      const { data: target, error: targetError } = await adminClient
+        .from("login_usernames")
+        .select("user_id, username, role, allowed_form_types")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (targetError) throw targetError;
+      if (!target) return respond({ error: "That user account could not be found." }, 404);
+      const { data: targetMasterAdmin, error: targetAdminError } = await adminClient
+        .from("mw_portal_admins")
+        .select("user_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (targetAdminError) throw targetAdminError;
+      if (targetMasterAdmin && requestedRole !== "admin") {
+        return respond({ error: "A Master Admin account cannot be changed to the User role." }, 409);
+      }
+      if (targetMasterAdmin && username !== target.username) {
+        return respond({ error: "A Master Admin account's username cannot be changed here." }, 409);
+      }
+      if (targetMasterAdmin && (status !== "active" || password)) {
+        return respond({ error: "A Master Admin account's status or password cannot be changed here." }, 409);
+      }
+      if (username !== target.username) {
+        const { data: existingUsername, error: usernameError } = await adminClient
+          .from("login_usernames")
+          .select("user_id")
+          .eq("username", username)
+          .maybeSingle();
+        if (usernameError) throw usernameError;
+        if (existingUsername) return respond({ error: "That username is already in use." }, 409);
+      }
+
+      const requestedForms = Array.isArray(body.allowed_form_types)
+        ? [...new Set(body.allowed_form_types.filter((value): value is string => typeof value === "string"))]
+        : [];
+      const formTypes = targetMasterAdmin || requestedRole === "admin" ? allowedFormTypes : requestedForms;
+      if (formTypes.length < 1 || formTypes.some(formType => !allowedFormTypes.includes(formType))) {
+        return respond({ error: "Select at least one valid form for this user." }, 400);
+      }
+
+      const role = targetMasterAdmin ? "admin" : requestedRole;
+      const { error: updateError } = await adminClient
+        .from("login_usernames")
+        .update({ username, department, status, role, allowed_form_types: formTypes })
+        .eq("user_id", userId);
+      if (updateError) throw updateError;
+
+      const authUpdate: {
+        password?: string;
+        user_metadata: Record<string, unknown>;
+      } = {
+        user_metadata: {
+          portal_username: username,
+          department,
+          role,
+          allowed_form_types: formTypes,
+          must_change_password: status === "default",
+        },
+      };
+      if (password) authUpdate.password = password;
+      const { error: authUpdateError } = await adminClient.auth.admin.updateUserById(userId, authUpdate);
+      return respond({
+        ok: true,
+        username,
+        department,
+        status,
+        role,
+        allowed_form_types: formTypes,
+        ...(authUpdateError
+          ? { warning: `Account details were saved, but authentication settings could not be fully synchronized: ${authUpdateError.message}` }
+          : {}),
+      });
+    }
+
+    if (body.action === "delete_user") {
+      const userId = typeof body.user_id === "string" ? body.user_id : "";
+      if (!/^[0-9a-f-]{36}$/i.test(userId)) return respond({ error: "Choose a valid user account." }, 400);
+      if (userId === authData.user.id) {
+        return respond({ error: "You cannot delete your own signed-in Master Admin account." }, 409);
+      }
+      const { data: target, error: targetError } = await adminClient
+        .from("login_usernames")
+        .select("user_id, username")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (targetError) throw targetError;
+      if (!target) return respond({ error: "That user account could not be found." }, 404);
+      const { data: targetMasterAdmin, error: targetAdminError } = await adminClient
+        .from("mw_portal_admins")
+        .select("user_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+      if (targetAdminError) throw targetAdminError;
+      if (targetMasterAdmin) {
+        return respond({ error: "Master Admin accounts are protected from deletion." }, 409);
+      }
+      const { error: deleteError } = await adminClient.auth.admin.deleteUser(userId);
+      if (deleteError) throw deleteError;
+      return respond({ ok: true, username: target.username });
     }
 
     if (body.action === "save_workbook") {

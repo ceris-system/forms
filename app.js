@@ -45,6 +45,7 @@ let notificationOffset = 0;
 let notificationRequestToReveal = null;
 let notificationRefreshTimer = null;
 let currentUnreadNotificationCount = 0;
+let adminUserAccounts = [];
 const workflowLoadIds = new Map();
 
 function getLocalDate() {
@@ -610,19 +611,26 @@ async function loadAdminState() {
   document.querySelector("#outgoing-departments-tab").value = state.outgoing_departments_tab || "area";
   document.querySelector("#incoming-departments-tab").value = state.incoming_departments_tab || "area";
   document.querySelector("#suppliers-tab").value = state.suppliers_tab || "dd";
+  adminUserAccounts = Array.isArray(state.users) ? state.users : [];
   await loadAccountDepartmentOptions();
+  renderUserAccounts();
 }
 
 async function loadAccountDepartmentOptions() {
   const select = document.querySelector("#new-user-department");
+  const editSelect = document.querySelector("#edit-user-department");
   const status = document.querySelector("#add-user-status");
   select.disabled = true;
   select.replaceChildren(new Option("Loading departments from AREA!A1:A…", ""));
+  editSelect.disabled = true;
+  editSelect.replaceChildren(new Option("Loading departments from AREA!A1:A…", ""));
   try {
     const lookups = await loadLookupData();
     const departments = Array.isArray(lookups.account_departments) ? lookups.account_departments : [];
     populateSelect(select, departments, "department");
+    populateSelect(editSelect, departments, "department");
     select.disabled = departments.length === 0;
+    editSelect.disabled = departments.length === 0;
     if (departments.length === 0) {
       status.textContent = "No departments were found in the AREA sheet's column A.";
     } else {
@@ -631,15 +639,177 @@ async function loadAccountDepartmentOptions() {
   } catch (error) {
     console.error("Unable to load account departments from the AREA sheet.", error);
     select.replaceChildren(new Option("Could not load departments from AREA!A1:A", ""));
+    editSelect.replaceChildren(new Option("Could not load departments from AREA!A1:A", ""));
     status.textContent = `Could not load departments from the AREA sheet: ${error.message || "Request failed."}`;
   }
 }
 
-function updateUserFormAccess() {
-  const role = document.querySelector("#new-user-role").value;
-  const formAccess = document.querySelector("#new-user-form-access");
+function updateUserFormAccess(
+  roleSelectId = "new-user-role",
+  formAccessId = "new-user-form-access",
+  checkboxName = "allowed-form-types",
+) {
+  const role = document.querySelector(`#${roleSelectId}`).value;
+  const formAccess = document.querySelector(`#${formAccessId}`);
   const isUnrestrictedAdmin = role === "admin";
   formAccess.disabled = isUnrestrictedAdmin;
+  if (isUnrestrictedAdmin) {
+    for (const checkbox of formAccess.querySelectorAll(`input[name="${checkboxName}"]`)) checkbox.checked = true;
+  }
+}
+
+function renderUserAccounts() {
+  const list = document.querySelector("#user-accounts-list");
+  const status = document.querySelector("#user-accounts-status");
+  list.replaceChildren();
+  if (adminUserAccounts.length === 0) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 6;
+    cell.textContent = "No user accounts found.";
+    row.append(cell);
+    list.append(row);
+    status.textContent = "No portal accounts are available to manage.";
+    return;
+  }
+
+  status.textContent = `${adminUserAccounts.length} account${adminUserAccounts.length === 1 ? "" : "s"}.`;
+  for (const account of adminUserAccounts) {
+    const row = document.createElement("tr");
+    const fields = [
+      account.username,
+      account.department || "—",
+      account.is_master_admin ? "Master Admin" : account.role === "admin" ? "Admin" : "User",
+      account.role === "admin"
+        ? "All forms"
+        : FORM_TYPES.filter(form => (account.allowed_form_types || []).includes(form.id))
+          .map(form => form.shortName)
+          .join(", ") || "No forms",
+      account.status === "default" ? "Password change required" : "Active",
+    ];
+    for (const value of fields) {
+      const cell = document.createElement("td");
+      cell.textContent = value;
+      row.append(cell);
+    }
+    const actionsCell = document.createElement("td");
+    actionsCell.className = "user-account-actions";
+    const editButton = document.createElement("button");
+    editButton.className = "button button-secondary";
+    editButton.type = "button";
+    editButton.textContent = "Edit";
+    editButton.addEventListener("click", () => openAccountEditor(account));
+    actionsCell.append(editButton);
+    if (!account.is_master_admin) {
+      const deleteButton = document.createElement("button");
+      deleteButton.className = "button button-danger";
+      deleteButton.type = "button";
+      deleteButton.textContent = "Delete";
+      deleteButton.addEventListener("click", () => void deleteUserAccount(account));
+      actionsCell.append(deleteButton);
+    }
+    row.append(actionsCell);
+    list.append(row);
+  }
+}
+
+function openAccountEditor(account) {
+  const dialog = document.querySelector("#account-edit-dialog");
+  document.querySelector("#account-edit-form").reset();
+  document.querySelector("#edit-user-id").value = account.user_id;
+  document.querySelector("#account-edit-title").textContent = `Edit ${account.is_master_admin ? "Master Admin" : "user"} account`;
+  document.querySelector("#account-edit-username").textContent = account.username;
+  const usernameInput = document.querySelector("#edit-user-login");
+  usernameInput.value = account.username;
+  usernameInput.disabled = Boolean(account.is_master_admin);
+  document.querySelector("#edit-user-department").value = account.department || "";
+  const role = account.is_master_admin ? "admin" : account.role === "admin" ? "admin" : "user";
+  document.querySelector("#edit-user-role").value = role;
+  document.querySelector("#edit-user-status").value = account.status === "default" ? "default" : "active";
+  for (const checkbox of document.querySelectorAll('input[name="edit-allowed-form-types"]')) {
+    checkbox.checked = account.is_master_admin
+      || role === "admin"
+      || (account.allowed_form_types || []).includes(checkbox.value);
+  }
+  const roleSelect = document.querySelector("#edit-user-role");
+  roleSelect.disabled = Boolean(account.is_master_admin);
+  document.querySelector("#edit-user-status").disabled = Boolean(account.is_master_admin);
+  updateUserFormAccess("edit-user-role", "edit-user-form-access", "edit-allowed-form-types");
+  document.querySelector("#edit-user-status").disabled = Boolean(account.is_master_admin);
+  document.querySelector("#edit-user-password").disabled = Boolean(account.is_master_admin);
+  document.querySelector("#edit-user-password").value = "";
+  document.querySelector("#account-edit-status").textContent = account.is_master_admin
+    ? "Master Admin accounts are protected from role changes, password resets, and deletion."
+    : "";
+  document.querySelector("#save-account-edit").disabled = false;
+  dialog.showModal();
+}
+
+async function refreshUserAccounts() {
+  const button = document.querySelector("#refresh-user-accounts");
+  button.disabled = true;
+  document.querySelector("#user-accounts-status").textContent = "Refreshing user accounts…";
+  try {
+    const state = await callPortalAdmin({ action: "state" });
+    adminUserAccounts = Array.isArray(state.users) ? state.users : [];
+    renderUserAccounts();
+  } catch (error) {
+    console.error("Unable to refresh user accounts.", error);
+    document.querySelector("#user-accounts-status").textContent =
+      `Could not load user accounts: ${error.message || "Request failed."}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function saveUserAccount(event) {
+  event.preventDefault();
+  const button = document.querySelector("#save-account-edit");
+  const status = document.querySelector("#account-edit-status");
+  button.disabled = true;
+  status.textContent = "Saving account changes…";
+  try {
+    const role = document.querySelector("#edit-user-role").value;
+    const allowedFormTypes = [...document.querySelectorAll('input[name="edit-allowed-form-types"]:checked')]
+      .map(input => input.value);
+    if (role === "user" && !allowedFormTypes.length) throw new Error("Select at least one form for this user.");
+    const result = await callPortalAdmin({
+      action: "update_user",
+      user_id: document.querySelector("#edit-user-id").value,
+      username: document.querySelector("#edit-user-login").value.trim().toLowerCase(),
+      department: document.querySelector("#edit-user-department").value,
+      role,
+      allowed_form_types: role === "admin" ? FORM_TYPES.map(form => form.id) : allowedFormTypes,
+      status: document.querySelector("#edit-user-status").value,
+      password: document.querySelector("#edit-user-password").value,
+    });
+    await refreshUserAccounts();
+    status.textContent = result.warning || "Account updated.";
+    if (!result.warning) document.querySelector("#account-edit-dialog").close();
+  } catch (error) {
+    console.error("Unable to update user account.", error);
+    status.textContent = `Could not update account: ${error.message || "Request failed."}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function deleteUserAccount(account) {
+  const confirmation = window.confirm(
+    `Delete the "${account.username}" account? The user will lose portal access, and their saved notifications will be removed. This cannot be undone.`,
+  );
+  if (!confirmation) return;
+  const status = document.querySelector("#user-accounts-status");
+  status.textContent = `Deleting "${account.username}"…`;
+  try {
+    const result = await callPortalAdmin({ action: "delete_user", user_id: account.user_id });
+    adminUserAccounts = adminUserAccounts.filter(item => item.user_id !== account.user_id);
+    renderUserAccounts();
+    status.textContent = `Account "${result.username}" deleted.`;
+  } catch (error) {
+    console.error("Unable to delete user account.", error);
+    status.textContent = `Could not delete account: ${error.message || "Request failed."}`;
+  }
 }
 
 async function saveWorkbook() {
@@ -691,6 +861,7 @@ async function addUser(event) {
     });
     form.reset();
     updateUserFormAccess();
+    await refreshUserAccounts();
     status.textContent = `User "${result.username}" added. Give the username and temporary password privately.`;
   } catch (error) {
     console.error("Unable to create a portal user.", error);
@@ -1625,5 +1796,13 @@ requestFormBody.addEventListener("input", (event) => {
 });
 document.querySelector("#add-user-form").addEventListener("submit", addUser);
 document.querySelector("#new-user-role").addEventListener("change", updateUserFormAccess);
+document.querySelector("#refresh-user-accounts").addEventListener("click", refreshUserAccounts);
+document.querySelector("#account-edit-form").addEventListener("submit", saveUserAccount);
+document.querySelector("#edit-user-role").addEventListener("change", () =>
+  updateUserFormAccess("edit-user-role", "edit-user-form-access", "edit-allowed-form-types"));
+document.querySelector("#close-account-edit").addEventListener("click", () =>
+  document.querySelector("#account-edit-dialog").close());
+document.querySelector("#cancel-account-edit").addEventListener("click", () =>
+  document.querySelector("#account-edit-dialog").close());
 document.querySelector("#password-change-form").addEventListener("submit", changeTemporaryPassword);
 passwordChangeDialog.addEventListener("cancel", event => event.preventDefault());

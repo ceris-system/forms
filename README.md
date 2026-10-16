@@ -88,7 +88,7 @@ The **Notifications** inbox keeps form-specific updates for the signed-in user. 
 
 ## Roles and form access
 
-Only the Master Admin can create accounts, assign the **Admin** or **User** role, choose a User's assigned forms, and change workbook or portal settings. Admins can review and approve requests, handle all departments, and see every request in **Reports & History**, but cannot manage accounts or settings. Master Admin access remains controlled by `public.mw_portal_admins`.
+Only the Master Admin can create accounts, assign the **Admin** or **User** role, choose a User's assigned forms, and change workbook or portal settings. The Master Admin's **User accounts** directory can edit usernames, departments, roles, form access, and account status; it can also set a new password or delete a non-Master Admin account. Master Admin accounts are protected from deletion, password resets, username changes, and role demotion. Admins can review and approve requests, handle all departments, and see every request in **Reports & History**, but cannot manage accounts or settings. Master Admin access remains controlled by `public.mw_portal_admins`.
 
 For a regular User, select the department from the **AREA** tab's column A and one or more form types when creating the account. The user can submit and view queues only for those forms. **Reports & History** is read-only and shows requests for the assigned form types where the user's department is the outgoing or incoming department. Existing accounts keep access to all four forms after applying the role migration. The backend enforces role, form assignment, and department rules for every read and workflow action; hiding a page or form in the browser is not the security boundary.
 
@@ -102,12 +102,14 @@ The next sequence number is recalculated from the matching sheet when the form p
 
 Open the portal's sign-in screen, enter the username and password from the administrator (use **Show** to reveal the password if needed), choose a form, select departments (and a supplier for Purchase Order), select products after choosing the outgoing department, and submit. Use **My requests** to follow your request statuses and **Notifications** to review form-specific updates. Master Admins use **Approvals** to review and approve; the matching outgoing and incoming departments use **Pending to release** and **Pending to received** to complete their respective steps.
 
-## Adding a staff account
+## Adding and managing a staff account
 
-1. Sign in as Master Admin and use **Add a user** to enter a username, department, temporary password, and status. The dashboard creates and confirms the Supabase Auth account and maps the username. Since Supabase Auth requires an email, it generates a non-deliverable internal address from the username; no email is sent or needed.
+1. Sign in as Master Admin and use **Add a user** to enter a username, department, role, allowed forms, temporary password, and status. The dashboard creates and confirms the Supabase Auth account and maps the username. Since Supabase Auth requires an email, it generates a non-deliverable internal address from the username; no email is sent or needed.
 2. Give the staff member their username and temporary password through a secure channel. The portal accepts uppercase username input by converting it to lowercase.
 
-Usernames must contain 3–32 letters, numbers, periods, underscores, or hyphens. Passwords must be at least 6 characters and should be delivered privately. A new user created with **Default** status must change the temporary password at first sign-in. After changing it, the account becomes **Active**. The saved department is preselected as the user's Incoming Department on request forms.
+Use **User accounts** to edit a username, department, role, allowed forms, or status. Enter a new password only when you want to reset it; passwords set here must be at least 8 characters. Deleting an account removes its sign-in access and saved notification inbox, and cannot be undone. Master Admin accounts cannot be deleted or demoted from this directory.
+
+Usernames must contain 3–32 letters, numbers, periods, underscores, or hyphens. Initial passwords must be at least 6 characters and should be delivered privately. A new user created with **Default** status must change the temporary password at first sign-in. After changing it, the account becomes **Active**. The saved department is preselected as the user's Incoming Department on request forms.
 
 ## Run locally
 
