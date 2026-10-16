@@ -21,6 +21,7 @@ const catalogDialog = document.querySelector("#catalog-dialog");
 const catalogProducts = document.querySelector("#catalog-products");
 const catalogStatus = document.querySelector("#catalog-status");
 const passwordChangeDialog = document.querySelector("#password-change-dialog");
+const installAppButtons = [...document.querySelectorAll(".install-app-button")];
 let catalogRows = [];
 let selectedCatalogRows = new Set();
 let supabaseClient = null;
@@ -46,7 +47,45 @@ let notificationRequestToReveal = null;
 let notificationRefreshTimer = null;
 let currentUnreadNotificationCount = 0;
 let adminUserAccounts = [];
+let pendingInstallPrompt = null;
 const workflowLoadIds = new Map();
+
+function setInstallButtonsVisible(visible) {
+  for (const button of installAppButtons) button.hidden = !visible;
+}
+
+function showInstallMessage(message) {
+  saveStatus.textContent = message;
+  document.querySelector("#install-app-status").textContent = message;
+}
+
+async function installPortalApp() {
+  if (!pendingInstallPrompt) {
+    const isAppleMobile = /iPad|iPhone|iPod/.test(navigator.userAgent)
+      || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    showInstallMessage(isAppleMobile
+      ? "To install, tap Share in Safari, then choose Add to Home Screen."
+      : "To install, use your browser's Install app option or choose Install page from its menu.");
+    return;
+  }
+  for (const button of installAppButtons) button.disabled = true;
+  try {
+    await pendingInstallPrompt.prompt();
+    const choice = await pendingInstallPrompt.userChoice;
+    if (choice.outcome === "accepted") {
+      setInstallButtonsVisible(false);
+      showInstallMessage("Installing Mother's Wonderland Requests…");
+    } else {
+      showInstallMessage("Installation was cancelled. You can install the app later from this button.");
+    }
+    pendingInstallPrompt = null;
+  } catch (error) {
+    console.error("Unable to start app installation.", error);
+    showInstallMessage(`Could not start app installation: ${error.message || "Use your browser's Install app menu."}`);
+  } finally {
+    for (const button of installAppButtons) button.disabled = false;
+  }
+}
 
 function getLocalDate() {
   const today = new Date();
@@ -1695,6 +1734,7 @@ async function submitRequest(event) {
 
 renderUserForms();
 setActiveNavigation();
+void registerPortalServiceWorker();
 configureSupabase(buildSettings());
 document.querySelector("#save-workbook").addEventListener("click", saveWorkbook);
 document.querySelector("#toggle-user-mode").addEventListener("click", async () => {
@@ -1714,6 +1754,31 @@ document.querySelector("#toggle-user-mode").addEventListener("click", async () =
     saveStatus.textContent = `Sign-out failed: ${error.message || "Supabase returned an unexpected error."}`;
   }
 });
+window.addEventListener("beforeinstallprompt", event => {
+  event.preventDefault();
+  pendingInstallPrompt = event;
+  setInstallButtonsVisible(true);
+});
+window.addEventListener("appinstalled", () => {
+  pendingInstallPrompt = null;
+  setInstallButtonsVisible(false);
+  showInstallMessage("Mother's Wonderland Requests is installed on this device.");
+});
+installAppButtons.forEach(button => button.addEventListener("click", installPortalApp));
+async function registerPortalServiceWorker() {
+  if (!window.isSecureContext || !("serviceWorker" in navigator)) return;
+  try {
+    await navigator.serviceWorker.register(new URL("sw.js", document.baseURI));
+    await navigator.serviceWorker.ready;
+    if (!window.matchMedia("(display-mode: standalone)").matches && !navigator.standalone) {
+      setInstallButtonsVisible(true);
+    }
+  } catch (error) {
+    console.error("Unable to register the request portal app shell.", error);
+    setInstallButtonsVisible(false);
+    showInstallMessage(`The app could not be prepared for installation: ${error.message || "Service worker registration failed."}`);
+  }
+}
 userFormGrid.addEventListener("click", (event) => {
   const button = event.target.closest("[data-open-form]");
   if (!button) return;

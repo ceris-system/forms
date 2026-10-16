@@ -1,0 +1,27 @@
+{
+  "id": "./",
+  "name": "Mother's Wonderland Request Portal",
+  "short_name": "MW Requests",
+  "description": "Staff requests, approvals, releases, and inventory workflows for Mother's Wonderland.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f7f4",
+  "theme_color": "#1f4b38",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "assets/app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "assets/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -68,7 +68,9 @@ const DEPLOYMENT_SETTINGS = {
 };
 ```
 
-Publish `index.html`, `app.js`, `styles.css`, `SIG.png`, `assets/`, and `supabase/` together to a static HTTPS host such as GitHub Pages. The publishable/anon key is designed for browser use with RLS enabled. **Never use a `service_role` key, `sb_secret_` key, or Google private key in the website.**
+Publish `index.html`, `app.js`, `styles.css`, `manifest.webmanifest`, `sw.js`, `SIG.png`, `assets/`, and `supabase/` together to a static HTTPS host such as GitHub Pages. Keep the service worker and manifest at the portal root and publish all generated `assets/app-icon-*.png` icons. The publishable/anon key is designed for browser use with RLS enabled. **Never use a `service_role` key, `sb_secret_` key, or Google private key in the website.**
+
+The portal is installable as a Progressive Web App (PWA) on supported devices. Open the published HTTPS portal and use **Install app** in the login screen or workspace header. In Safari on iPhone or iPad, use **Share → Add to Home Screen**. On desktop browsers that do not show the install prompt, use the browser menu's **Install page** option. The app shell can load from cache when offline, but sign-in, Google Sheets, and other live portal data require an internet connection.
 
 ## Master Admin setup in the portal
 

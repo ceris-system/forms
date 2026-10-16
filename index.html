@@ -3,8 +3,15 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#f4f7f4">
+    <meta name="theme-color" content="#1f4b38">
+    <meta name="description" content="Mother's Wonderland staff request and inventory workflow portal.">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="MW Requests">
     <title>Request Forms | Mother's Wonderland</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="assets/app-icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" sizes="180x180" href="assets/app-icon-180.png">
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
     <script src="app.js" defer></script>
@@ -25,6 +32,8 @@
         </div>
         <p class="catalog-status" id="auth-status" role="status" aria-live="polite"></p>
         <button class="button button-primary" id="submit-auth" type="submit">Sign in</button>
+        <button class="button button-install install-app-button login-install-button" type="button" hidden>📲 Install app</button>
+        <p class="install-app-status" id="install-app-status" role="status" aria-live="polite"></p>
       </form>
     </main>
     <div class="app-shell">
@@ -51,10 +60,14 @@
 
       <main class="main-content">
         <header class="topbar">
-          <div class="breadcrumbs">Workspace <span>/</span> <strong id="breadcrumb-page">My forms</strong></div>
+          <div class="topbar-identity">
+            <div class="topbar-monogram" aria-hidden="true">MW</div>
+            <div class="breadcrumbs"><span class="workspace-breadcrumb">WORKSPACE</span><strong id="breadcrumb-page">My forms</strong></div>
+          </div>
           <div class="topbar-right">
             <span class="system-status"><span class="status-dot"></span><span id="session-status">Setup workspace</span></span>
-            <button class="button button-secondary" type="button" id="toggle-user-mode">Sign in</button>
+            <button class="button button-install install-app-button" type="button" id="install-app-button" hidden>📲 Install app</button>
+            <button class="button button-secondary sign-in-button" type="button" id="toggle-user-mode">Sign in</button>
           </div>
         </header>
 
@@ -73,7 +86,7 @@
 
           <section class="section-block user-only portal-page" id="approvals" data-page-section hidden>
             <div class="section-heading">
-              <div><p class="eyebrow">ADMIN REVIEW</p><h1>Approvals</h1><p class="section-description">Review each request by form category. Adjust Approved Qty before approving; the approving username is saved as the approval signature.</p></div>
+              <div><p class="eyebrow">✅ ADMIN REVIEW</p><h1>Approvals</h1><p class="section-description">Review each request by form category. Adjust Approved Qty before approving; the approving username is saved as the approval signature.</p></div>
               <button class="button button-secondary" id="refresh-approvals" type="button">Refresh</button>
             </div>
             <p class="field-hint" id="approval-list-status" role="status" aria-live="polite"></p>
@@ -82,7 +95,7 @@
 
           <section class="section-block user-only portal-page" id="my-requests" data-page-section hidden>
             <div class="section-heading">
-              <div><p class="eyebrow">REQUEST STATUS</p><h1>My requests</h1><p class="section-description">See the current status of requests submitted by your account.</p></div>
+              <div><p class="eyebrow">📂 REQUEST STATUS</p><h1>My requests</h1><p class="section-description">See the current status of requests submitted by your account.</p></div>
               <button class="button button-secondary" id="refresh-my-requests" type="button">Refresh</button>
             </div>
             <p class="field-hint" id="my-requests-status" role="status" aria-live="polite"></p>
@@ -91,7 +104,7 @@
 
           <section class="section-block user-only portal-page" id="pending-release" data-page-section hidden>
             <div class="section-heading">
-              <div><p class="eyebrow">OUTGOING DEPARTMENT</p><h1>Pending to release</h1><p class="section-description">View and print the complete approved form with its approver signature before releasing it. Admins can process requests for every department.</p></div>
+              <div><p class="eyebrow">📤 OUTGOING DEPARTMENT</p><h1>Pending to release</h1><p class="section-description">View and print the complete approved form with its approver signature before releasing it. Admins can process requests for every department.</p></div>
               <button class="button button-secondary" id="refresh-pending-release" type="button">Refresh</button>
             </div>
             <p class="field-hint" id="pending-release-status" role="status" aria-live="polite"></p>
@@ -100,7 +113,7 @@
 
           <section class="section-block user-only portal-page" id="pending-received" data-page-section hidden>
             <div class="section-heading">
-              <div><p class="eyebrow">INCOMING DEPARTMENT</p><h1>Pending to received</h1><p class="section-description">Requests awaiting receipt by your incoming department. Admins can view and receive requests for every department.</p></div>
+              <div><p class="eyebrow">📥 INCOMING DEPARTMENT</p><h1>Pending to received</h1><p class="section-description">Requests awaiting receipt by your incoming department. Admins can view and receive requests for every department.</p></div>
               <button class="button button-secondary" id="refresh-pending-received" type="button">Refresh</button>
             </div>
             <p class="field-hint" id="pending-received-status" role="status" aria-live="polite"></p>
@@ -109,7 +122,7 @@
 
           <section class="section-block user-only portal-page" id="notifications" data-page-section hidden>
             <div class="section-heading">
-              <div><p class="eyebrow">FORM ACTIVITY</p><h1>Notifications</h1><p class="section-description">Updates for forms you submitted or need to review, release, or receive.</p></div>
+              <div><p class="eyebrow">🔔 FORM ACTIVITY</p><h1>Notifications</h1><p class="section-description">Updates for forms you submitted or need to review, release, or receive.</p></div>
               <div class="notification-actions">
                 <button class="button button-secondary" id="mark-all-notifications-read" type="button" disabled>Mark all as read</button>
                 <button class="button button-secondary" id="refresh-notifications" type="button">Refresh</button>
@@ -122,7 +135,7 @@
 
           <section class="section-block user-only portal-page" id="reports-history" data-page-section hidden>
             <div class="section-heading">
-              <div><p class="eyebrow">REPORTS &amp; RECORDS</p><h1>Reports &amp; History</h1><p class="section-description">Choose a section to view its records and reports.</p></div>
+              <div><p class="eyebrow">📊 REPORTS &amp; RECORDS</p><h1>Reports &amp; History</h1><p class="section-description">Choose a section to view its records and reports.</p></div>
             </div>
             <div class="report-menu-grid" aria-label="Reports and history sections">
               <button class="report-menu-button" type="button"><span class="report-menu-icon" aria-hidden="true">📦</span><span>Inventory</span></button>
