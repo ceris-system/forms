@@ -212,6 +212,7 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .inventory-table th:first-child, .inventory-table td:first-child { border-left: 1px solid #dce4dd; }
 .inventory-table thead th { position: sticky; top: 0; z-index: 2; border-top: 1px solid #dce4dd; background: #eff5f0; color: #53645a; font-size: 9px; }
 .inventory-table td { padding: 9px 10px; font-size: 10px; }
+.inventory-print-table th:nth-child(n + 3), .inventory-print-table td:nth-child(n + 3) { text-align: center; }
 .inventory-view-button { min-height: 29px; padding: 0 10px; font-size: 10px; }
 .inventory-form-toolbar { min-height: 55px; }
 .inventory-print-heading { display: none; }
