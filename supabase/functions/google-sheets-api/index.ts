@@ -377,6 +377,53 @@ async function previewRequestSequence(
   });
 }
 
+async function loadApprovalQueue(spreadsheetId: string): Promise<Record<string, unknown>[]> {
+  const metadata = await getSheetMetadata(spreadsheetId);
+  const availableTabs = new Map<string, string>(
+    (metadata.sheets || []).map((sheet: Record<string, any>) => [
+      String(sheet.properties?.title || "").toLocaleLowerCase(),
+      String(sheet.properties?.title || ""),
+    ]),
+  );
+  const requests = new Map<string, Record<string, unknown>>();
+
+  for (const [formType, tabName] of Object.entries(requestTabs)) {
+    const actualTab = availableTabs.get(tabName.toLocaleLowerCase());
+    if (!actualTab) continue;
+    const rows = await ensureRequestHeaders(spreadsheetId, actualTab);
+    for (const row of rows.slice(1)) {
+      const requestNumber = String(row[0] ?? "").trim();
+      const status = String(row[18] ?? "").trim().toLocaleLowerCase();
+      if (!requestNumber || status !== "pending") continue;
+
+      let request = requests.get(requestNumber);
+      if (!request) {
+        request = {
+          request_number: requestNumber,
+          form_type: String(row[1] || formType.replaceAll("-", " ")).toLocaleUpperCase(),
+          request_date: String(row[2] || ""),
+          outgoing_department: String(row[3] || ""),
+          incoming_department: String(row[4] || ""),
+          supplier: String(row[5] || ""),
+          submitted_by: String(row[6] || ""),
+          items: [],
+        };
+        requests.set(requestNumber, request);
+      }
+      (request.items as Record<string, string>[]).push({
+        sku_code: String(row[7] || ""),
+        product_description: String(row[8] || ""),
+        transfer_qty: String(row[15] || ""),
+        remarks: String(row[16] || ""),
+      });
+    }
+  }
+
+  return [...requests.values()].sort((left, right) =>
+    String(right.request_number).localeCompare(String(left.request_number))
+  );
+}
+
 async function getPortalUsername(
   adminClient: ReturnType<typeof createClient>,
   userId: string,
@@ -446,10 +493,11 @@ async function saveSubmissionDirect(
       item.qty_onhand, item.total_qty_onhand, item.cost, item.srp, item.transfer_qty, item.remarks,
       allocatedSequence, "Pending",
     ]);
-    const tab = safeTabName(actualOutputTab);
+    const firstRow = current.length + 1;
+    const lastRow = firstRow + rows.length - 1;
     await googleRequest(
-      `spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tab)}!A:S:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
-      { method: "POST", body: JSON.stringify({ values: rows }) },
+      `spreadsheets/${spreadsheetId}/values/${range(actualOutputTab, `A${firstRow}:S${lastRow}`)}?valueInputOption=RAW`,
+      { method: "PUT", body: JSON.stringify({ values: rows }) },
     );
     return requestNumber;
   });
@@ -502,6 +550,9 @@ Deno.serve(async (request: Request) => {
         throw new Error("The next request sequence number is invalid.");
       }
       return respond({ sequence_number: sequenceNumber });
+    }
+    if (body.action === "approval_queue") {
+      return respond({ requests: await loadApprovalQueue(settings.spreadsheet_id) });
     }
     if (body.action === "submit") {
       const requestNumber = await saveSubmissionDirect(

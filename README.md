@@ -79,11 +79,13 @@ Publish `index.html`, `app.js`, `styles.css`, `assets/`, and `supabase/` togethe
 
 Lookup tabs are read-only for portal users. Requests are saved to the fixed tabs `TRANSFER` (Release & Request), `REQUEST` (Transfer), `RTV` (Pull Out), and `P.O REQUEST` (Purchase Order). Each row includes the full **Request Number** (for example, `RRF-0000001`), numeric **Sequence Number**, the portal username in **Submitted By**, and a **Status** value. Status begins as **Pending**; spreadsheet editors can select **Approved**, then **Received**, from the status dropdown. Request text fields and saved request text are uppercased; usernames and passwords used for sign-in are not changed.
 
+Requests are written to the first free row after the last occupied row in their destination tab. The **Approvals** navigation view shows requests whose spreadsheet status is Pending from all four tabs; it is a read-only review list for now. Update request status in Google Sheets.
+
 The next sequence number is recalculated from the matching sheet when the form preview loads and again at submit. Deleting request rows therefore resets numbering to 1 when the corresponding tab has no remaining request rows, or resumes after the highest remaining request number. A per-form lock prevents simultaneous requests from reusing a number during the sheet write. If writing to Sheets fails after allocation, the portal reports the failure; the next preview reconciles the counter with the sheet.
 
 ## Staff use
 
-Open the portal's sign-in screen, enter the username and password from the administrator, choose a form, select departments (and a supplier for Purchase Order), select products after choosing the outgoing department, and submit.
+Open the portal's sign-in screen, enter the username and password from the administrator (use **Show** to reveal the password if needed), choose a form, select departments (and a supplier for Purchase Order), select products after choosing the outgoing department, and submit. Use **Approvals** in the sidebar to view requests still marked Pending.
 
 ## Adding a staff account
 

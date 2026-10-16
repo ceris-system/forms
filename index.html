@@ -22,7 +22,10 @@
         <label class="catalog-search-label" for="auth-username">Username</label>
         <input class="catalog-search" id="auth-username" type="text" autocomplete="username" minlength="3" maxlength="32" autofocus required>
         <label class="catalog-search-label auth-password-label" for="auth-password">Password</label>
-        <input class="catalog-search" id="auth-password" type="password" autocomplete="current-password" required>
+        <div class="password-input-wrap">
+          <input class="catalog-search" id="auth-password" type="password" autocomplete="current-password" required>
+          <button class="password-toggle" id="toggle-login-password" type="button" aria-label="Show password" aria-pressed="false">Show</button>
+        </div>
         <p class="catalog-status" id="auth-status" role="status" aria-live="polite"></p>
         <button class="button button-primary" id="submit-auth" type="submit">Sign in</button>
       </form>
@@ -34,7 +37,8 @@
         </a>
         <div class="workspace-label">REQUESTS</div>
         <nav class="nav-list">
-          <a class="nav-link user-only active" href="#user-forms"><span class="nav-icon">♙</span>My forms</a>
+          <a class="nav-link user-only active" href="#user-forms" data-page="user-forms"><span class="nav-icon">♙</span>My forms</a>
+          <a class="nav-link user-only" href="#approvals" data-page="approvals"><span class="nav-icon">✓</span>Approvals</a>
           <button class="nav-link nav-link-disabled user-only" type="button" disabled aria-label="Reports and history, coming soon"><span class="nav-icon" aria-hidden="true">▤</span><span>Reports &amp; History</span><small>SOON</small></button>
         </nav>
         <div class="sidebar-bottom">
@@ -54,7 +58,7 @@
         </header>
 
         <div class="page-content">
-          <section class="section-block user-only" id="user-forms">
+          <section class="section-block user-only portal-page" id="user-forms" data-page-section>
             <div class="section-heading">
               <div><p class="eyebrow">MOTHER'S WONDERLAND</p><h1>What do you need today?</h1><p class="section-description">Choose a form to start a request. You can add products and submit once signed in.</p></div>
               <span class="section-count">4 FORMS</span>
@@ -63,6 +67,15 @@
               <summary>Outgoing</summary>
               <div class="user-form-grid" id="user-form-grid"></div>
             </details>
+          </section>
+
+          <section class="section-block user-only portal-page" id="approvals" data-page-section hidden>
+            <div class="section-heading">
+              <div><p class="eyebrow">REQUEST REVIEW</p><h1>Approvals</h1><p class="section-description">Requests currently waiting for approval, from all form types.</p></div>
+              <button class="button button-secondary" id="refresh-approvals" type="button">Refresh</button>
+            </div>
+            <p class="field-hint" id="approval-list-status" role="status" aria-live="polite"></p>
+            <div class="approval-list" id="approval-list"></div>
           </section>
 
           <details class="section-block setup-details admin-tools" id="supabase-connection" hidden>

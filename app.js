@@ -392,7 +392,10 @@ function updateSessionUi(session, navigate = true) {
     if (passwordChangeDialog.open) passwordChangeDialog.close();
     void refreshAdminTools();
   }
-  if (navigate) location.hash = "user-forms";
+  if (signedIn && !currentUserProfile.mustChangePassword) {
+    const requestedPage = navigate ? "user-forms" : location.hash.slice(1);
+    activatePortalPage(requestedPage === "approvals" ? "approvals" : "user-forms");
+  }
 }
 
 function unsubscribeFromAuthChanges() {
@@ -559,7 +562,13 @@ async function signIn(event) {
     });
     if (sessionError) throw sessionError;
     document.querySelector("#auth-username").value = "";
-    document.querySelector("#auth-password").value = "";
+    const passwordInput = document.querySelector("#auth-password");
+    passwordInput.value = "";
+    passwordInput.type = "password";
+    const passwordToggle = document.querySelector("#toggle-login-password");
+    passwordToggle.textContent = "Show";
+    passwordToggle.setAttribute("aria-label", "Show password");
+    passwordToggle.setAttribute("aria-pressed", "false");
     status.textContent = "";
   } catch (error) {
     console.error("Supabase sign-in failed.", error);
@@ -606,14 +615,105 @@ async function changeTemporaryPassword(event) {
 }
 
 function setActiveNavigation() {
-  const links = document.querySelectorAll(".nav-link");
-  const sections = [...links].map((link) => document.querySelector(link.getAttribute("href")));
-  const observer = new IntersectionObserver((entries) => {
-    const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-    if (!visible) return;
-    for (const link of links) link.classList.toggle("active", link.getAttribute("href") === `#${visible.target.id}`);
-  }, { rootMargin: "-15% 0px -70% 0px" });
-  for (const section of sections) if (section) observer.observe(section);
+  document.querySelector(".nav-list").addEventListener("click", (event) => {
+    const link = event.target.closest("[data-page]");
+    if (!link) return;
+    event.preventDefault();
+    activatePortalPage(link.dataset.page);
+  });
+  activatePortalPage("user-forms");
+}
+
+function activatePortalPage(pageId) {
+  const selectedPage = document.querySelector(`[data-page-section]#${CSS.escape(pageId)}`);
+  if (!selectedPage || !currentSession) return;
+  document.querySelectorAll("[data-page-section]").forEach((section) => {
+    section.hidden = section !== selectedPage;
+  });
+  document.querySelectorAll(".nav-link[data-page]").forEach((link) => {
+    link.classList.toggle("active", link.dataset.page === pageId);
+  });
+  document.querySelector("#breadcrumb-page").textContent = pageId === "approvals" ? "Approvals" : "My forms";
+  history.replaceState(null, "", `#${pageId}`);
+  if (pageId === "approvals") void loadApprovalQueue();
+}
+
+async function loadApprovalQueue() {
+  const list = document.querySelector("#approval-list");
+  const status = document.querySelector("#approval-list-status");
+  status.textContent = "Loading requests awaiting approval…";
+  list.replaceChildren();
+  try {
+    const result = await requestSheetData("approval_queue");
+    const requests = Array.isArray(result.requests) ? result.requests : [];
+    if (!requests.length) {
+      status.textContent = "There are no requests waiting for approval.";
+      return;
+    }
+    status.textContent = `${requests.length} request${requests.length === 1 ? "" : "s"} waiting for approval.`;
+    for (const request of requests) {
+      const card = document.createElement("article");
+      card.className = "approval-card";
+      const heading = document.createElement("div");
+      heading.className = "approval-card-heading";
+      const title = document.createElement("h2");
+      title.textContent = request.request_number;
+      const badge = document.createElement("span");
+      badge.className = "approval-pending-badge";
+      badge.textContent = "PENDING";
+      heading.append(title, badge);
+
+      const details = document.createElement("dl");
+      details.className = "approval-request-details";
+      for (const [label, value] of [
+        ["Form", request.form_type],
+        ["Date", request.request_date],
+        ["Outgoing", request.outgoing_department],
+        ["Incoming", request.incoming_department],
+        ["Supplier", request.supplier || "—"],
+        ["Submitted by", request.submitted_by],
+      ]) {
+        const pair = document.createElement("div");
+        const term = document.createElement("dt");
+        term.textContent = label;
+        const description = document.createElement("dd");
+        description.textContent = value || "—";
+        pair.append(term, description);
+        details.append(pair);
+      }
+
+      const tableScroll = document.createElement("div");
+      tableScroll.className = "approval-items-scroll";
+      const table = document.createElement("table");
+      table.className = "approval-items-table";
+      const head = document.createElement("thead");
+      const headerRow = document.createElement("tr");
+      for (const label of ["SKU", "Product", "Transfer Qty", "Remarks"]) {
+        const cell = document.createElement("th");
+        cell.scope = "col";
+        cell.textContent = label;
+        headerRow.append(cell);
+      }
+      head.append(headerRow);
+      const body = document.createElement("tbody");
+      for (const item of request.items || []) {
+        const row = document.createElement("tr");
+        for (const value of [item.sku_code, item.product_description, item.transfer_qty, item.remarks]) {
+          const cell = document.createElement("td");
+          cell.textContent = value || "—";
+          row.append(cell);
+        }
+        body.append(row);
+      }
+      table.append(head, body);
+      tableScroll.append(table);
+      card.append(heading, details, tableScroll);
+      list.append(card);
+    }
+  } catch (error) {
+    console.error("Unable to load requests awaiting approval.", error);
+    status.textContent = `Could not load approvals: ${error.message || "Request failed."}`;
+  }
 }
 
 async function submitRequest(event) {
@@ -777,6 +877,16 @@ document.querySelector("#cancel-catalog").addEventListener("click", () => catalo
 document.querySelector("#close-request-dialog").addEventListener("click", () => requestDialog.close());
 document.querySelector("#request-form").addEventListener("submit", submitRequest);
 document.querySelector("#auth-form").addEventListener("submit", signIn);
+document.querySelector("#toggle-login-password").addEventListener("click", (event) => {
+  const button = event.currentTarget;
+  const password = document.querySelector("#auth-password");
+  const visible = password.type === "password";
+  password.type = visible ? "text" : "password";
+  button.textContent = visible ? "Hide" : "Show";
+  button.setAttribute("aria-label", visible ? "Hide password" : "Show password");
+  button.setAttribute("aria-pressed", String(visible));
+});
+document.querySelector("#refresh-approvals").addEventListener("click", loadApprovalQueue);
 requestFormBody.addEventListener("input", (event) => {
   if (event.target instanceof HTMLInputElement && event.target.type === "text") {
     const start = event.target.selectionStart;
