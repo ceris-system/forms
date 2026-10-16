@@ -552,12 +552,10 @@ function showInventoryItem(sheetRow) {
   const detailFields = {
     "inventory-item-sku": row.sku_code,
     "inventory-item-description": row.description,
-    "inventory-item-expiration": formatDisplayDate(row.near_expiration),
-    "inventory-item-qty": row.on_hand,
     "inventory-item-cost": row.cost,
     "inventory-item-srp": row.srp,
     "inventory-item-received-qty": row.received_qty,
-    "inventory-item-latest-received": row.latest_received,
+    "inventory-item-latest-received": formatDisplayDate(row.latest_received),
     "inventory-item-total": row.total_on_hand,
   };
   for (const [id, value] of Object.entries(detailFields)) {
@@ -565,20 +563,33 @@ function showInventoryItem(sheetRow) {
   }
   const batches = document.querySelector("#inventory-item-batches");
   batches.replaceChildren();
-  for (const [label, date, qty] of [
-    ["Batch 1", row.expiration_1, row.qty_1],
-    ["Batch 2", row.expiration_2, row.qty_2],
-    ["Batch 3", row.expiration_3, row.qty_3],
+  for (const [index, date, qty] of [
+    [1, row.expiration_1, row.qty_1],
+    [2, row.expiration_2, row.qty_2],
+    [3, row.expiration_3, row.qty_3],
   ]) {
     const batch = document.createElement("div");
-    batch.className = "inventory-batch";
-    const name = document.createElement("strong");
-    name.textContent = label;
-    const batchDate = document.createElement("span");
-    batchDate.textContent = date ? `Expiration: ${formatDisplayDate(date)}` : "";
-    const batchQty = document.createElement("span");
-    batchQty.textContent = qty ? `Qty: ${qty}` : "";
-    batch.append(name, batchDate, batchQty);
+    batch.className = "inventory-batch-editor-row";
+    const dateLabel = document.createElement("label");
+    const dateInput = document.createElement("input");
+    dateInput.type = "date";
+    dateInput.id = `inventory-batch-${index}-date`;
+    dateInput.dataset.inventoryBatchDate = String(index);
+    dateInput.value = toDateInputValue(String(date ?? ""));
+    dateLabel.htmlFor = dateInput.id;
+    dateLabel.append(document.createTextNode(`Expiration date (${["1st", "2nd", "3rd"][index - 1]})`), dateInput);
+
+    const qtyLabel = document.createElement("label");
+    const qtyInput = document.createElement("input");
+    qtyInput.type = "number";
+    qtyInput.step = "any";
+    qtyInput.min = "0";
+    qtyInput.id = `inventory-batch-${index}-qty`;
+    qtyInput.dataset.inventoryBatchQty = String(index);
+    qtyInput.value = qty == null ? "" : String(qty);
+    qtyLabel.htmlFor = qtyInput.id;
+    qtyLabel.append(document.createTextNode("Qty"), qtyInput);
+    batch.append(dateLabel, qtyLabel);
     batches.append(batch);
   }
   const category = document.querySelector("#inventory-adjustment-category");
@@ -599,20 +610,26 @@ async function saveInventoryAdjustment(event) {
   if (!selectedInventoryRow) return;
   const button = document.querySelector("#update-inventory-adjustment");
   const status = document.querySelector("#inventory-adjustment-status");
+  const skuCode = selectedInventoryRow.sku_code;
   button.disabled = true;
-  status.textContent = "Saving adjustment…";
+  status.textContent = "Saving inventory…";
   try {
     await requestSheetData("inventory_adjustment_update", {
       department: inventoryDepartment,
       sheet_row: selectedInventoryRow.sheet_row,
-      sku_code: selectedInventoryRow.sku_code,
+      sku_code: skuCode,
+      batches: [...document.querySelectorAll("[data-inventory-batch-date]")].map(dateInput => {
+        const index = dateInput.dataset.inventoryBatchDate;
+        const qtyInput = document.querySelector(`[data-inventory-batch-qty="${index}"]`);
+        return { date: dateInput.value, qty: qtyInput.value };
+      }),
       category: document.querySelector("#inventory-adjustment-category").value,
       qty: document.querySelector("#inventory-adjustment-qty").value,
       remarks: document.querySelector("#inventory-adjustment-remarks").value,
     });
     document.querySelector("#inventory-item-dialog").close();
     await loadInventoryPage("inventory", true);
-    document.querySelector("#inventory-status").textContent = `Adjustment updated for ${selectedInventoryRow.sku_code}.`;
+    document.querySelector("#inventory-status").textContent = `Inventory updated for ${skuCode}.`;
   } catch (error) {
     console.error("Unable to update inventory adjustment.", error);
     status.textContent = `Could not update adjustment: ${error.message || "Request failed."}`;

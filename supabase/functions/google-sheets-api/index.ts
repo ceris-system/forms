@@ -308,30 +308,97 @@ async function updateInventoryAdjustment(
 ): Promise<Record<string, unknown>> {
   const { departments, categories } = await loadInventoryValues(spreadsheetId);
   const department = resolveInventoryDepartment(user, body.department, departments);
-  if (!department) throw new InventoryRequestError("Select a department before updating an inventory adjustment.", 400);
+  if (!department) throw new InventoryRequestError("Select a department before updating inventory.", 400);
   const sheetRow = Number(body.sheet_row);
   if (!Number.isSafeInteger(sheetRow) || sheetRow < 8) {
     throw new InventoryRequestError("The selected inventory row is invalid.", 400);
   }
-  const requestedCategory = typeof body.category === "string" ? body.category.trim() : "";
-  const category = categories.find(value => value.toLocaleLowerCase() === requestedCategory.toLocaleLowerCase());
-  if (!category) throw new InventoryRequestError("Select a valid adjustment category from DD!A1:A.", 400);
-  const qtyText = String(body.qty ?? "").trim();
-  const qty = Number(qtyText);
-  if (!qtyText || !Number.isFinite(qty)) throw new InventoryRequestError("Enter a valid adjustment quantity.", 400);
   const remarks = typeof body.remarks === "string" ? body.remarks.trim() : "";
   if (remarks.length > 500) throw new InventoryRequestError("Adjustment remarks must be 500 characters or fewer.", 400);
+  let batchValues: (string | number)[] | null = null;
+  if (body.batches !== undefined) {
+    if (!Array.isArray(body.batches) || body.batches.length !== 3) {
+      throw new InventoryRequestError("Provide expiration date and quantity values for all three batches.", 400);
+    }
+    batchValues = [];
+    for (const [index, value] of body.batches.entries()) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) {
+        throw new InventoryRequestError(`Expiration batch ${index + 1} is invalid.`, 400);
+      }
+      const batch = value as Record<string, unknown>;
+      const dateText = typeof batch.date === "string" ? batch.date.trim() : "";
+      if (dateText) {
+        const match = dateText.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) throw new InventoryRequestError(`Expiration batch ${index + 1} needs a valid date.`, 400);
+        const year = Number(match[1]);
+        const month = Number(match[2]);
+        const day = Number(match[3]);
+        const date = new Date(Date.UTC(year, month - 1, day));
+        if (
+          year < 1900
+          || date.getUTCFullYear() !== year
+          || date.getUTCMonth() !== month - 1
+          || date.getUTCDate() !== day
+        ) throw new InventoryRequestError(`Expiration batch ${index + 1} needs a valid date.`, 400);
+        batchValues.push(Math.floor(date.getTime() / 86_400_000) + 25_569);
+      } else {
+        batchValues.push("");
+      }
+      const qtyText = String(batch.qty ?? "").trim();
+      if (!qtyText) {
+        batchValues.push("");
+      } else {
+        const qty = Number(qtyText);
+        if (!Number.isFinite(qty) || qty < 0) {
+          throw new InventoryRequestError(`Expiration batch ${index + 1} quantity must be zero or greater.`, 400);
+        }
+        batchValues.push(qty);
+      }
+    }
+  }
+
   const skuValues = await readValues(spreadsheetId, department, `B${sheetRow}:B${sheetRow}`);
   const actualSku = String(skuValues[0]?.[0] ?? "").trim();
   const requestedSku = typeof body.sku_code === "string" ? body.sku_code.trim() : "";
   if (!actualSku || actualSku !== requestedSku) {
     throw new InventoryRequestError("The selected inventory item changed or no longer exists. Refresh the inventory and try again.", 409);
   }
+
+  const data: Record<string, unknown>[] = [];
+  if (batchValues) {
+    data.push({
+      range: range(department, `H${sheetRow}:M${sheetRow}`),
+      values: [batchValues],
+    });
+  }
+  const requestedCategory = typeof body.category === "string" ? body.category.trim() : "";
+  const adjustmentQtyText = String(body.qty ?? "").trim();
+  let adjustmentUpdated = false;
+  if (requestedCategory || adjustmentQtyText || remarks) {
+    const category = categories.find(value => value.toLocaleLowerCase() === requestedCategory.toLocaleLowerCase());
+    if (!category) throw new InventoryRequestError("Select a valid adjustment category from DD!A1:A.", 400);
+    const adjustmentQty = Number(adjustmentQtyText);
+    if (!adjustmentQtyText || !Number.isFinite(adjustmentQty)) {
+      throw new InventoryRequestError("Enter a valid adjustment quantity.", 400);
+    }
+    data.push({
+      range: range(department, `R${sheetRow}:T${sheetRow}`),
+      values: [[category, adjustmentQty, remarks]],
+    });
+    adjustmentUpdated = true;
+  }
+  if (!data.length) throw new InventoryRequestError("There are no inventory changes to save.", 400);
   await googleRequest(
-    `spreadsheets/${spreadsheetId}/values/${range(department, `R${sheetRow}:T${sheetRow}`)}?valueInputOption=RAW`,
-    { method: "PUT", body: JSON.stringify({ values: [[category, qty, remarks]] }) },
+    `spreadsheets/${spreadsheetId}/values:batchUpdate`,
+    { method: "POST", body: JSON.stringify({ valueInputOption: "RAW", data }) },
   );
-  return { ok: true, department, sheet_row: sheetRow, category, qty, remarks };
+  return {
+    ok: true,
+    department,
+    sheet_row: sheetRow,
+    batches: batchValues,
+    adjustment_updated: adjustmentUpdated,
+  };
 }
 
 async function loadRequestHistory(

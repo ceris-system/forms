@@ -361,36 +361,46 @@
         <div><p class="eyebrow">INVENTORY ITEM</p><h2 id="inventory-item-title">Item details</h2></div>
         <button class="dialog-close" id="close-inventory-item" type="button" aria-label="Close item details">✖️</button>
       </div>
-      <div class="inventory-detail-grid">
+      <div class="inventory-item-identity">
         <div><small>SKU Code</small><strong id="inventory-item-sku"></strong></div>
-        <div class="inventory-detail-wide"><small>Item Description</small><strong id="inventory-item-description"></strong></div>
-        <div><small>Expiration Date</small><strong id="inventory-item-expiration"></strong></div>
-        <div><small>Qty</small><strong id="inventory-item-qty"></strong></div>
-      </div>
-      <h3 class="inventory-subheading">Expiration Batches</h3>
-      <div class="inventory-batch-list" id="inventory-item-batches"></div>
-      <div class="inventory-detail-grid">
-        <div><small>Cost</small><strong id="inventory-item-cost"></strong></div>
-        <div><small>SRP</small><strong id="inventory-item-srp"></strong></div>
-        <div><small>Stock Received Qty</small><strong id="inventory-item-received-qty"></strong></div>
-        <div><small>Latest Stock Received</small><strong id="inventory-item-latest-received"></strong></div>
-        <div class="inventory-detail-wide"><small>Total Available Qty</small><strong id="inventory-item-total"></strong></div>
+        <div><small>Item Description</small><strong id="inventory-item-description"></strong></div>
       </div>
       <form id="inventory-adjustment-form">
-        <h3 class="inventory-subheading">Adjustment</h3>
-        <label for="inventory-adjustment-category">Category
-          <select id="inventory-adjustment-category" required disabled><option value="">Loading categories…</option></select>
-        </label>
-        <label for="inventory-adjustment-qty">Qty
-          <input id="inventory-adjustment-qty" type="number" step="any" required>
-        </label>
-        <label for="inventory-adjustment-remarks">Remarks
-          <textarea id="inventory-adjustment-remarks" rows="3" maxlength="500"></textarea>
-        </label>
+        <section class="inventory-editor-section" aria-labelledby="inventory-batches-heading">
+          <h3 id="inventory-batches-heading" class="inventory-subheading"><span aria-hidden="true">▤</span> Expiration batches</h3>
+          <div class="inventory-batch-editor" id="inventory-item-batches"></div>
+        </section>
+        <section class="inventory-editor-section" aria-labelledby="inventory-pricing-heading">
+          <h3 id="inventory-pricing-heading" class="inventory-subheading"><span aria-hidden="true">◆</span> Pricing</h3>
+          <div class="inventory-readonly-grid">
+            <div><small>SRP</small><strong id="inventory-item-srp"></strong></div>
+            <div><small>Cost</small><strong id="inventory-item-cost"></strong></div>
+          </div>
+        </section>
+        <section class="inventory-editor-section" aria-labelledby="inventory-receiving-heading">
+          <h3 id="inventory-receiving-heading" class="inventory-subheading"><span aria-hidden="true">⇥</span> Stock receiving</h3>
+          <div class="inventory-readonly-grid">
+            <div><small>Stock received qty</small><strong id="inventory-item-received-qty"></strong></div>
+            <div><small>Latest stock received</small><strong id="inventory-item-latest-received"></strong></div>
+            <div class="inventory-readonly-wide"><small>Total available qty</small><strong id="inventory-item-total"></strong></div>
+          </div>
+        </section>
+        <section class="inventory-editor-section inventory-adjustment-section" aria-labelledby="inventory-adjustment-heading">
+          <h3 id="inventory-adjustment-heading" class="inventory-subheading"><span aria-hidden="true">◆</span> Adjustment</h3>
+          <label for="inventory-adjustment-category">Category
+            <select id="inventory-adjustment-category" disabled><option value="">Loading categories…</option></select>
+          </label>
+          <label for="inventory-adjustment-qty">Qty
+            <input id="inventory-adjustment-qty" type="number" step="any">
+          </label>
+          <label for="inventory-adjustment-remarks">Remarks
+            <textarea id="inventory-adjustment-remarks" rows="3" maxlength="500"></textarea>
+          </label>
+        </section>
         <p class="field-hint" id="inventory-adjustment-status" role="status" aria-live="polite"></p>
         <div class="inventory-drawer-actions">
           <button class="button button-secondary" id="cancel-inventory-adjustment" type="button">Close</button>
-          <button class="button button-primary" id="update-inventory-adjustment" type="submit">Update</button>
+          <button class="button button-primary" id="update-inventory-adjustment" type="submit">💾 Update inventory</button>
         </div>
       </form>
     </dialog>
