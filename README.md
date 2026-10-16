@@ -6,6 +6,8 @@ Supabase stores accounts, departments, and sequence counters. Submitted forms an
 
 The current portal does not call the legacy [`google-apps-script/Code.gs`](./google-apps-script/Code.gs) endpoint; form submissions use the `google-sheets-api` Edge Function.
 
+Dates displayed in request forms, inventory, approvals, and history use the `MONTH DAY, YEAR` format (for example, `SEPTEMBER 26, 2026`); stored sheet values remain unchanged.
+
 ## One-time setup
 
 ### 1. Configure Google Sheets access

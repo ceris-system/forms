@@ -145,6 +145,41 @@ function getLocalDate() {
   return `${today.getFullYear()}-${month}-${day}`;
 }
 
+function formatDisplayDate(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return "";
+
+  let year;
+  let month;
+  let day;
+  let match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (match) {
+    [, year, month, day] = match;
+  } else {
+    match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (match) [, month, day, year] = match;
+  }
+
+  let date;
+  if (match) {
+    date = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+    if (
+      date.getUTCFullYear() !== Number(year)
+      || date.getUTCMonth() !== Number(month) - 1
+      || date.getUTCDate() !== Number(day)
+    ) return text;
+  } else {
+    date = new Date(text);
+    if (Number.isNaN(date.getTime())) return text;
+  }
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(date).toLocaleUpperCase();
+}
+
 function makeUserFormButton(form) {
   const card = document.createElement("button");
   card.className = "user-form-card";
@@ -191,7 +226,7 @@ function openRequestForm(form) {
       ` : ""}
       <div class="request-number-date">
         <p><span>SEQUENCE NO.:</span><strong class="request-number" aria-live="polite">Select outgoing department</strong></p>
-        <p><span>DATE:</span><strong>${new Intl.DateTimeFormat(undefined, { month: "long", day: "numeric", year: "numeric" }).format(new Date()).toUpperCase()}</strong></p>
+        <p><span>DATE:</span><strong>${formatDisplayDate(getLocalDate())}</strong></p>
       </div>
     </div>
     <div class="request-sheet-actions">
@@ -349,9 +384,10 @@ function renderInventoryRows() {
   body.replaceChildren();
   for (const row of filtered) {
     const tr = document.createElement("tr");
-    for (const value of [row.sku_code, row.description, row.uom, row.cost, row.srp, row.near_expiration, row.on_hand, row.total_on_hand, row.department]) {
+    const values = [row.sku_code, row.description, row.uom, row.cost, row.srp, row.near_expiration, row.on_hand, row.total_on_hand, row.department];
+    for (const [index, value] of values.entries()) {
       const cell = document.createElement("td");
-      cell.textContent = value == null ? "" : String(value);
+      cell.textContent = index === 5 ? formatDisplayDate(value) : value == null ? "" : String(value);
       tr.append(cell);
     }
     const actionCell = document.createElement("td");
@@ -380,9 +416,11 @@ function renderInventoryFormRows() {
       row.expiration_1, row.qty_1, row.expiration_2, row.qty_2,
       row.expiration_3, row.qty_3, row.total_on_hand,
     ];
-    for (const value of values) {
+    for (const [index, value] of values.entries()) {
       const cell = document.createElement("td");
-      cell.textContent = value == null ? "" : String(value);
+      cell.textContent = [3, 5, 7, 9].includes(index)
+        ? formatDisplayDate(value)
+        : value == null ? "" : String(value);
       tr.append(cell);
     }
     body.append(tr);
@@ -450,7 +488,9 @@ function renderRequestHistory(pageId) {
     const tr = document.createElement("tr");
     for (const field of fields) {
       const cell = document.createElement("td");
-      cell.textContent = row[field] == null ? "" : String(row[field]);
+      cell.textContent = ["expiration_date", "second_expiration_date", "request_date", "received_date"].includes(field)
+        ? formatDisplayDate(row[field])
+        : row[field] == null ? "" : String(row[field]);
       tr.append(cell);
     }
     body.append(tr);
@@ -512,7 +552,7 @@ function showInventoryItem(sheetRow) {
   const detailFields = {
     "inventory-item-sku": row.sku_code,
     "inventory-item-description": row.description,
-    "inventory-item-expiration": row.near_expiration,
+    "inventory-item-expiration": formatDisplayDate(row.near_expiration),
     "inventory-item-qty": row.on_hand,
     "inventory-item-cost": row.cost,
     "inventory-item-srp": row.srp,
@@ -535,7 +575,7 @@ function showInventoryItem(sheetRow) {
     const name = document.createElement("strong");
     name.textContent = label;
     const batchDate = document.createElement("span");
-    batchDate.textContent = date ? `Expiration: ${date}` : "";
+    batchDate.textContent = date ? `Expiration: ${formatDisplayDate(date)}` : "";
     const batchQty = document.createElement("span");
     batchQty.textContent = qty ? `Qty: ${qty}` : "";
     batch.append(name, batchDate, batchQty);
@@ -1702,7 +1742,9 @@ function makeReleaseFormSheet(request) {
     const term = document.createElement("dt");
     term.textContent = label;
     const description = document.createElement("dd");
-    description.textContent = value || "—";
+    description.textContent = ["Request date", "Approved date", "Released date", "Received date"].includes(label)
+      ? formatDisplayDate(value) || "—"
+      : value || "—";
     pair.append(term, description);
     details.append(pair);
   }
@@ -1742,7 +1784,9 @@ function makeReleaseFormSheet(request) {
     const row = document.createElement("tr");
     for (const [, field] of columns) {
       const cell = document.createElement("td");
-      cell.textContent = item[field] || "—";
+      cell.textContent = field === "expiration_date"
+        ? formatDisplayDate(item[field]) || "—"
+        : item[field] || "—";
       row.append(cell);
     }
     body.append(row);
@@ -1901,7 +1945,9 @@ function makeWorkflowRequestCard(request, action) {
     const term = document.createElement("dt");
     term.textContent = label;
     const description = document.createElement("dd");
-    description.textContent = value || "—";
+    description.textContent = /date$/i.test(label)
+      ? formatDisplayDate(value) || "—"
+      : value || "—";
     pair.append(term, description);
     details.append(pair);
   }
