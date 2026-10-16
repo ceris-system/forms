@@ -108,8 +108,12 @@ function safeTabName(value: unknown): string {
   return /^[A-Za-z0-9_]+$/.test(name) ? name : `'${name.replace(/'/g, "''")}'`;
 }
 
+function a1Range(tab: string, cells: string): string {
+  return `${safeTabName(tab)}!${cells}`;
+}
+
 function range(tab: string, cells: string): string {
-  return encodeURIComponent(`${safeTabName(tab)}!${cells}`).replace(/'/g, "%27");
+  return encodeURIComponent(a1Range(tab, cells)).replace(/'/g, "%27");
 }
 
 async function readValues(spreadsheetId: string, tab: string, cells: string): Promise<unknown[][]> {
@@ -579,7 +583,7 @@ async function applyWorkflowAction(
         updated[22] = user.username;
       }
       return {
-        range: range(actualTab, `S${sheetRow}:W${sheetRow}`),
+        range: a1Range(actualTab, `S${sheetRow}:W${sheetRow}`),
         values: [[...updated.slice(18, 23)]],
       };
     });
