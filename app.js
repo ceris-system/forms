@@ -28,6 +28,11 @@ let currentSession = null;
 let currentUserProfile = { username: "", department: "", status: "active", mustChangePassword: false };
 let authSubscription = null;
 let isMasterAdmin = false;
+let profileUserId = "";
+let adminStatusUserId = "";
+let lookupCache = null;
+let activePageId = "";
+const workflowLoadIds = new Map();
 
 function getLocalDate() {
   const today = new Date();
@@ -159,7 +164,7 @@ async function openProductCatalog() {
   catalogDialog.showModal();
 
   try {
-    const result = await requestSheetData("lookup");
+    const result = await loadLookupData();
     const selectedDepartment = outgoingDepartment.toLocaleLowerCase();
     catalogRows = result.products.filter(product =>
       String(product["OUTGOING DEPARTMENT"] || "").trim().toLocaleLowerCase() === selectedDepartment
@@ -170,9 +175,32 @@ async function openProductCatalog() {
     }
     renderCatalogRows();
   } catch (error) {
+    profileUserId = "";
     console.error("Unable to load products from Google Sheets.", error);
     catalogStatus.textContent = `Could not load products: ${error.message || "Google Sheets returned an unexpected error."}`;
     catalogRows = [];
+  }
+}
+
+async function loadLookupData() {
+  const userId = currentSession?.user.id;
+  if (!userId) throw new Error("Sign in before loading spreadsheet lists.");
+  if (lookupCache?.userId === userId && lookupCache.expiresAt > Date.now()) {
+    return lookupCache.promise;
+  }
+  const cacheEntry = {
+    userId,
+    expiresAt: Date.now() + 30_000,
+    promise: requestSheetData("lookup"),
+  };
+  lookupCache = cacheEntry;
+  try {
+    const result = await cacheEntry.promise;
+    cacheEntry.expiresAt = Date.now() + 30_000;
+    return result;
+  } catch (error) {
+    if (lookupCache === cacheEntry) lookupCache = null;
+    throw error;
   }
 }
 
@@ -234,6 +262,8 @@ async function edgeFunctionErrorMessage(error) {
 
 async function refreshUserProfile(session) {
   if (!supabaseClient || currentSession?.user.id !== session.user.id) return;
+  if (profileUserId === session.user.id) return;
+  profileUserId = session.user.id;
   try {
     const profile = await callPortalAdmin({ action: "profile" });
     if (currentSession?.user.id !== session.user.id) return;
@@ -252,6 +282,7 @@ async function refreshUserProfile(session) {
   } catch (error) {
     console.error("Unable to load the signed-in user's profile.", error);
     if (currentSession?.user.id === session.user.id) {
+      profileUserId = "";
       saveStatus.textContent = `Could not load your saved account details: ${error.message || "Request failed."}`;
     }
   }
@@ -272,7 +303,7 @@ async function loadRequestLookups(formType) {
   incoming.disabled = !currentUserProfile.department;
   setRequestNotice(`Signed in as ${currentUserProfile.username || "your account"}. Loading outgoing departments…`);
   try {
-    const result = await requestSheetData("lookup");
+    const result = await loadLookupData();
     if (!requestDialog.open || requestDialog.dataset.formType !== formType) return;
     populateSelect(outgoing, result.outgoing_departments || [], "department");
     if (supplier) populateSelect(supplier, result.suppliers || [], "supplier");
@@ -362,6 +393,16 @@ function toDateInputValue(value) {
 }
 
 function updateSessionUi(session, navigate = true) {
+  const previousUserId = currentSession?.user.id || "";
+  const nextUserId = session?.user.id || "";
+  if (previousUserId !== nextUserId) {
+    currentUserProfile = { username: "", department: "", status: "active", mustChangePassword: false };
+    profileUserId = "";
+    adminStatusUserId = "";
+    isMasterAdmin = false;
+    lookupCache = null;
+    document.body.classList.remove("admin-mode");
+  }
   currentSession = session;
   const signedIn = Boolean(session);
   document.body.classList.toggle("signed-out", !signedIn);
@@ -382,12 +423,12 @@ function updateSessionUi(session, navigate = true) {
   document.querySelector("#account-name").textContent = accountName;
   document.querySelector("#account-role").textContent = signedIn ? currentUserProfile.department || "Signed-in user" : "Request portal";
   document.querySelector("#account-badge").textContent = signedIn ? "USER" : "GUEST";
-  document.querySelector("#breadcrumb-page").textContent = "My forms";
   document.querySelector("#session-status").textContent = signedIn ? "Signed in" : supabaseClient ? "Ready to sign in" : "Setup needed";
   if (!signedIn && catalogDialog.open) catalogDialog.close();
   if (!signedIn && requestDialog.open) requestDialog.close();
   if (!signedIn || currentUserProfile.mustChangePassword) {
     isMasterAdmin = false;
+    adminStatusUserId = "";
     document.body.classList.remove("admin-mode");
     document.querySelector("#supabase-connection").hidden = true;
     if (requestDialog.open) requestDialog.close();
@@ -399,8 +440,9 @@ function updateSessionUi(session, navigate = true) {
     void refreshAdminTools();
   }
   if (signedIn && !currentUserProfile.mustChangePassword) {
-    const requestedPage = navigate ? "user-forms" : location.hash.slice(1);
-    activatePortalPage(requestedPage === "approvals" ? "approvals" : "user-forms");
+    const requestedPage = navigate ? "user-forms" : location.hash.slice(1) || activePageId || "user-forms";
+    const validPages = new Set(["user-forms", "my-requests", "approvals", "pending-release", "pending-received"]);
+    activatePortalPage(validPages.has(requestedPage) ? requestedPage : "user-forms", false);
   }
 }
 
@@ -441,7 +483,7 @@ async function configureSupabase(settings) {
     updateSessionUi(data.session, false);
     authSubscription = supabaseClient.auth.onAuthStateChange((event, session) => {
       updateSessionUi(session, event === "SIGNED_IN" || event === "SIGNED_OUT");
-      if (session && event !== "SIGNED_OUT") {
+      if (session && ["INITIAL_SESSION", "SIGNED_IN", "USER_UPDATED"].includes(event)) {
         setTimeout(() => void refreshUserProfile(session), 0);
       }
     });
@@ -464,19 +506,23 @@ async function callPortalAdmin(body) {
 
 async function refreshAdminTools() {
   const panel = document.querySelector("#supabase-connection");
+  if (!supabaseClient || !currentSession) return;
+  const userId = currentSession.user.id;
+  if (adminStatusUserId === userId) return;
+  adminStatusUserId = userId;
   panel.hidden = true;
   isMasterAdmin = false;
   document.body.classList.remove("admin-mode");
-  if (!supabaseClient || !currentSession) return;
-  const userId = currentSession.user.id;
   try {
     const access = await callPortalAdmin({ action: "status" });
-    if (!access.is_master_admin || currentSession?.user.id !== userId) return;
+    if (currentSession?.user.id !== userId) return;
+    if (!access.is_master_admin) return;
     isMasterAdmin = true;
     document.body.classList.add("admin-mode");
     panel.hidden = false;
     await loadAdminState();
   } catch (error) {
+    if (currentSession?.user.id === userId) adminStatusUserId = "";
     console.error("Unable to verify Master Admin access.", error);
     saveStatus.textContent = `Master Admin access could not be checked: ${error.message || "Check the portal-admin function deployment."}`;
     document.querySelector("#session-status").textContent = "Admin setup error";
@@ -507,6 +553,7 @@ async function saveWorkbook() {
       suppliers_tab: document.querySelector("#suppliers-tab").value.trim(),
     });
     input.value = result.spreadsheet_url;
+    lookupCache = null;
     document.querySelector("#admin-status").textContent = "Spreadsheet and lookup tabs saved. Make sure the workbook is shared with the Google service account as an Editor.";
   } catch (error) {
     console.error("Unable to save the shared spreadsheet.", error);
@@ -634,9 +681,10 @@ function setActiveNavigation() {
   activatePortalPage("user-forms");
 }
 
-function activatePortalPage(pageId) {
+function activatePortalPage(pageId, refresh = true) {
   const selectedPage = document.querySelector(`[data-page-section]#${CSS.escape(pageId)}`);
   if (!selectedPage || !currentSession) return;
+  const pageChanged = activePageId !== pageId;
   document.querySelectorAll("[data-page-section]").forEach((section) => {
     section.hidden = section !== selectedPage;
   });
@@ -651,7 +699,9 @@ function activatePortalPage(pageId) {
     "pending-received": "Pending to received",
   };
   document.querySelector("#breadcrumb-page").textContent = pageNames[pageId];
-  history.replaceState(null, "", `#${pageId}`);
+  if (location.hash !== `#${pageId}`) history.replaceState(null, "", `#${pageId}`);
+  activePageId = pageId;
+  if (!pageChanged && !refresh) return;
   const loaders = {
     "my-requests": loadMyRequests,
     approvals: loadApprovalQueue,
@@ -680,16 +730,19 @@ async function loadPendingReceived() {
 async function loadWorkflowQueue(action, listId, statusId, emptyMessage) {
   const list = document.querySelector(`#${listId}`);
   const status = document.querySelector(`#${statusId}`);
-  status.textContent = "Loading requests…";
-  list.replaceChildren();
+  const loadId = (workflowLoadIds.get(action) || 0) + 1;
+  workflowLoadIds.set(action, loadId);
+  status.textContent = list.childElementCount ? "Refreshing requests…" : "Loading requests…";
   try {
     const result = await requestSheetData(action);
+    if (workflowLoadIds.get(action) !== loadId) return;
     const requests = Array.isArray(result.requests) ? result.requests : [];
     status.textContent = requests.length
       ? `${requests.length} request${requests.length === 1 ? "" : "s"}.`
       : `${emptyMessage}: none found.`;
     renderWorkflowRequests(list, requests, action);
   } catch (error) {
+    if (workflowLoadIds.get(action) !== loadId) return;
     console.error(`Unable to load ${emptyMessage.toLocaleLowerCase()}.`, error);
     status.textContent = `Could not load requests: ${error.message || "Request failed."}`;
   }
@@ -795,8 +848,7 @@ function makeReleaseFormSheet(request) {
 
   const signatures = document.createElement("div");
   signatures.className = "release-form-signatures";
-  const released = document.createElement("div");
-  released.innerHTML = "<strong>RELEASED BY: / DESIGNATION</strong><span></span><small>SIGNATURE OVER PRINTED NAME</small>";
+  const released = makeUnsignedReleaseSignature("RELEASED BY: / DESIGNATION");
   const approved = document.createElement("div");
   approved.className = "release-form-approved-signature";
   const signature = document.createElement("img");
@@ -805,16 +857,33 @@ function makeReleaseFormSheet(request) {
   const approver = document.createElement("strong");
   approver.textContent = request.approved_by || "APPROVED BY";
   const signatureLine = document.createElement("span");
+  signatureLine.className = "release-signature-line";
   const approvalLabel = document.createElement("b");
   approvalLabel.textContent = "APPROVED BY";
   const approvalCaption = document.createElement("small");
   approvalCaption.textContent = "APPROVAL SIGNATURE";
   approved.append(signature, approver, signatureLine, approvalLabel, approvalCaption);
-  const received = document.createElement("div");
-  received.innerHTML = "<strong>RECEIVED BY: / DESIGNATION</strong><span></span><small>SIGNATURE OVER PRINTED NAME</small>";
+  const received = makeUnsignedReleaseSignature("RECEIVED BY: / DESIGNATION");
   signatures.append(released, approved, received);
   sheet.append(signatures);
   return sheet;
+}
+
+function makeUnsignedReleaseSignature(label) {
+  const signature = document.createElement("div");
+  signature.className = "release-form-unsigned-signature";
+  const imageSpace = document.createElement("span");
+  imageSpace.className = "release-signature-space";
+  imageSpace.setAttribute("aria-hidden", "true");
+  const nameSpace = imageSpace.cloneNode();
+  const line = document.createElement("span");
+  line.className = "release-signature-line";
+  const title = document.createElement("strong");
+  title.textContent = label;
+  const caption = document.createElement("small");
+  caption.textContent = "SIGNATURE OVER PRINTED NAME";
+  signature.append(imageSpace, nameSpace, line, title, caption);
+  return signature;
 }
 
 function printReleaseForm(sheet, requestNumber) {
@@ -853,13 +922,12 @@ function printReleaseForm(sheet, requestNumber) {
     .release-form-items th:nth-child(9), .release-form-items th:nth-child(10) { width: 8%; }
     .release-form-items th:nth-child(11) { width: 15%; }
     .release-form-signatures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 20px; margin-top: 38px; break-inside: avoid; }
-    .release-form-signatures > div { display: grid; min-height: 94px; gap: 4px; text-align: center; }
-    .release-form-signatures > div:not(.release-form-approved-signature) { grid-template-rows: 1fr 1px 12px; }
-    .release-form-approved-signature { grid-template-rows: 45px auto 1fr auto 12px; }
+    .release-form-signatures > div { display: grid; min-height: 110px; grid-template-rows: 72px 16px 1px 11px 11px; gap: 4px; text-align: center; }
     .release-form-signatures strong, .release-form-signatures b { align-self: end; font-size: 8px; }
-    .release-form-signatures span { background: #171719; }
+    .release-form-signatures .release-signature-line { background: #171719; }
+    .release-form-unsigned-signature .release-signature-space { background: transparent; }
     .release-form-signatures small { font-size: 7px; font-weight: 600; }
-    .release-form-approved-signature img { justify-self: center; width: auto; height: 44px; max-width: 100px; object-fit: contain; }
+    .release-form-approved-signature img { justify-self: center; width: 112px; height: 72px; max-width: 100%; object-fit: cover; object-position: center 55%; }
     .release-form-approved-signature strong { overflow-wrap: anywhere; font-size: 8px; }
     @media screen { body { padding: 20px; } }
   `;

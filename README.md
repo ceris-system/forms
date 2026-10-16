@@ -83,6 +83,8 @@ Requests are written to the first free row after the last occupied row in their 
 
 After approval, a request appears under **Pending to release** for a signed-in user whose saved department matches its Outgoing Department. The full form, including all item details, approved quantities, and the `SIG.png` approval signature, is shown there and can be printed before marking it Released. It then appears under **Pending to received** for a user whose saved department matches its Incoming Department; that user can mark it Received. Master Admins can see and authorize requests across all departments in both queues. The backend checks department membership for staff, admin access for Master Admin overrides, and the current status when applying each action. Approval names are shown above the approval-signature label in the categorized request cards and in the requestor's **My requests** view.
 
+The portal keeps the selected dashboard page in the URL hash so it can be restored after a reload or session refresh. Lookup lists are briefly cached in the signed-in browser session, and workflow requests for the separate form tabs are fetched concurrently.
+
 The next sequence number is recalculated from the matching sheet when the form preview loads and again at submit. Deleting request rows therefore resets numbering to 1 when the corresponding tab has no remaining request rows, or resumes after the highest remaining request number. A per-form lock prevents simultaneous requests from reusing a number during the sheet write. If writing to Sheets fails after allocation, the portal reports the failure; the next preview reconciles the counter with the sheet.
 
 ## Staff use

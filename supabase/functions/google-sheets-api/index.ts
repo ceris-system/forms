@@ -26,6 +26,7 @@ const requestTabs: Record<string, string> = {
   "purchase-order": "P.O REQUEST",
 };
 const requestStatuses = ["Pending", "Approved", "Released", "Received"];
+const statusDropdownCache = new Map<string, { rowCount: number; expiresAt: number }>();
 
 function respond(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -167,8 +168,12 @@ async function getSheetMetadata(spreadsheetId: string): Promise<Record<string, a
   return googleRequest(`spreadsheets/${spreadsheetId}?fields=sheets(properties(sheetId,title,gridProperties(rowCount)))`);
 }
 
-async function ensureOutputTab(spreadsheetId: string, tabName: string): Promise<string> {
-  const metadata = await getSheetMetadata(spreadsheetId);
+async function ensureOutputTab(
+  spreadsheetId: string,
+  tabName: string,
+  knownMetadata?: Record<string, any>,
+): Promise<string> {
+  const metadata = knownMetadata || await getSheetMetadata(spreadsheetId);
   const existingSheet = (metadata.sheets || []).find((sheet: Record<string, any>) =>
     String(sheet.properties?.title || "").toLocaleLowerCase() === tabName.toLocaleLowerCase()
   );
@@ -184,14 +189,24 @@ async function ensureStatusDropdown(
   spreadsheetId: string,
   tabName: string,
   minimumRows: number,
+  knownMetadata?: Record<string, any>,
 ): Promise<void> {
-  const metadata = await getSheetMetadata(spreadsheetId);
-  const sheet = (metadata.sheets || []).find((item: Record<string, any>) =>
+  let metadata = knownMetadata || await getSheetMetadata(spreadsheetId);
+  let sheet = (metadata.sheets || []).find((item: Record<string, any>) =>
     String(item.properties?.title || "").toLocaleLowerCase() === tabName.toLocaleLowerCase()
   );
+  if (!sheet && knownMetadata) {
+    metadata = await getSheetMetadata(spreadsheetId);
+    sheet = (metadata.sheets || []).find((item: Record<string, any>) =>
+      String(item.properties?.title || "").toLocaleLowerCase() === tabName.toLocaleLowerCase()
+    );
+  }
   if (!sheet?.properties?.sheetId) throw new Error(`Could not find the "${tabName}" request tab.`);
   const sheetId = Number(sheet.properties.sheetId);
   const rowCount = Math.max(Number(sheet.properties.gridProperties?.rowCount) || 1000, minimumRows, 2);
+  const cacheKey = `${spreadsheetId}:${tabName.toLocaleLowerCase()}`;
+  const cached = statusDropdownCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now() && cached.rowCount >= minimumRows && rowCount >= minimumRows) return;
   const requests: Record<string, unknown>[] = [];
   if (Number(sheet.properties.gridProperties?.rowCount) < rowCount) {
     requests.push({
@@ -215,6 +230,7 @@ async function ensureStatusDropdown(
     method: "POST",
     body: JSON.stringify({ requests }),
   });
+  statusDropdownCache.set(cacheKey, { rowCount, expiresAt: Date.now() + 5 * 60_000 });
 }
 
 function requiredText(value: unknown, label: string): string {
@@ -317,11 +333,19 @@ async function ensureRequestHeaders(spreadsheetId: string, tabName: string): Pro
       hasLegacyId ? "" : row[22] ?? "",
     ];
   });
-  await writeRequestColumns(spreadsheetId, tabName, [
-    requestHeaders.slice(17),
-    ...rows,
-  ]);
-  current = await readValues(spreadsheetId, tabName, "A:Z");
+  const workflowHeadersChanged = requestHeaders.slice(17).some((header, index) => headers[index + 17] !== header);
+  const workflowValuesChanged = rows.some((values, rowIndex) =>
+    requestHeaders.slice(17).some((_, columnIndex) =>
+      String(current[rowIndex + 1]?.[columnIndex + 17] ?? "") !== String(values[columnIndex] ?? "")
+    )
+  );
+  if (workflowHeadersChanged || workflowValuesChanged) {
+    await writeRequestColumns(spreadsheetId, tabName, [
+      requestHeaders.slice(17),
+      ...rows,
+    ]);
+    current = await readValues(spreadsheetId, tabName, "A:Z");
+  }
   return current;
 }
 
@@ -385,11 +409,12 @@ async function previewRequestSequence(
   const tabName = requestTabs[formType];
   if (!prefix || !tabName) throw new Error("Unknown request form type.");
   return withRequestSequenceLock(adminClient, formType, async () => {
-    const actualTab = await ensureOutputTab(spreadsheetId, tabName);
+    const metadata = await getSheetMetadata(spreadsheetId);
+    const actualTab = await ensureOutputTab(spreadsheetId, tabName, metadata);
     const rows = await ensureRequestHeaders(spreadsheetId, actualTab);
     const maximum = getMaximumSequence(rows, prefix);
     await setCounterFromSheet(adminClient, formType, maximum);
-    await ensureStatusDropdown(spreadsheetId, actualTab, rows.length + 100);
+    await ensureStatusDropdown(spreadsheetId, actualTab, rows.length + 100, metadata);
     return maximum + 1;
   });
 }
@@ -408,13 +433,16 @@ async function loadWorkflowRequests(
       String(sheet.properties?.title || ""),
     ]),
   );
+  const rowsByTab = await Promise.all(Object.entries(requestTabs).map(async ([formType, tabName]) => {
+    const actualTab = availableTabs.get(tabName.toLocaleLowerCase());
+    if (!actualTab) return [];
+    const rows = await ensureRequestHeaders(spreadsheetId, actualTab);
+    return rows.slice(1).map(row => ({ formType, row }));
+  }));
   const requests = new Map<string, Record<string, unknown>>();
 
-  for (const [formType, tabName] of Object.entries(requestTabs)) {
-    const actualTab = availableTabs.get(tabName.toLocaleLowerCase());
-    if (!actualTab) continue;
-    const rows = await ensureRequestHeaders(spreadsheetId, actualTab);
-    for (const row of rows.slice(1)) {
+  for (const tabRows of rowsByTab) {
+    for (const { formType, row } of tabRows) {
       const requestNumber = String(row[0] ?? "").trim();
       const status = String(row[18] ?? "").trim().toLocaleLowerCase();
       if (!requestNumber) continue;
@@ -632,11 +660,12 @@ async function saveSubmissionDirect(
   });
 
   return withRequestSequenceLock(adminClient, formType, async () => {
-    const actualOutputTab = await ensureOutputTab(spreadsheetId, outputTab);
+    const metadata = await getSheetMetadata(spreadsheetId);
+    const actualOutputTab = await ensureOutputTab(spreadsheetId, outputTab, metadata);
     let current = await ensureRequestHeaders(spreadsheetId, actualOutputTab);
     const maximumSequence = getMaximumSequence(current, prefix);
     await setCounterFromSheet(adminClient, formType, maximumSequence);
-    await ensureStatusDropdown(spreadsheetId, actualOutputTab, current.length + items.length + 100);
+    await ensureStatusDropdown(spreadsheetId, actualOutputTab, current.length + items.length + 100, metadata);
 
     const { data: sequenceNumber, error: sequenceError } = await adminClient.rpc("allocate_request_number", {
       p_form_type: formType,
