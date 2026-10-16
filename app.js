@@ -1570,7 +1570,7 @@ function makeWorkflowRequestCard(request, action) {
   table.append(head, body);
   tableScroll.append(table);
   card.append(heading, details);
-  if (request.approved_by && action !== "pending_received") {
+  if (request.approved_by && action === "pending_release") {
     const signature = document.createElement("div");
     signature.className = "approval-signature";
     const name = document.createElement("strong");
