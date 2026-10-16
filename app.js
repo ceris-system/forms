@@ -578,7 +578,14 @@ async function refreshAdminTools() {
     isAdmin = Boolean(access.is_admin);
     if (!isAdmin) return;
     document.body.classList.add("admin-mode");
-    if (isMasterAdmin) document.body.classList.add("master-admin-mode");
+    if (!isMasterAdmin) {
+      renderUserForms();
+      document.querySelector("#account-role").textContent =
+        ["Admin", currentUserProfile.department].filter(Boolean).join(" · ");
+      document.querySelector("#account-badge").textContent = "ADMIN";
+      return;
+    }
+    document.body.classList.add("master-admin-mode");
     panel.hidden = false;
     const adminRoleOption = document.querySelector(".master-admin-only-option");
     adminRoleOption.hidden = !isMasterAdmin;

@@ -177,6 +177,15 @@ Deno.serve(async (request: Request) => {
       return respond({ ok: true });
     }
     if (!isAdmin) return respond({ error: "Admin access is required." }, 403);
+    if ([
+      "reset_request_history",
+      "state",
+      "create_user",
+      "save_workbook",
+      "save_assignment",
+    ].includes(String(body.action)) && !isMasterAdmin) {
+      return respond({ error: "Only the Master Admin can manage users, roles, and portal settings." }, 403);
+    }
 
     if (body.action === "reset_request_history") {
       const userClient = createClient(supabaseUrl, anonKey, {

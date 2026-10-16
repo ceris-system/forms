@@ -87,7 +87,7 @@ The **Notifications** inbox keeps form-specific updates for the signed-in user. 
 
 ## Roles and form access
 
-The Master Admin creates accounts with either the **Admin** or **User** role. Admins can manage users, review and approve requests, handle all departments, change workbook settings, and see every request in **Reports & History**. Only a Master Admin can grant Admin status. Master Admin access remains controlled by `public.mw_portal_admins`.
+Only the Master Admin can create accounts, assign the **Admin** or **User** role, choose a User's assigned forms, and change workbook or portal settings. Admins can review and approve requests, handle all departments, and see every request in **Reports & History**, but cannot manage accounts or settings. Master Admin access remains controlled by `public.mw_portal_admins`.
 
 For a regular User, select one or more form types when creating the account. The user can submit and view queues only for those forms. **Reports & History** is read-only and shows requests for the assigned form types where the user's department is the outgoing or incoming department. Existing accounts keep access to all four forms after applying the role migration. The backend enforces role, form assignment, and department rules for every read and workflow action; hiding a page or form in the browser is not the security boundary.
 

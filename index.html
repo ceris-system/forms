@@ -158,7 +158,7 @@
             </div>
             </div>
             <div class="section-heading assignment-heading">
-              <div><p class="eyebrow">STAFF ACCOUNTS</p><h2>Add a user</h2><p class="section-description">Create an account with a username, department, role, assigned forms, initial password, and status. Users set a new password when signing in with Default status. Only a Master Admin can grant Admin access.</p></div>
+              <div><p class="eyebrow">STAFF ACCOUNTS · MASTER ADMIN</p><h2>Add a user</h2><p class="section-description">Only the Master Admin can create accounts and assign the Admin or User role and allowed forms. Users set a new password when signing in with Default status.</p></div>
             </div>
             <form class="add-user-form" id="add-user-form">
               <label class="add-user-field" for="new-user-username">Username
@@ -170,7 +170,7 @@
               <label class="add-user-field" for="new-user-role">Role
                 <select id="new-user-role" name="role" required>
                   <option value="user" selected>User — assigned forms only</option>
-                  <option class="master-admin-only-option" value="admin">Admin — manage users and all requests</option>
+                  <option class="master-admin-only-option" value="admin">Admin — approve and manage all requests</option>
                 </select>
               </label>
               <label class="add-user-field" for="new-user-password">Temporary password
