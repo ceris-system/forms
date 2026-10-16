@@ -440,7 +440,9 @@ function renderRequestHistory(pageId) {
   const body = section.querySelector("[data-history-rows]");
   body.replaceChildren();
   const fields = [
-    "serial_number", "outgoing_department", "sku_code", "product_description", "uom",
+    "serial_number",
+    ...(pageId === "po-history" ? ["supplier"] : []),
+    "outgoing_department", "sku_code", "product_description", "uom",
     "expiration_date", "on_hand", "total_on_hand", "cost", "srp", "approved_transfer_qty",
     "second_expiration_date", "received_qty", "remarks", "incoming_department", "request_date", "received_date",
   ];

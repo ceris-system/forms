@@ -375,6 +375,7 @@ async function loadRequestHistory(
     if (incomingDepartment.trim().toLocaleLowerCase() !== normalizedDepartment) return [];
     return [{
       serial_number: String(row[0] ?? ""),
+      supplier: String(row[5] ?? ""),
       outgoing_department: outgoingDepartment,
       sku_code: String(row[7] ?? ""),
       product_description: String(row[8] ?? ""),
@@ -394,6 +395,15 @@ async function loadRequestHistory(
       status,
     }];
   });
+  if (formType === "purchase-order") {
+    rows.sort((left, right) => {
+      const leftSupplier = String(left.supplier ?? "").trim();
+      const rightSupplier = String(right.supplier ?? "").trim();
+      if (!leftSupplier) return rightSupplier ? 1 : 0;
+      if (!rightSupplier) return -1;
+      return leftSupplier.localeCompare(rightSupplier, undefined, { sensitivity: "base" });
+    });
+  }
   return { department, departments, rows };
 }
 
