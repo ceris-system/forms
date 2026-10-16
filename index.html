@@ -12,7 +12,21 @@
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
     <script src="app.js" defer></script>
   </head>
-  <body class="user-mode">
+  <body class="user-mode signed-out">
+    <main class="login-screen" id="login-screen">
+      <form class="login-card" id="auth-form">
+        <img src="assets/mothers-wonderland-logo.png" alt="Mother's Wonderland">
+        <p class="eyebrow">WORKSPACE ACCOUNT</p>
+        <h1>Sign in</h1>
+        <p class="section-description">Use the username and password provided by your workspace admin.</p>
+        <label class="catalog-search-label" for="auth-username">Username</label>
+        <input class="catalog-search" id="auth-username" type="text" autocomplete="username" minlength="3" maxlength="32" autofocus required>
+        <label class="catalog-search-label auth-password-label" for="auth-password">Password</label>
+        <input class="catalog-search" id="auth-password" type="password" autocomplete="current-password" required>
+        <p class="catalog-status" id="auth-status" role="status" aria-live="polite"></p>
+        <button class="button button-primary" id="submit-auth" type="submit">Sign in</button>
+      </form>
+    </main>
     <div class="app-shell">
       <aside class="sidebar" aria-label="Main navigation">
         <a class="brand" href="#user-forms" aria-label="Mother's Wonderland request portal home">
@@ -58,7 +72,7 @@
               <div class="department-icon" aria-hidden="true">⚙</div>
               <p class="eyebrow">SHARED WORKBOOK</p>
               <h2>Spreadsheet setup</h2>
-              <p class="section-description">Connect the shared Google workbook and select lookup tabs for products, each department list, and suppliers. Submitted forms go to each user's assigned tab.</p>
+              <p class="section-description">Connect the shared Google workbook and select lookup tabs for products, departments, and suppliers. Forms are saved to their matching request tabs.</p>
             </div>
             <div class="department-fields">
               <label class="field-label" for="shared-workbook-url">Shared Google spreadsheet URL</label>
@@ -102,13 +116,9 @@
               <p class="field-hint add-user-status" id="add-user-status" role="status" aria-live="polite"></p>
             </form>
             <div class="section-heading assignment-heading">
-              <div><p class="eyebrow">STAFF OUTPUT TABS</p><h2>Assign a tab to each user</h2><p class="section-description">Departments are saved when you create each account. Assign only the user's output tab here.</p></div>
+              <div><p class="eyebrow">LEGACY REQUEST DATA</p><h2>Delete legacy Supabase requests</h2><p class="section-description">Optional cleanup for requests saved before direct-to-Sheets submissions. This does not change Google Sheets or user accounts. Sequence numbers are recalculated from each request tab automatically.</p></div>
             </div>
-            <div class="assignment-list" id="assignment-list" aria-live="polite"></div>
-            <div class="section-heading assignment-heading">
-              <div><p class="eyebrow">REQUEST SEQUENCES</p><h2>Reset all form sequences</h2><p class="section-description">After clearing request rows in Google Sheets, permanently delete any legacy requests stored in Supabase and restart every form sequence at 1. This does not change spreadsheet contents or user accounts.</p></div>
-            </div>
-            <button class="button button-danger" id="reset-request-history" type="button">Delete legacy requests and reset sequences</button>
+            <button class="button button-danger" id="reset-request-history" type="button">Delete legacy Supabase requests</button>
           </details>
 
           <footer class="page-footer"><span>Mother's Wonderland <span aria-hidden="true">✦</span> Request portal</span><span id="save-status" role="status" aria-live="polite">Sign in to create and submit a request.</span></footer>
@@ -148,7 +158,7 @@
     </dialog>
     <dialog class="catalog-dialog" id="catalog-dialog" aria-labelledby="catalog-dialog-title">
       <div class="catalog-dialog-heading">
-        <div><p class="eyebrow">PRODUCT CATALOG</p><h2 id="catalog-dialog-title">Select products</h2><p class="section-description">Search the catalog, select products, then add them to your request.</p></div>
+        <div><p class="eyebrow">PRODUCT CATALOG</p><h2 id="catalog-dialog-title">Select products</h2><p class="section-description">Choose the outgoing department first; only its products are listed here.</p></div>
         <button class="dialog-close" id="close-catalog-dialog" type="button" aria-label="Close product catalog">×</button>
       </div>
       <label class="catalog-search-label" for="catalog-search">Search products</label>
@@ -164,23 +174,6 @@
         <button class="button button-secondary" id="cancel-catalog" type="button">Cancel</button>
         <button class="button button-primary" id="add-selected-products" type="button" disabled>Add selected products</button>
       </div>
-    </dialog>
-    <dialog class="catalog-dialog auth-dialog" id="auth-dialog" aria-labelledby="auth-dialog-title">
-      <form id="auth-form">
-        <div class="catalog-dialog-heading">
-          <div><p class="eyebrow">WORKSPACE ACCOUNT</p><h2 id="auth-dialog-title">Sign in</h2><p class="section-description">Use the username and password provided by your workspace admin.</p></div>
-          <button class="dialog-close" id="close-auth-dialog" type="button" aria-label="Close sign in">×</button>
-        </div>
-        <label class="catalog-search-label" for="auth-username">Username</label>
-        <input class="catalog-search" id="auth-username" type="text" autocomplete="username" minlength="3" maxlength="32" required>
-        <label class="catalog-search-label auth-password-label" for="auth-password">Password</label>
-        <input class="catalog-search" id="auth-password" type="password" autocomplete="current-password" required>
-        <p class="catalog-status" id="auth-status" role="status" aria-live="polite"></p>
-        <div class="catalog-dialog-actions">
-          <button class="button button-secondary" id="cancel-auth" type="button">Cancel</button>
-          <button class="button button-primary" id="submit-auth" type="submit">Sign in</button>
-        </div>
-      </form>
     </dialog>
   </body>
 </html>

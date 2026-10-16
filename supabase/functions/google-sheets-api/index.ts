@@ -10,7 +10,7 @@ const requestHeaders = [
   "Request Number", "Form Type", "Request Date", "Outgoing Department",
   "Incoming Department", "Supplier", "Submitted By", "SKU Code",
   "Product Description", "UOM", "Expiration Date", "Onhand",
-  "Total Onhand", "Cost", "SRP", "Transfer Qty", "Remarks", "Sequence Number",
+  "Total Onhand", "Cost", "SRP", "Transfer Qty", "Remarks", "Sequence Number", "Status",
 ];
 const requestPrefixes: Record<string, string> = {
   "release-request": "RRF",
@@ -18,6 +18,13 @@ const requestPrefixes: Record<string, string> = {
   "pull-out": "PUF",
   "purchase-order": "POF",
 };
+const requestTabs: Record<string, string> = {
+  "release-request": "TRANSFER",
+  transfer: "REQUEST",
+  "pull-out": "RTV",
+  "purchase-order": "P.O REQUEST",
+};
+const requestStatuses = ["Pending", "Approved", "Received"];
 
 function respond(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -151,8 +158,12 @@ async function lookupLists(
   };
 }
 
+async function getSheetMetadata(spreadsheetId: string): Promise<Record<string, any>> {
+  return googleRequest(`spreadsheets/${spreadsheetId}?fields=sheets(properties(sheetId,title,gridProperties(rowCount)))`);
+}
+
 async function ensureOutputTab(spreadsheetId: string, tabName: string): Promise<string> {
-  const metadata = await googleRequest(`spreadsheets/${spreadsheetId}?fields=sheets.properties.title`);
+  const metadata = await getSheetMetadata(spreadsheetId);
   const existingSheet = (metadata.sheets || []).find((sheet: Record<string, any>) =>
     String(sheet.properties?.title || "").toLocaleLowerCase() === tabName.toLocaleLowerCase()
   );
@@ -164,10 +175,51 @@ async function ensureOutputTab(spreadsheetId: string, tabName: string): Promise<
   return tabName;
 }
 
+async function ensureStatusDropdown(
+  spreadsheetId: string,
+  tabName: string,
+  minimumRows: number,
+): Promise<void> {
+  const metadata = await getSheetMetadata(spreadsheetId);
+  const sheet = (metadata.sheets || []).find((item: Record<string, any>) =>
+    String(item.properties?.title || "").toLocaleLowerCase() === tabName.toLocaleLowerCase()
+  );
+  if (!sheet?.properties?.sheetId) throw new Error(`Could not find the "${tabName}" request tab.`);
+  const sheetId = Number(sheet.properties.sheetId);
+  const rowCount = Math.max(Number(sheet.properties.gridProperties?.rowCount) || 1000, minimumRows, 2);
+  const requests: Record<string, unknown>[] = [];
+  if (Number(sheet.properties.gridProperties?.rowCount) < rowCount) {
+    requests.push({
+      updateSheetProperties: {
+        properties: { sheetId, gridProperties: { rowCount } },
+        fields: "gridProperties.rowCount",
+      },
+    });
+  }
+  requests.push({
+    setDataValidation: {
+      range: { sheetId, startRowIndex: 1, endRowIndex: rowCount, startColumnIndex: 18, endColumnIndex: 19 },
+      rule: {
+        condition: { type: "ONE_OF_LIST", values: requestStatuses.map(userEnteredValue => ({ userEnteredValue })) },
+        strict: true,
+        showCustomUi: true,
+      },
+    },
+  });
+  await googleRequest(`spreadsheets/${spreadsheetId}:batchUpdate`, {
+    method: "POST",
+    body: JSON.stringify({ requests }),
+  });
+}
+
 function requiredText(value: unknown, label: string): string {
   const text = typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
   if (!text) throw new Error(`${label} is required.`);
   return text;
+}
+
+function uppercaseText(value: unknown, label: string): string {
+  return requiredText(value, label).toLocaleUpperCase();
 }
 
 function numberOrBlank(value: unknown): string | number {
@@ -179,17 +231,150 @@ function numberOrBlank(value: unknown): string | number {
 
 function normalizeSubmittedItem(item: Record<string, unknown>): Record<string, unknown> {
   return {
-    sku_code: requiredText(item.sku_code, "SKU code"),
-    product_description: requiredText(item.product_description, "Product description"),
-    uom: typeof item.uom === "string" ? item.uom : "",
+    sku_code: uppercaseText(item.sku_code, "SKU code"),
+    product_description: uppercaseText(item.product_description, "Product description"),
+    uom: typeof item.uom === "string" ? item.uom.toLocaleUpperCase() : "",
     expiration_date: typeof item.expiration_date === "string" ? item.expiration_date : "",
     qty_onhand: numberOrBlank(item.qty_onhand),
     total_qty_onhand: numberOrBlank(item.total_qty_onhand),
     cost: numberOrBlank(item.cost),
     srp: numberOrBlank(item.srp),
     transfer_qty: numberOrBlank(item.transfer_qty),
-    remarks: typeof item.remarks === "string" ? item.remarks : "",
+    remarks: typeof item.remarks === "string" ? item.remarks.toLocaleUpperCase() : "",
   };
+}
+
+async function writeRequestColumns(
+  spreadsheetId: string,
+  tabName: string,
+  values: unknown[][],
+): Promise<void> {
+  await googleRequest(
+    `spreadsheets/${spreadsheetId}/values/${range(tabName, `R1:S${values.length}`)}?valueInputOption=RAW`,
+    { method: "PUT", body: JSON.stringify({ values }) },
+  );
+}
+
+async function ensureRequestHeaders(spreadsheetId: string, tabName: string): Promise<unknown[][]> {
+  let current = await readValues(spreadsheetId, tabName, "A:Z");
+  if (!current.length) {
+    await googleRequest(`spreadsheets/${spreadsheetId}/values/${range(tabName, "A1:S1")}?valueInputOption=RAW`, {
+      method: "PUT",
+      body: JSON.stringify({ values: [requestHeaders] }),
+    });
+    return readValues(spreadsheetId, tabName, "A:Z");
+  }
+
+  const headers = current[0].map(value => String(value ?? ""));
+  if (requestHeaders.slice(0, 17).some((header, index) => headers[index] !== header)) {
+    throw new Error(`The "${tabName}" tab has different columns from the request format. No request data was saved.`);
+  }
+  if (headers.slice(19).some(Boolean)) {
+    throw new Error(`The "${tabName}" tab has extra columns after Status. No request data was saved.`);
+  }
+  if (headers[17] && headers[17] !== "Sequence Number" && headers[17] !== "Supabase Request ID") {
+    throw new Error(`The "${tabName}" tab has different columns from the request format. No request data was saved.`);
+  }
+  const hasLegacyId = headers[17] === "Supabase Request ID";
+  if (!hasLegacyId && headers[18] && headers[18] !== "Status") {
+    throw new Error(`The "${tabName}" tab has different columns from the request format. No request data was saved.`);
+  }
+
+  const rows = current.slice(1).map(row => {
+    const requestNumber = String(row[0] ?? "");
+    const numberMatch = requestNumber.match(/^(?:RRF|TRF|PUF|POF)-(\d+)$/);
+    const storedSequence = !hasLegacyId && headers[17] === "Sequence Number" ? row[17] : "";
+    const sequence = storedSequence !== "" && Number.isSafeInteger(Number(storedSequence))
+      ? Number(storedSequence)
+      : numberMatch ? Number(numberMatch[1]) : "";
+    const storedStatus = !hasLegacyId && headers[18] === "Status" ? String(row[18] ?? "").trim() : "";
+    let status = "";
+    if (requestNumber) {
+      if (!storedStatus) {
+        status = "Pending";
+      } else {
+        const canonicalStatus = requestStatuses.find(value => value.toLocaleLowerCase() === storedStatus.toLocaleLowerCase());
+        if (!canonicalStatus) throw new Error(`The "${tabName}" tab has an invalid status "${storedStatus}". Use Pending, Approved, or Received.`);
+        status = canonicalStatus;
+      }
+    }
+    return [sequence, status];
+  });
+  await writeRequestColumns(spreadsheetId, tabName, [
+    [requestHeaders[17], requestHeaders[18]],
+    ...rows,
+  ]);
+  current = await readValues(spreadsheetId, tabName, "A:Z");
+  return current;
+}
+
+function getMaximumSequence(rows: unknown[][], prefix: string): number {
+  if (!rows.length) return 0;
+  const header = rows[0].map(value => String(value ?? ""));
+  if (requestHeaders.slice(0, 17).some((value, index) => header[index] !== value)) {
+    throw new Error("The request tab headers do not match the request format.");
+  }
+  let maximum = 0;
+  for (const row of rows.slice(1)) {
+    const match = String(row[0] ?? "").match(new RegExp(`^${prefix}-(\\d+)$`));
+    if (!match) continue;
+    const value = Number(match[1]);
+    if (Number.isSafeInteger(value)) maximum = Math.max(maximum, value);
+  }
+  return maximum;
+}
+
+async function setCounterFromSheet(
+  adminClient: ReturnType<typeof createClient>,
+  formType: string,
+  lastValue: number,
+): Promise<void> {
+  const { error } = await adminClient.rpc("set_request_counter_from_sheet", {
+    p_form_type: formType,
+    p_last_value: lastValue,
+  });
+  if (error) throw error;
+}
+
+async function withRequestSequenceLock<T>(
+  adminClient: ReturnType<typeof createClient>,
+  formType: string,
+  action: () => Promise<T>,
+): Promise<T> {
+  const lockId = crypto.randomUUID();
+  const { data: acquired, error: acquireError } = await adminClient.rpc("acquire_request_sequence_lock", {
+    p_form_type: formType,
+    p_lock_id: lockId,
+  });
+  if (acquireError) throw acquireError;
+  if (!acquired) throw new Error("Another request of this form is being saved. Wait a moment and try again.");
+  try {
+    return await action();
+  } finally {
+    const { error: releaseError } = await adminClient.rpc("release_request_sequence_lock", {
+      p_form_type: formType,
+      p_lock_id: lockId,
+    });
+    if (releaseError) throw releaseError;
+  }
+}
+
+async function previewRequestSequence(
+  adminClient: ReturnType<typeof createClient>,
+  spreadsheetId: string,
+  formType: string,
+): Promise<number> {
+  const prefix = requestPrefixes[formType];
+  const tabName = requestTabs[formType];
+  if (!prefix || !tabName) throw new Error("Unknown request form type.");
+  return withRequestSequenceLock(adminClient, formType, async () => {
+    const actualTab = await ensureOutputTab(spreadsheetId, tabName);
+    const rows = await ensureRequestHeaders(spreadsheetId, actualTab);
+    const maximum = getMaximumSequence(rows, prefix);
+    await setCounterFromSheet(adminClient, formType, maximum);
+    await ensureStatusDropdown(spreadsheetId, actualTab, rows.length + 100);
+    return maximum + 1;
+  });
 }
 
 async function getPortalUsername(
@@ -210,7 +395,6 @@ async function saveSubmissionDirect(
   adminClient: ReturnType<typeof createClient>,
   submittedBy: string,
   spreadsheetId: string,
-  assignedOutputTab: string,
   value: unknown,
 ): Promise<string> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("The submitted request details are missing.");
@@ -220,12 +404,10 @@ async function saveSubmissionDirect(
   if (!prefix) {
     throw new Error("Unknown request form type.");
   }
-  const outputTab = formType === "release-request"
-    ? "TRANSFER"
-    : requiredText(assignedOutputTab, "Assigned output tab");
-  const outgoing = requiredText(submission.outgoing_department, "Outgoing department");
-  const incoming = requiredText(submission.incoming_department, "Incoming department");
-  const supplier = typeof submission.supplier === "string" ? submission.supplier.trim() : "";
+  const outputTab = requestTabs[formType];
+  const outgoing = uppercaseText(submission.outgoing_department, "Outgoing department");
+  const incoming = uppercaseText(submission.incoming_department, "Incoming department");
+  const supplier = typeof submission.supplier === "string" ? submission.supplier.trim().toLocaleUpperCase() : "";
   if (formType === "purchase-order" && !supplier) throw new Error("A supplier is required for purchase orders.");
   const requestDate = requiredText(submission.request_date, "Request date");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(requestDate)) throw new Error("The request date is invalid.");
@@ -239,84 +421,38 @@ async function saveSubmissionDirect(
     return normalizeSubmittedItem(item as Record<string, unknown>);
   });
 
-  const actualOutputTab = await ensureOutputTab(spreadsheetId, outputTab);
-  let current = await readValues(spreadsheetId, actualOutputTab, "A:S");
-  if (current.length) {
-    let existingHeaders = current[0].map(value => String(value ?? ""));
-    if (requestHeaders.slice(0, 17).some((header, index) => existingHeaders[index] !== header)) {
-      throw new Error(`The "${actualOutputTab}" tab has different columns from the request format. No request data was saved.`);
-    }
-    if (existingHeaders[17] === "Supabase Request ID") {
-      await googleRequest(`spreadsheets/${spreadsheetId}/values/${range(actualOutputTab, "R:S")}:clear`, {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-      current = await readValues(spreadsheetId, actualOutputTab, "A:S");
-      existingHeaders = current[0].map(value => String(value ?? ""));
-      const sequenceColumn = [
-        [requestHeaders[17]],
-        ...current.slice(1).map(row => {
-          const match = String(row[0] ?? "").match(/^(?:RRF|TRF|PUF|POF)-(\d+)$/);
-          return [match ? Number(match[1]) : ""];
-        }),
-      ];
-      await googleRequest(`spreadsheets/${spreadsheetId}/values/${range(actualOutputTab, `R1:R${sequenceColumn.length}`)}?valueInputOption=RAW`, {
-        method: "PUT",
-        body: JSON.stringify({ values: sequenceColumn }),
-      });
-      current = await readValues(spreadsheetId, actualOutputTab, "A:S");
-      existingHeaders = current[0].map(value => String(value ?? ""));
-    }
-    if (existingHeaders[17] && existingHeaders[17] !== requestHeaders[17]) {
-      throw new Error(`The "${actualOutputTab}" tab has different columns from the request format. No request data was saved.`);
-    }
-    if (existingHeaders[18]) {
-      throw new Error(`The "${actualOutputTab}" tab has extra columns after Sequence Number. No request data was saved.`);
-    }
-    if (!existingHeaders[17]) {
-      const sequenceColumn = [
-        [requestHeaders[17]],
-        ...current.slice(1).map(row => {
-          const match = String(row[0] ?? "").match(/^(?:RRF|TRF|PUF|POF)-(\d+)$/);
-          return [match ? Number(match[1]) : ""];
-        }),
-      ];
-      await googleRequest(`spreadsheets/${spreadsheetId}/values/${range(actualOutputTab, `R1:R${sequenceColumn.length}`)}?valueInputOption=RAW`, {
-        method: "PUT",
-        body: JSON.stringify({ values: sequenceColumn }),
-      });
-    }
-  } else {
-    await googleRequest(`spreadsheets/${spreadsheetId}/values/${range(actualOutputTab, "A1:R1")}?valueInputOption=RAW`, {
-      method: "PUT",
-      body: JSON.stringify({ values: [requestHeaders] }),
-    });
-  }
+  return withRequestSequenceLock(adminClient, formType, async () => {
+    const actualOutputTab = await ensureOutputTab(spreadsheetId, outputTab);
+    let current = await ensureRequestHeaders(spreadsheetId, actualOutputTab);
+    const maximumSequence = getMaximumSequence(current, prefix);
+    await setCounterFromSheet(adminClient, formType, maximumSequence);
+    await ensureStatusDropdown(spreadsheetId, actualOutputTab, current.length + items.length + 100);
 
-  const { data: sequenceNumber, error: sequenceError } = await adminClient.rpc("allocate_request_number", {
-    p_form_type: formType,
+    const { data: sequenceNumber, error: sequenceError } = await adminClient.rpc("allocate_request_number", {
+      p_form_type: formType,
+    });
+    if (sequenceError) throw sequenceError;
+    const allocatedSequence = Number(sequenceNumber);
+    if (!Number.isSafeInteger(allocatedSequence) || allocatedSequence < 1) {
+      throw new Error("The request sequence allocator returned an invalid number.");
+    }
+    const requestNumber = `${prefix}-${String(allocatedSequence).padStart(7, "0")}`;
+    if (current.slice(1).some(row => String(row[0] ?? "") === requestNumber)) {
+      throw new Error("The request number already exists in the destination sheet. No request data was saved.");
+    }
+    const rows = items.map(item => [
+      requestNumber, formType.replaceAll("-", " ").toLocaleUpperCase(), requestDate, outgoing, incoming, supplier,
+      submittedBy.toLocaleUpperCase(), item.sku_code, item.product_description, item.uom, item.expiration_date,
+      item.qty_onhand, item.total_qty_onhand, item.cost, item.srp, item.transfer_qty, item.remarks,
+      allocatedSequence, "Pending",
+    ]);
+    const tab = safeTabName(actualOutputTab);
+    await googleRequest(
+      `spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tab)}!A:S:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      { method: "POST", body: JSON.stringify({ values: rows }) },
+    );
+    return requestNumber;
   });
-  if (sequenceError) throw sequenceError;
-  const allocatedSequence = Number(sequenceNumber);
-  if (!Number.isSafeInteger(allocatedSequence) || allocatedSequence < 1) {
-    throw new Error("The request sequence allocator returned an invalid number.");
-  }
-  const requestNumber = `${prefix}-${String(allocatedSequence).padStart(7, "0")}`;
-  if (current.slice(1).some(row => String(row[0] ?? "") === requestNumber)) {
-    throw new Error("The request number already exists in the destination sheet. Clear the sheet or reset the sequence before retrying.");
-  }
-  const rows = items.map(item => [
-    requestNumber, formType, requestDate, outgoing, incoming, supplier, submittedBy,
-    item.sku_code, item.product_description, item.uom, item.expiration_date,
-    item.qty_onhand, item.total_qty_onhand, item.cost, item.srp, item.transfer_qty, item.remarks,
-    allocatedSequence,
-  ]);
-  const tab = safeTabName(actualOutputTab);
-  await googleRequest(
-    `spreadsheets/${spreadsheetId}/values/${encodeURIComponent(tab)}!A:R:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
-    { method: "POST", body: JSON.stringify({ values: rows }) },
-  );
-  return requestNumber;
 }
 
 Deno.serve(async (request: Request) => {
@@ -340,14 +476,10 @@ Deno.serve(async (request: Request) => {
       return respond({ error: "Your sign-in session is invalid. Sign in again." }, 401);
     }
     const adminClient = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
-    const [{ data: assignment, error: assignmentError }, { data: settings, error: settingsError }] = await Promise.all([
-      adminClient.from("mw_sheet_assignments").select("output_tab").eq("user_id", authData.user.id).maybeSingle(),
-      adminClient.from("mw_google_settings")
+    const { data: settings, error: settingsError } = await adminClient.from("mw_google_settings")
         .select("spreadsheet_id, products_tab, outgoing_departments_tab, incoming_departments_tab, suppliers_tab")
         .eq("singleton", true)
-        .maybeSingle(),
-    ]);
-    if (assignmentError) throw assignmentError;
+        .maybeSingle();
     if (settingsError) throw settingsError;
     if (!settings?.spreadsheet_id) return respond({ error: "The Master Admin has not connected the shared spreadsheet yet." }, 409);
 
@@ -365,16 +497,7 @@ Deno.serve(async (request: Request) => {
     }));
     if (body.action === "sequence_preview") {
       const formType = requiredText(body.form_type, "Form type");
-      const prefix = requestPrefixes[formType];
-      if (!prefix) return respond({ error: "Unknown request form type." }, 400);
-      const { data: counter, error } = await adminClient
-        .from("request_counters")
-        .select("last_value")
-        .eq("form_type", formType)
-        .maybeSingle();
-      if (error) throw error;
-      if (!counter) throw new Error("The request sequence counter is not configured.");
-      const sequenceNumber = Number(counter.last_value) + 1;
+      const sequenceNumber = await previewRequestSequence(adminClient, settings.spreadsheet_id, formType);
       if (!Number.isSafeInteger(sequenceNumber) || sequenceNumber < 1) {
         throw new Error("The next request sequence number is invalid.");
       }
@@ -385,7 +508,6 @@ Deno.serve(async (request: Request) => {
         adminClient,
         await getPortalUsername(adminClient, authData.user.id),
         settings.spreadsheet_id,
-        assignment?.output_tab || "",
         body.submission,
       );
       return respond({ ok: true, request_number: requestNumber });

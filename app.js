@@ -20,7 +20,6 @@ const requestFormBody = document.querySelector("#request-form-body");
 const catalogDialog = document.querySelector("#catalog-dialog");
 const catalogProducts = document.querySelector("#catalog-products");
 const catalogStatus = document.querySelector("#catalog-status");
-const authDialog = document.querySelector("#auth-dialog");
 const passwordChangeDialog = document.querySelector("#password-change-dialog");
 let catalogRows = [];
 let selectedCatalogRows = new Set();
@@ -28,8 +27,6 @@ let supabaseClient = null;
 let currentSession = null;
 let currentUserProfile = { username: "", department: "", status: "active", mustChangePassword: false };
 let authSubscription = null;
-let adminAccounts = [];
-let accountAssignments = new Map();
 
 function getLocalDate() {
   const today = new Date();
@@ -58,7 +55,7 @@ function openRequestForm(form) {
       return;
     }
     saveStatus.textContent = "Sign in with your invited user account to open and submit forms.";
-    authDialog.showModal();
+    document.querySelector("#auth-username").focus();
     return;
   }
   document.querySelector("#form-dialog-title").textContent = form.name;
@@ -84,11 +81,11 @@ function openRequestForm(form) {
       </div>
     </div>
     <div class="request-sheet-actions">
-      <button class="button add-product-button" type="button" data-add-item disabled><span aria-hidden="true">＋</span> Add product</button>
+      <button class="button add-product-button" type="button" data-add-item disabled><span aria-hidden="true">＋</span> Select products</button>
       <button class="button button-primary submit-request-button" type="submit">▣ Submit</button>
     </div>
     <p class="request-inline-notice" role="status" aria-live="polite"></p>
-    <div class="approval-status"><strong>PENDING APPROVALS</strong><span>Awaiting approval workflow setup</span></div>
+    <div class="approval-status"><strong>STATUS</strong><span>Pending · update to Approved, then Received, in the spreadsheet.</span></div>
     <div class="request-sheet-items">
       <p class="request-info-label">REQUEST INFORMATION</p>
       <div class="request-table-scroll">
@@ -363,6 +360,7 @@ function toDateInputValue(value) {
 function updateSessionUi(session, navigate = true) {
   currentSession = session;
   const signedIn = Boolean(session);
+  document.body.classList.toggle("signed-out", !signedIn);
   const metadata = session?.user?.user_metadata || {};
   if (signedIn && !currentUserProfile.username) {
     currentUserProfile = {
@@ -416,14 +414,14 @@ async function configureSupabase(settings) {
     supabaseClient = null;
     document.querySelector("#session-status").textContent = "Setup needed";
     updateSessionUi(null, false);
-    saveStatus.textContent = "The portal administrator must add the Supabase URL and publishable key to app.js before publishing.";
+    document.querySelector("#auth-status").textContent = "The portal administrator must add the Supabase URL and publishable key to app.js before publishing.";
     return;
   }
   if (!window.supabase?.createClient) {
     supabaseClient = null;
     document.querySelector("#session-status").textContent = "Connection error";
     updateSessionUi(null, false);
-    saveStatus.textContent = "Could not load the Supabase client library. Check your internet connection and reload.";
+    document.querySelector("#auth-status").textContent = "Could not load the sign-in service. Check your internet connection and reload.";
     return;
   }
   try {
@@ -443,7 +441,7 @@ async function configureSupabase(settings) {
     supabaseClient = null;
     document.querySelector("#session-status").textContent = "Connection error";
     updateSessionUi(null, false);
-    saveStatus.textContent = `Supabase connection failed: ${error.message || "Check the Project URL and public key."}`;
+    document.querySelector("#auth-status").textContent = `Sign-in service connection failed: ${error.message || "Check the Project URL and public key."}`;
   }
 }
 
@@ -479,64 +477,6 @@ async function loadAdminState() {
   document.querySelector("#outgoing-departments-tab").value = state.outgoing_departments_tab || "area";
   document.querySelector("#incoming-departments-tab").value = state.incoming_departments_tab || "area";
   document.querySelector("#suppliers-tab").value = state.suppliers_tab || "dd";
-  adminAccounts = Array.isArray(state.users) ? state.users : [];
-  accountAssignments = new Map((state.assignments || []).map(assignment => [assignment.user_id, assignment.output_tab]));
-  renderAssignments();
-}
-
-function renderAssignments() {
-  const list = document.querySelector("#assignment-list");
-  list.replaceChildren();
-  if (!adminAccounts.length) {
-    const empty = document.createElement("p");
-    empty.className = "field-hint";
-    empty.textContent = "No username accounts exist yet. Create accounts and username mappings before assigning tabs.";
-    list.append(empty);
-    return;
-  }
-  for (const account of adminAccounts) {
-    const row = document.createElement("div");
-    row.className = "assignment-row";
-    const username = document.createElement("strong");
-    username.textContent = `${account.username} · ${account.status || "active"}`;
-    const department = document.createElement("span");
-    department.className = "assignment-department";
-    department.textContent = account.department || "Department not set";
-    const input = document.createElement("input");
-    input.type = "text";
-    input.maxLength = 100;
-    input.placeholder = "Output tab name";
-    input.value = accountAssignments.get(account.user_id) || "";
-    input.setAttribute("aria-label", `Output tab for ${account.username}`);
-    const button = document.createElement("button");
-    button.className = "button button-secondary";
-    button.type = "button";
-    button.textContent = "Save user";
-    button.addEventListener("click", async () => {
-      button.disabled = true;
-      document.querySelector("#admin-status").textContent = `Saving output tab for ${account.username}…`;
-      try {
-        const result = await callPortalAdmin({
-          action: "save_assignment",
-          user_id: account.user_id,
-          output_tab: input.value.trim(),
-        });
-        if (result.output_tab) accountAssignments.set(account.user_id, result.output_tab);
-        else accountAssignments.delete(account.user_id);
-        username.textContent = `${account.username} · ${account.status || "active"}`;
-        document.querySelector("#admin-status").textContent = result.output_tab
-          ? `${account.username}'s output tab "${result.output_tab}" is saved.`
-          : `${account.username}'s output tab assignment was removed.`;
-      } catch (error) {
-        console.error("Unable to save a user's output tab.", error);
-        document.querySelector("#admin-status").textContent = `Could not save ${account.username}'s output tab: ${error.message || "Request failed."}`;
-      } finally {
-        button.disabled = false;
-      }
-    });
-    row.append(username, department, input, button);
-    list.append(row);
-  }
 }
 
 async function saveWorkbook() {
@@ -579,15 +519,7 @@ async function addUser(event) {
       status: document.querySelector("#new-user-status").value,
     });
     form.reset();
-    adminAccounts = [...adminAccounts, {
-      user_id: result.user_id,
-      username: result.username,
-      department: result.department,
-      status: result.status,
-    }]
-      .sort((left, right) => left.username.localeCompare(right.username));
-    renderAssignments();
-    status.textContent = `User "${result.username}" added. Assign an output tab below, then give the username and temporary password privately.`;
+    status.textContent = `User "${result.username}" added. Give the username and temporary password privately.`;
   } catch (error) {
     console.error("Unable to create a portal user.", error);
     status.textContent = `Could not add user: ${error.message || "Request failed."}`;
@@ -626,7 +558,6 @@ async function signIn(event) {
       refresh_token: data.refresh_token,
     });
     if (sessionError) throw sessionError;
-    authDialog.close();
     document.querySelector("#auth-username").value = "";
     document.querySelector("#auth-password").value = "";
     status.textContent = "";
@@ -761,16 +692,16 @@ document.querySelector("#save-workbook").addEventListener("click", saveWorkbook)
 document.querySelector("#reset-request-history").addEventListener("click", async (event) => {
   const button = event.currentTarget;
   const confirmation = window.prompt(
-    "This permanently deletes legacy requests and their items from Supabase and resets every form sequence to 1. It does not change Google Sheets or user accounts. Type RESET to confirm.",
+    "This permanently deletes legacy requests and their items from Supabase. It does not change Google Sheets or user accounts. New sequence numbers are recalculated from the matching Sheets tab. Type RESET to confirm.",
   );
   if (confirmation !== "RESET") return;
 
   button.disabled = true;
-  document.querySelector("#admin-status").textContent = "Deleting legacy requests and resetting sequences…";
+  document.querySelector("#admin-status").textContent = "Deleting legacy Supabase requests…";
   try {
     const result = await callPortalAdmin({ action: "reset_request_history" });
     document.querySelector("#admin-status").textContent =
-      `Deleted ${result.deleted_requests} legacy request(s). All form sequences now restart at 1.`;
+      `Deleted ${result.deleted_requests} legacy request(s). Sequences continue to follow the request rows in Google Sheets.`;
   } catch (error) {
     console.error("Unable to reset request history.", error);
     document.querySelector("#admin-status").textContent =
@@ -785,8 +716,7 @@ document.querySelector("#toggle-user-mode").addEventListener("click", async () =
       saveStatus.textContent = "The portal is not connected yet. Contact your administrator.";
       return;
     }
-    document.querySelector("#auth-status").textContent = "";
-    authDialog.showModal();
+    document.querySelector("#auth-username").focus();
     return;
   }
   try {
@@ -847,8 +777,14 @@ document.querySelector("#cancel-catalog").addEventListener("click", () => catalo
 document.querySelector("#close-request-dialog").addEventListener("click", () => requestDialog.close());
 document.querySelector("#request-form").addEventListener("submit", submitRequest);
 document.querySelector("#auth-form").addEventListener("submit", signIn);
+requestFormBody.addEventListener("input", (event) => {
+  if (event.target instanceof HTMLInputElement && event.target.type === "text") {
+    const start = event.target.selectionStart;
+    const end = event.target.selectionEnd;
+    event.target.value = event.target.value.toLocaleUpperCase();
+    if (start !== null && end !== null) event.target.setSelectionRange(start, end);
+  }
+});
 document.querySelector("#add-user-form").addEventListener("submit", addUser);
 document.querySelector("#password-change-form").addEventListener("submit", changeTemporaryPassword);
 passwordChangeDialog.addEventListener("cancel", event => event.preventDefault());
-document.querySelector("#close-auth-dialog").addEventListener("click", () => authDialog.close());
-document.querySelector("#cancel-auth").addEventListener("click", () => authDialog.close());
