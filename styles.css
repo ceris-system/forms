@@ -135,7 +135,7 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .release-form-signatures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 20px; margin-top: 38px; }
 .release-form-signatures > div { display: grid; min-height: 110px; grid-template-rows: 72px 16px 1px 11px 11px; gap: 4px; text-align: center; }
 .release-form-signatures strong, .release-form-signatures b { align-self: end; font-size: 8px; }
-.release-form-signatures .release-signature-line { background: #171719; }
+.release-form-signatures .release-signature-line { height: 1px; border-top: 1px solid #171719; background: transparent; }
 .release-form-unsigned-signature .release-signature-space { background: transparent; }
 .release-form-signatures small { font-size: 7px; font-weight: 600; }
 .release-form-approved-signature img { justify-self: center; width: 112px; height: 72px; max-width: 100%; object-fit: cover; object-position: center 55%; }

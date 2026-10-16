@@ -896,7 +896,7 @@ function printReleaseForm(sheet, requestNumber) {
   const style = printWindow.document.createElement("style");
   style.textContent = `
     @page { size: A4 landscape; margin: 12mm; }
-    * { box-sizing: border-box; font-family: Arial, sans-serif; }
+    * { box-sizing: border-box; font-family: Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body { margin: 0; color: #171719; }
     .release-form-sheet { width: 100%; padding: 0; }
     .release-form-header { display: grid; justify-items: center; gap: 5px; margin-bottom: 22px; text-align: center; }
@@ -911,7 +911,7 @@ function printReleaseForm(sheet, requestNumber) {
     .release-form-items { width: 100%; border-collapse: collapse; table-layout: fixed; }
     .release-form-items thead { display: table-header-group; }
     .release-form-items tr { break-inside: avoid; }
-    .release-form-items th { padding: 7px 4px; background: #171719; color: white; font-size: 7px; }
+    .release-form-items th { padding: 7px 4px; border: 0; background-color: #171719 !important; color: white !important; font-size: 7px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .release-form-items td { padding: 7px 4px; border-bottom: 1px solid #d9ddd9; font-size: 8px; overflow-wrap: anywhere; }
     .release-form-items th:nth-child(1) { width: 8%; }
     .release-form-items th:nth-child(2) { width: 22%; }
@@ -924,7 +924,7 @@ function printReleaseForm(sheet, requestNumber) {
     .release-form-signatures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 20px; margin-top: 38px; break-inside: avoid; }
     .release-form-signatures > div { display: grid; min-height: 110px; grid-template-rows: 72px 16px 1px 11px 11px; gap: 4px; text-align: center; }
     .release-form-signatures strong, .release-form-signatures b { align-self: end; font-size: 8px; }
-    .release-form-signatures .release-signature-line { background: #171719; }
+    .release-form-signatures .release-signature-line { height: 1px; border-top: 1px solid #171719; background: transparent; }
     .release-form-unsigned-signature .release-signature-space { background: transparent; }
     .release-form-signatures small { font-size: 7px; font-weight: 600; }
     .release-form-approved-signature img { justify-self: center; width: 112px; height: 72px; max-width: 100%; object-fit: cover; object-position: center 55%; }
