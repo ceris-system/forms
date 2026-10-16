@@ -714,10 +714,187 @@ function renderWorkflowRequests(container, requests, action) {
   }
 }
 
+function makeReleaseFormSheet(request) {
+  const form = FORM_TYPES.find(candidate => candidate.id === request.form_type_id);
+  const sheet = document.createElement("section");
+  sheet.className = "release-form-sheet";
+
+  const header = document.createElement("header");
+  header.className = "release-form-header";
+  const logo = document.createElement("img");
+  logo.src = new URL("assets/mothers-wonderland-logo.png", document.baseURI).href;
+  logo.alt = "Mother's Wonderland";
+  const title = document.createElement("h2");
+  title.textContent = form?.name || request.form_type || "Request Form";
+  const number = document.createElement("strong");
+  number.textContent = request.request_number || "";
+  header.append(logo, title, number);
+  sheet.append(header);
+
+  const details = document.createElement("dl");
+  details.className = "release-form-details";
+  for (const [label, value] of [
+    ["Request date", request.request_date],
+    ["Outgoing department (requested from)", request.outgoing_department],
+    ["Incoming department (requesting)", request.incoming_department],
+    ["Supplier", request.supplier],
+    ["Submitted by", request.submitted_by],
+  ]) {
+    if (!value && label === "Supplier") continue;
+    const pair = document.createElement("div");
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const description = document.createElement("dd");
+    description.textContent = value || "—";
+    pair.append(term, description);
+    details.append(pair);
+  }
+  sheet.append(details);
+
+  const status = document.createElement("p");
+  status.className = "release-form-status";
+  status.textContent = `STATUS: ${String(request.status || "APPROVED").toLocaleUpperCase()}`;
+  sheet.append(status);
+
+  const table = document.createElement("table");
+  table.className = "release-form-items";
+  const columns = [
+    ["SKU CODE", "sku_code"],
+    ["PRODUCT DESCRIPTION", "product_description"],
+    ["UOM", "uom"],
+    ["COST", "cost"],
+    ["SRP", "srp"],
+    ["EXP. DATE", "expiration_date"],
+    ["ONHAND", "qty_onhand"],
+    ["TOTAL ONHAND", "total_qty_onhand"],
+    ["TRANSFER QTY", "transfer_qty"],
+    ["APPROVED QTY", "approved_qty"],
+    ["REMARKS", "remarks"],
+  ];
+  const head = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+  for (const [label] of columns) {
+    const cell = document.createElement("th");
+    cell.scope = "col";
+    cell.textContent = label;
+    headerRow.append(cell);
+  }
+  head.append(headerRow);
+  const body = document.createElement("tbody");
+  for (const item of request.items || []) {
+    const row = document.createElement("tr");
+    for (const [, field] of columns) {
+      const cell = document.createElement("td");
+      cell.textContent = item[field] || "—";
+      row.append(cell);
+    }
+    body.append(row);
+  }
+  table.append(head, body);
+  sheet.append(table);
+
+  const signatures = document.createElement("div");
+  signatures.className = "release-form-signatures";
+  const released = document.createElement("div");
+  released.innerHTML = "<strong>RELEASED BY: / DESIGNATION</strong><span></span><small>SIGNATURE OVER PRINTED NAME</small>";
+  const approved = document.createElement("div");
+  approved.className = "release-form-approved-signature";
+  const signature = document.createElement("img");
+  signature.src = new URL("SIG.png", document.baseURI).href;
+  signature.alt = "Approver's signature";
+  const approver = document.createElement("strong");
+  approver.textContent = request.approved_by || "APPROVED BY";
+  const signatureLine = document.createElement("span");
+  const approvalLabel = document.createElement("b");
+  approvalLabel.textContent = "APPROVED BY";
+  const approvalCaption = document.createElement("small");
+  approvalCaption.textContent = "APPROVAL SIGNATURE";
+  approved.append(signature, approver, signatureLine, approvalLabel, approvalCaption);
+  const received = document.createElement("div");
+  received.innerHTML = "<strong>RECEIVED BY: / DESIGNATION</strong><span></span><small>SIGNATURE OVER PRINTED NAME</small>";
+  signatures.append(released, approved, received);
+  sheet.append(signatures);
+  return sheet;
+}
+
+function printReleaseForm(sheet, requestNumber) {
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    window.alert("Allow pop-ups for this portal to print the request form.");
+    return;
+  }
+  printWindow.document.title = `Request ${requestNumber}`;
+  const style = printWindow.document.createElement("style");
+  style.textContent = `
+    @page { size: A4 landscape; margin: 12mm; }
+    * { box-sizing: border-box; font-family: Arial, sans-serif; }
+    body { margin: 0; color: #171719; }
+    .release-form-sheet { width: 100%; padding: 0; }
+    .release-form-header { display: grid; justify-items: center; gap: 5px; margin-bottom: 22px; text-align: center; }
+    .release-form-header img { width: 150px; max-height: 42px; object-fit: contain; }
+    .release-form-header h2 { margin: 0; font-size: 14px; letter-spacing: 1px; text-transform: uppercase; }
+    .release-form-header > strong { font-size: 11px; }
+    .release-form-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 20px; margin: 0 0 14px; }
+    .release-form-details > div { min-width: 0; }
+    .release-form-details dt { margin-bottom: 4px; font-size: 8px; font-weight: 700; text-transform: uppercase; }
+    .release-form-details dd { margin: 0; overflow-wrap: anywhere; font-size: 10px; }
+    .release-form-status { margin: 0 0 8px; font-size: 9px; font-weight: 700; }
+    .release-form-items { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    .release-form-items thead { display: table-header-group; }
+    .release-form-items tr { break-inside: avoid; }
+    .release-form-items th { padding: 7px 4px; background: #171719; color: white; font-size: 7px; }
+    .release-form-items td { padding: 7px 4px; border-bottom: 1px solid #d9ddd9; font-size: 8px; overflow-wrap: anywhere; }
+    .release-form-items th:nth-child(1) { width: 8%; }
+    .release-form-items th:nth-child(2) { width: 22%; }
+    .release-form-items th:nth-child(3) { width: 5%; }
+    .release-form-items th:nth-child(4), .release-form-items th:nth-child(5) { width: 7%; }
+    .release-form-items th:nth-child(6) { width: 8%; }
+    .release-form-items th:nth-child(7), .release-form-items th:nth-child(8) { width: 7%; }
+    .release-form-items th:nth-child(9), .release-form-items th:nth-child(10) { width: 8%; }
+    .release-form-items th:nth-child(11) { width: 15%; }
+    .release-form-signatures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 20px; margin-top: 38px; break-inside: avoid; }
+    .release-form-signatures > div { display: grid; min-height: 94px; gap: 4px; text-align: center; }
+    .release-form-signatures > div:not(.release-form-approved-signature) { grid-template-rows: 1fr 1px 12px; }
+    .release-form-approved-signature { grid-template-rows: 45px auto 1fr auto 12px; }
+    .release-form-signatures strong, .release-form-signatures b { align-self: end; font-size: 8px; }
+    .release-form-signatures span { background: #171719; }
+    .release-form-signatures small { font-size: 7px; font-weight: 600; }
+    .release-form-approved-signature img { justify-self: center; width: auto; height: 44px; max-width: 100px; object-fit: contain; }
+    .release-form-approved-signature strong { overflow-wrap: anywhere; font-size: 8px; }
+    @media screen { body { padding: 20px; } }
+  `;
+  printWindow.document.head.append(style);
+  printWindow.document.body.append(printWindow.document.importNode(sheet, true));
+  const images = [...printWindow.document.images];
+  Promise.all(images.map(image => image.decode())).then(() => {
+    printWindow.focus();
+    printWindow.print();
+  }).catch(error => {
+    console.error("Could not load images for the printable request.", error);
+    printWindow.close();
+    window.alert("The form or approver signature image could not be loaded. Check that SIG.png is published with the portal.");
+  });
+}
+
 function makeWorkflowRequestCard(request, action) {
   const card = document.createElement("article");
   card.className = "approval-card";
   card.dataset.requestNumber = request.request_number;
+  if (action === "pending_release") {
+    card.classList.add("release-form-card");
+    const sheet = makeReleaseFormSheet(request);
+    card.append(sheet);
+    const actions = document.createElement("div");
+    actions.className = "approval-card-actions release-form-actions";
+    const printButton = document.createElement("button");
+    printButton.className = "button button-secondary";
+    printButton.type = "button";
+    printButton.textContent = "Print form";
+    printButton.addEventListener("click", () => printReleaseForm(sheet, request.request_number));
+    actions.append(printButton, makeWorkflowActionButton(request, action, card));
+    card.append(actions);
+    return card;
+  }
   const heading = document.createElement("div");
   heading.className = "approval-card-heading";
   const title = document.createElement("h3");
@@ -802,43 +979,47 @@ function makeWorkflowRequestCard(request, action) {
   }
   card.append(tableScroll);
 
-  if (action === "approval_queue" || action === "pending_release" || action === "pending_received") {
+  if (action === "approval_queue" || action === "pending_received") {
     const actions = document.createElement("div");
     actions.className = "approval-card-actions";
-    const button = document.createElement("button");
-    button.className = "button button-primary";
-    button.type = "button";
-    button.textContent = action === "approval_queue" ? "Approve form" : action === "pending_release" ? "Mark released" : "Mark received";
-    button.addEventListener("click", async () => {
-      button.disabled = true;
-      const payload = {
-        action: action === "approval_queue" ? "approve" : action === "pending_release" ? "release" : "receive",
-        request_number: request.request_number,
-      };
-      if (action === "approval_queue") {
-        const inputs = [...card.querySelectorAll("[data-approved-quantity]")];
-        if (inputs.some(input => !input.reportValidity())) {
-          button.disabled = false;
-          return;
-        }
-        payload.approved_quantities = inputs.map(input => input.value);
-      }
-      try {
-        await requestSheetData("workflow_action", payload);
-        card.remove();
-        const refresh = action === "approval_queue" ? loadApprovalQueue
-          : action === "pending_release" ? loadPendingRelease : loadPendingReceived;
-        await refresh();
-      } catch (error) {
-        console.error("Unable to update request workflow status.", error);
-        window.alert(`Could not update ${request.request_number}: ${error.message || "Request failed."}`);
-        button.disabled = false;
-      }
-    });
-    actions.append(button);
+    actions.append(makeWorkflowActionButton(request, action, card));
     card.append(actions);
   }
   return card;
+}
+
+function makeWorkflowActionButton(request, action, card) {
+  const button = document.createElement("button");
+  button.className = "button button-primary";
+  button.type = "button";
+  button.textContent = action === "approval_queue" ? "Approve form" : action === "pending_release" ? "Mark released" : "Mark received";
+  button.addEventListener("click", async () => {
+    button.disabled = true;
+    const payload = {
+      action: action === "approval_queue" ? "approve" : action === "pending_release" ? "release" : "receive",
+      request_number: request.request_number,
+    };
+    if (action === "approval_queue") {
+      const inputs = [...card.querySelectorAll("[data-approved-quantity]")];
+      if (inputs.some(input => !input.reportValidity())) {
+        button.disabled = false;
+        return;
+      }
+      payload.approved_quantities = inputs.map(input => input.value);
+    }
+    try {
+      await requestSheetData("workflow_action", payload);
+      card.remove();
+      const refresh = action === "approval_queue" ? loadApprovalQueue
+        : action === "pending_release" ? loadPendingRelease : loadPendingReceived;
+      await refresh();
+    } catch (error) {
+      console.error("Unable to update request workflow status.", error);
+      window.alert(`Could not update ${request.request_number}: ${error.message || "Request failed."}`);
+      button.disabled = false;
+    }
+  });
+  return button;
 }
 
 async function submitRequest(event) {

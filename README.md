@@ -67,7 +67,7 @@ const DEPLOYMENT_SETTINGS = {
 };
 ```
 
-Publish `index.html`, `app.js`, `styles.css`, `assets/`, and `supabase/` together to a static HTTPS host such as GitHub Pages. The publishable/anon key is designed for browser use with RLS enabled. **Never use a `service_role` key, `sb_secret_` key, or Google private key in the website.**
+Publish `index.html`, `app.js`, `styles.css`, `SIG.png`, `assets/`, and `supabase/` together to a static HTTPS host such as GitHub Pages. The publishable/anon key is designed for browser use with RLS enabled. **Never use a `service_role` key, `sb_secret_` key, or Google private key in the website.**
 
 ## Master Admin setup in the portal
 
@@ -81,7 +81,7 @@ Lookup tabs are read-only for portal users. Requests are saved to the fixed tabs
 
 Requests are written to the first free row after the last occupied row in their destination tab. The **Approvals** page is Master Admin-only and groups Pending requests into separate expandable buttons by form category. The Master Admin can edit each item's approved quantity and approve the request; approved quantities must be zero or greater and may exceed the originally requested quantity. The saved Master Admin username is recorded in **Approved By** and displayed as the approval signature. The requestor can see their own status and approval signature under **My requests**.
 
-After approval, a request appears under **Pending to release** for a signed-in user whose saved department matches its Outgoing Department. That department can mark it Released. It then appears under **Pending to received** for a user whose saved department matches its Incoming Department; that user can mark it Received. Master Admins can see and authorize requests across all departments in both queues. The backend checks department membership for staff, admin access for Master Admin overrides, and the current status when applying each action. Approval names are shown above the approval-signature label in the categorized request cards and in the requestor's **My requests** view.
+After approval, a request appears under **Pending to release** for a signed-in user whose saved department matches its Outgoing Department. The full form, including all item details, approved quantities, and the `SIG.png` approval signature, is shown there and can be printed before marking it Released. It then appears under **Pending to received** for a user whose saved department matches its Incoming Department; that user can mark it Received. Master Admins can see and authorize requests across all departments in both queues. The backend checks department membership for staff, admin access for Master Admin overrides, and the current status when applying each action. Approval names are shown above the approval-signature label in the categorized request cards and in the requestor's **My requests** view.
 
 The next sequence number is recalculated from the matching sheet when the form preview loads and again at submit. Deleting request rows therefore resets numbering to 1 when the corresponding tab has no remaining request rows, or resumes after the highest remaining request number. A per-form lock prevents simultaneous requests from reusing a number during the sheet write. If writing to Sheets fails after allocation, the portal reports the failure; the next preview reconciles the counter with the sheet.
 

@@ -450,11 +450,17 @@ async function loadWorkflowRequests(
         requests.set(requestNumber, request);
       }
       (request.items as Record<string, string>[]).push({
-        sku_code: String(row[7] || ""),
-        product_description: String(row[8] || ""),
-        transfer_qty: String(row[15] || ""),
-        remarks: String(row[16] || ""),
-        approved_qty: String(row[19] || ""),
+        sku_code: String(row[7] ?? ""),
+        product_description: String(row[8] ?? ""),
+        uom: String(row[9] ?? ""),
+        expiration_date: String(row[10] ?? ""),
+        qty_onhand: String(row[11] ?? ""),
+        total_qty_onhand: String(row[12] ?? ""),
+        cost: String(row[13] ?? ""),
+        srp: String(row[14] ?? ""),
+        transfer_qty: String(row[15] ?? ""),
+        remarks: String(row[16] ?? ""),
+        approved_qty: String(row[19] ?? ""),
       });
     }
   }
