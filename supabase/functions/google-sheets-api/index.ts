@@ -11,6 +11,7 @@ const requestHeaders = [
   "Incoming Department", "Supplier", "Submitted By", "SKU Code",
   "Product Description", "UOM", "Expiration Date", "Onhand",
   "Total Onhand", "Cost", "SRP", "Transfer Qty", "Remarks", "Sequence Number", "Status",
+  "Approved Qty", "Approved By", "Released By", "Received By",
 ];
 const requestPrefixes: Record<string, string> = {
   "release-request": "RRF",
@@ -24,7 +25,7 @@ const requestTabs: Record<string, string> = {
   "pull-out": "RTV",
   "purchase-order": "P.O REQUEST",
 };
-const requestStatuses = ["Pending", "Approved", "Received"];
+const requestStatuses = ["Pending", "Approved", "Released", "Received"];
 
 function respond(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -250,7 +251,7 @@ async function writeRequestColumns(
   values: unknown[][],
 ): Promise<void> {
   await googleRequest(
-    `spreadsheets/${spreadsheetId}/values/${range(tabName, `R1:S${values.length}`)}?valueInputOption=RAW`,
+    `spreadsheets/${spreadsheetId}/values/${range(tabName, `R1:W${values.length}`)}?valueInputOption=RAW`,
     { method: "PUT", body: JSON.stringify({ values }) },
   );
 }
@@ -258,7 +259,7 @@ async function writeRequestColumns(
 async function ensureRequestHeaders(spreadsheetId: string, tabName: string): Promise<unknown[][]> {
   let current = await readValues(spreadsheetId, tabName, "A:Z");
   if (!current.length) {
-    await googleRequest(`spreadsheets/${spreadsheetId}/values/${range(tabName, "A1:S1")}?valueInputOption=RAW`, {
+    await googleRequest(`spreadsheets/${spreadsheetId}/values/${range(tabName, "A1:W1")}?valueInputOption=RAW`, {
       method: "PUT",
       body: JSON.stringify({ values: [requestHeaders] }),
     });
@@ -269,8 +270,8 @@ async function ensureRequestHeaders(spreadsheetId: string, tabName: string): Pro
   if (requestHeaders.slice(0, 17).some((header, index) => headers[index] !== header)) {
     throw new Error(`The "${tabName}" tab has different columns from the request format. No request data was saved.`);
   }
-  if (headers.slice(19).some(Boolean)) {
-    throw new Error(`The "${tabName}" tab has extra columns after Status. No request data was saved.`);
+  if (headers.slice(requestHeaders.length).some(Boolean)) {
+    throw new Error(`The "${tabName}" tab has extra columns after Received By. No request data was saved.`);
   }
   if (headers[17] && headers[17] !== "Sequence Number" && headers[17] !== "Supabase Request ID") {
     throw new Error(`The "${tabName}" tab has different columns from the request format. No request data was saved.`);
@@ -278,6 +279,11 @@ async function ensureRequestHeaders(spreadsheetId: string, tabName: string): Pro
   const hasLegacyId = headers[17] === "Supabase Request ID";
   if (!hasLegacyId && headers[18] && headers[18] !== "Status") {
     throw new Error(`The "${tabName}" tab has different columns from the request format. No request data was saved.`);
+  }
+  if (!hasLegacyId && headers.slice(19, requestHeaders.length).some((header, index) =>
+    header && header !== requestHeaders[index + 19]
+  )) {
+    throw new Error(`The "${tabName}" tab has unexpected approval workflow columns.`);
   }
 
   const rows = current.slice(1).map(row => {
@@ -294,14 +300,21 @@ async function ensureRequestHeaders(spreadsheetId: string, tabName: string): Pro
         status = "Pending";
       } else {
         const canonicalStatus = requestStatuses.find(value => value.toLocaleLowerCase() === storedStatus.toLocaleLowerCase());
-        if (!canonicalStatus) throw new Error(`The "${tabName}" tab has an invalid status "${storedStatus}". Use Pending, Approved, or Received.`);
+        if (!canonicalStatus) throw new Error(`The "${tabName}" tab has an invalid status "${storedStatus}". Use Pending, Approved, Released, or Received.`);
         status = canonicalStatus;
       }
     }
-    return [sequence, status];
+    return [
+      sequence,
+      status,
+      hasLegacyId ? "" : row[19] ?? "",
+      hasLegacyId ? "" : row[20] ?? "",
+      hasLegacyId ? "" : row[21] ?? "",
+      hasLegacyId ? "" : row[22] ?? "",
+    ];
   });
   await writeRequestColumns(spreadsheetId, tabName, [
-    [requestHeaders[17], requestHeaders[18]],
+    requestHeaders.slice(17),
     ...rows,
   ]);
   current = await readValues(spreadsheetId, tabName, "A:Z");
@@ -377,7 +390,12 @@ async function previewRequestSequence(
   });
 }
 
-async function loadApprovalQueue(spreadsheetId: string): Promise<Record<string, unknown>[]> {
+async function loadWorkflowRequests(
+  spreadsheetId: string,
+  filter: "pending" | "approved" | "released" | "mine",
+  department = "",
+  username = "",
+): Promise<Record<string, unknown>[]> {
   const metadata = await getSheetMetadata(spreadsheetId);
   const availableTabs = new Map<string, string>(
     (metadata.sheets || []).map((sheet: Record<string, any>) => [
@@ -394,7 +412,18 @@ async function loadApprovalQueue(spreadsheetId: string): Promise<Record<string, 
     for (const row of rows.slice(1)) {
       const requestNumber = String(row[0] ?? "").trim();
       const status = String(row[18] ?? "").trim().toLocaleLowerCase();
-      if (!requestNumber || status !== "pending") continue;
+      if (!requestNumber) continue;
+      const outgoing = String(row[3] || "");
+      const incoming = String(row[4] || "");
+      const submittedBy = String(row[6] || "");
+      const matches = filter === "pending"
+        ? status === "pending"
+        : filter === "approved"
+        ? status === "approved" && outgoing.toLocaleLowerCase() === department.toLocaleLowerCase()
+        : filter === "released"
+        ? status === "released" && incoming.toLocaleLowerCase() === department.toLocaleLowerCase()
+        : submittedBy.toLocaleLowerCase() === username.toLocaleLowerCase();
+      if (!matches) continue;
 
       let request = requests.get(requestNumber);
       if (!request) {
@@ -405,7 +434,12 @@ async function loadApprovalQueue(spreadsheetId: string): Promise<Record<string, 
           outgoing_department: String(row[3] || ""),
           incoming_department: String(row[4] || ""),
           supplier: String(row[5] || ""),
-          submitted_by: String(row[6] || ""),
+          submitted_by: submittedBy,
+          status: String(row[18] || "Pending"),
+          approved_by: String(row[20] || ""),
+          released_by: String(row[21] || ""),
+          received_by: String(row[22] || ""),
+          form_type_id: formType,
           items: [],
         };
         requests.set(requestNumber, request);
@@ -415,6 +449,7 @@ async function loadApprovalQueue(spreadsheetId: string): Promise<Record<string, 
         product_description: String(row[8] || ""),
         transfer_qty: String(row[15] || ""),
         remarks: String(row[16] || ""),
+        approved_qty: String(row[19] || ""),
       });
     }
   }
@@ -436,6 +471,129 @@ async function getPortalUsername(
   if (error) throw error;
   if (!profile?.username) throw new Error("The signed-in account does not have a portal username.");
   return profile.username;
+}
+
+async function getPortalUserContext(
+  adminClient: ReturnType<typeof createClient>,
+  userId: string,
+): Promise<{ username: string; department: string; isMasterAdmin: boolean }> {
+  const [{ data: profile, error: profileError }, { data: admin, error: adminError }] = await Promise.all([
+    adminClient.from("login_usernames")
+      .select("username, department")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    adminClient.from("mw_portal_admins")
+      .select("user_id")
+      .eq("user_id", userId)
+      .maybeSingle(),
+  ]);
+  if (profileError) throw profileError;
+  if (adminError) throw adminError;
+  if (!profile?.username) throw new Error("The signed-in account does not have a portal profile.");
+  return {
+    username: profile.username,
+    department: String(profile.department || ""),
+    isMasterAdmin: Boolean(admin),
+  };
+}
+
+function formTypeFromRequestNumber(requestNumber: string): string {
+  const match = requestNumber.match(/^(RRF|TRF|PUF|POF)-\d{7,}$/);
+  const formType = match
+    ? Object.entries(requestPrefixes).find(([, prefix]) => prefix === match[1])?.[0]
+    : "";
+  if (!formType) throw new Error("The request number is invalid.");
+  return formType;
+}
+
+async function applyWorkflowAction(
+  adminClient: ReturnType<typeof createClient>,
+  spreadsheetId: string,
+  user: { username: string; department: string; isMasterAdmin: boolean },
+  value: unknown,
+): Promise<void> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("The workflow action is invalid.");
+  }
+  const body = value as Record<string, unknown>;
+  const action = requiredText(body.action, "Workflow action");
+  const requestNumber = requiredText(body.request_number, "Request number");
+  const formType = formTypeFromRequestNumber(requestNumber);
+  if (action === "approve" && !user.isMasterAdmin) {
+    throw new Error("Only a Master Admin can approve requests.");
+  }
+  if (action !== "approve" && action !== "release" && action !== "receive") {
+    throw new Error("Unknown request workflow action.");
+  }
+  if (action !== "approve" && !user.department) {
+    throw new Error("Your account has no department assigned. Ask the Master Admin to update your account.");
+  }
+
+  await withRequestSequenceLock(adminClient, formType, async () => {
+    const tabName = requestTabs[formType];
+    const actualTab = await ensureOutputTab(spreadsheetId, tabName);
+    const rows = await ensureRequestHeaders(spreadsheetId, actualTab);
+    const matchingRows = rows
+      .map((row, index) => ({ row, sheetRow: index + 1 }))
+      .filter(({ row }) => String(row[0] || "").trim() === requestNumber);
+    if (!matchingRows.length) throw new Error("That request could not be found in its form tab.");
+
+    const expectedStatus = action === "approve" ? "Pending" : action === "release" ? "Approved" : "Released";
+    if (matchingRows.some(({ row }) => String(row[18] || "").trim().toLocaleLowerCase() !== expectedStatus.toLocaleLowerCase())) {
+      throw new Error(`This request is no longer ${expectedStatus}. Refresh the list and try again.`);
+    }
+    if (action === "release" && matchingRows.some(({ row }) =>
+      String(row[3] || "").trim().toLocaleLowerCase() !== user.department.trim().toLocaleLowerCase()
+    )) {
+      throw new Error("Only the request's outgoing department can release it.");
+    }
+    if (action === "receive" && matchingRows.some(({ row }) =>
+      String(row[4] || "").trim().toLocaleLowerCase() !== user.department.trim().toLocaleLowerCase()
+    )) {
+      throw new Error("Only the request's incoming department can receive it.");
+    }
+
+    let approvedQuantities: number[] = [];
+    if (action === "approve") {
+      if (!Array.isArray(body.approved_quantities) || body.approved_quantities.length !== matchingRows.length) {
+        throw new Error("Enter an approved quantity for each request item.");
+      }
+      approvedQuantities = body.approved_quantities.map(value => {
+        if (value === "" || value === null || value === undefined) throw new Error("Approved quantity is required for every item.");
+        const quantity = Number(value);
+        if (!Number.isFinite(quantity) || quantity < 0) throw new Error("Approved quantities must be zero or greater.");
+        return quantity;
+      });
+      approvedQuantities.forEach((quantity, index) => {
+        const requestedQuantity = Number(matchingRows[index].row[15]);
+        if (Number.isFinite(requestedQuantity) && requestedQuantity >= 0 && quantity > requestedQuantity) {
+          throw new Error(`Approved quantity cannot exceed requested quantity for ${matchingRows[index].row[7]}.`);
+        }
+      });
+    }
+
+    const updatedStatus = action === "approve" ? "Approved" : action === "release" ? "Released" : "Received";
+    const valueRanges = matchingRows.map(({ row, sheetRow }, index) => {
+      const updated = [...row];
+      updated[18] = updatedStatus;
+      if (action === "approve") {
+        updated[19] = approvedQuantities[index];
+        updated[20] = user.username;
+      } else if (action === "release") {
+        updated[21] = user.username;
+      } else {
+        updated[22] = user.username;
+      }
+      return {
+        range: range(actualTab, `S${sheetRow}:W${sheetRow}`),
+        values: [[...updated.slice(18, 23)]],
+      };
+    });
+    await googleRequest(`spreadsheets/${spreadsheetId}/values:batchUpdate`, {
+      method: "POST",
+      body: JSON.stringify({ valueInputOption: "RAW", data: valueRanges }),
+    });
+  });
 }
 
 async function saveSubmissionDirect(
@@ -491,12 +649,12 @@ async function saveSubmissionDirect(
       requestNumber, formType.replaceAll("-", " ").toLocaleUpperCase(), requestDate, outgoing, incoming, supplier,
       submittedBy.toLocaleUpperCase(), item.sku_code, item.product_description, item.uom, item.expiration_date,
       item.qty_onhand, item.total_qty_onhand, item.cost, item.srp, item.transfer_qty, item.remarks,
-      allocatedSequence, "Pending",
+      allocatedSequence, "Pending", "", "", "", "",
     ]);
     const firstRow = current.length + 1;
     const lastRow = firstRow + rows.length - 1;
     await googleRequest(
-      `spreadsheets/${spreadsheetId}/values/${range(actualOutputTab, `A${firstRow}:S${lastRow}`)}?valueInputOption=RAW`,
+      `spreadsheets/${spreadsheetId}/values/${range(actualOutputTab, `A${firstRow}:W${lastRow}`)}?valueInputOption=RAW`,
       { method: "PUT", body: JSON.stringify({ values: rows }) },
     );
     return requestNumber;
@@ -551,8 +709,33 @@ Deno.serve(async (request: Request) => {
       }
       return respond({ sequence_number: sequenceNumber });
     }
-    if (body.action === "approval_queue") {
-      return respond({ requests: await loadApprovalQueue(settings.spreadsheet_id) });
+    if (body.action === "approval_queue"
+      || body.action === "my_requests"
+      || body.action === "pending_release"
+      || body.action === "pending_received"
+      || body.action === "workflow_action") {
+      const user = await getPortalUserContext(adminClient, authData.user.id);
+      if (body.action === "approval_queue") {
+        if (!user.isMasterAdmin) return respond({ error: "Only a Master Admin can review and approve requests." }, 403);
+        return respond({ requests: await loadWorkflowRequests(settings.spreadsheet_id, "pending") });
+      }
+      if (body.action === "my_requests") {
+        return respond({ requests: await loadWorkflowRequests(settings.spreadsheet_id, "mine", "", user.username) });
+      }
+      if (body.action === "pending_release") {
+        return respond({ requests: await loadWorkflowRequests(settings.spreadsheet_id, "approved", user.department) });
+      }
+      if (body.action === "pending_received") {
+        return respond({ requests: await loadWorkflowRequests(settings.spreadsheet_id, "released", user.department) });
+      }
+      const workflowAction = body.workflow && typeof body.workflow === "object"
+        ? body.workflow as Record<string, unknown>
+        : null;
+      if (workflowAction?.action === "approve" && !user.isMasterAdmin) {
+        return respond({ error: "Only a Master Admin can approve requests." }, 403);
+      }
+      await applyWorkflowAction(adminClient, settings.spreadsheet_id, user, body.workflow);
+      return respond({ ok: true });
     }
     if (body.action === "submit") {
       const requestNumber = await saveSubmissionDirect(

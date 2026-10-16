@@ -14,7 +14,7 @@
 * { box-sizing: border-box; }
 * { font-family: "Roboto Mono", monospace; }
 body:not(.user-mode) .user-only { display: none; }
-body.user-mode .admin-only { display: none !important; }
+body.user-mode:not(.admin-mode) .admin-only { display: none !important; }
 body.user-mode section.user-only { display: block; }
 body.user-mode .nav-link.user-only { display: flex; }
 body.signed-out .app-shell { display: none; }
@@ -103,6 +103,11 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .approval-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid #eff0ed; }
 .approval-card-heading h2 { margin: 0; font-size: 16px; }
 .approval-pending-badge { padding: 5px 8px; border-radius: 5px; background: #fbf1df; color: #946d30; font-size: 9px; font-weight: 700; letter-spacing: .5px; }
+.approval-category { display: grid; gap: 10px; }
+.approval-category-title { margin: 12px 0 0; font-size: 17px; }
+.approval-signature { display: grid; justify-items: center; gap: 5px; margin: 0 18px 14px; padding: 10px 12px; border-bottom: 1px solid #373e39; }
+.approval-signature strong { font-family: cursive; font-size: 20px; font-weight: 500; }
+.approval-signature span { font-size: 9px; font-weight: 700; letter-spacing: .4px; }
 .approval-request-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; margin: 0; padding: 15px 18px; }
 .approval-request-details > div { min-width: 0; }
 .approval-request-details dt { margin-bottom: 4px; color: var(--muted); font-size: 9px; font-weight: 700; text-transform: uppercase; }
@@ -111,6 +116,8 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .approval-items-table { width: 100%; border-collapse: collapse; text-align: left; }
 .approval-items-table th { padding: 9px 10px; background: #f5f7f4; color: #67736b; font-size: 9px; text-transform: uppercase; }
 .approval-items-table td { padding: 9px 10px; border-top: 1px solid #eff0ed; color: var(--ink); font-size: 10px; }
+.approved-quantity-input { width: 110px; max-width: 100%; padding: 6px 8px; border: 1px solid #dfe4df; border-radius: 5px; color: var(--ink); font-size: 10px; }
+.approval-card-actions { display: flex; justify-content: flex-end; padding: 0 18px 16px; }
 .section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; margin-bottom: 17px; }
 .section-heading .eyebrow { margin-bottom: 5px; }
 h2 { margin-bottom: 5px; font-size: 20px; font-weight: 700; letter-spacing: -.45px; }

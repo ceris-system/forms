@@ -27,6 +27,7 @@ let supabaseClient = null;
 let currentSession = null;
 let currentUserProfile = { username: "", department: "", status: "active", mustChangePassword: false };
 let authSubscription = null;
+let isMasterAdmin = false;
 
 function getLocalDate() {
   const today = new Date();
@@ -85,7 +86,7 @@ function openRequestForm(form) {
       <button class="button button-primary submit-request-button" type="submit">▣ Submit</button>
     </div>
     <p class="request-inline-notice" role="status" aria-live="polite"></p>
-    <div class="approval-status"><strong>STATUS</strong><span>Pending · update to Approved, then Received, in the spreadsheet.</span></div>
+    <div class="approval-status"><strong>STATUS</strong><span>Pending → Approved → Released → Received. Master Admin approves; matching departments release and receive.</span></div>
     <div class="request-sheet-items">
       <p class="request-info-label">REQUEST INFORMATION</p>
       <div class="request-table-scroll">
@@ -178,7 +179,10 @@ async function openProductCatalog() {
 async function requestSheetData(action, payload) {
   if (!supabaseClient || !currentSession) throw new Error("Sign in before accessing the assigned Google spreadsheet.");
   const { data, error } = await supabaseClient.functions.invoke("google-sheets-api", {
-    body: { action, ...(action === "submit" ? { submission: payload } : payload || {}) },
+    body: {
+      action,
+      ...(action === "submit" ? { submission: payload } : action === "workflow_action" ? { workflow: payload } : payload || {}),
+    },
   });
   if (error) throw new Error(await edgeFunctionErrorMessage(error));
   if (data?.error) throw new Error(data.error);
@@ -383,6 +387,8 @@ function updateSessionUi(session, navigate = true) {
   if (!signedIn && catalogDialog.open) catalogDialog.close();
   if (!signedIn && requestDialog.open) requestDialog.close();
   if (!signedIn || currentUserProfile.mustChangePassword) {
+    isMasterAdmin = false;
+    document.body.classList.remove("admin-mode");
     document.querySelector("#supabase-connection").hidden = true;
     if (requestDialog.open) requestDialog.close();
     if (catalogDialog.open) catalogDialog.close();
@@ -459,11 +465,15 @@ async function callPortalAdmin(body) {
 async function refreshAdminTools() {
   const panel = document.querySelector("#supabase-connection");
   panel.hidden = true;
+  isMasterAdmin = false;
+  document.body.classList.remove("admin-mode");
   if (!supabaseClient || !currentSession) return;
   const userId = currentSession.user.id;
   try {
     const access = await callPortalAdmin({ action: "status" });
     if (!access.is_master_admin || currentSession?.user.id !== userId) return;
+    isMasterAdmin = true;
+    document.body.classList.add("admin-mode");
     panel.hidden = false;
     await loadAdminState();
   } catch (error) {
@@ -633,87 +643,199 @@ function activatePortalPage(pageId) {
   document.querySelectorAll(".nav-link[data-page]").forEach((link) => {
     link.classList.toggle("active", link.dataset.page === pageId);
   });
-  document.querySelector("#breadcrumb-page").textContent = pageId === "approvals" ? "Approvals" : "My forms";
+  const pageNames = {
+    "user-forms": "My forms",
+    "my-requests": "My requests",
+    approvals: "Approvals",
+    "pending-release": "Pending to release",
+    "pending-received": "Pending to received",
+  };
+  document.querySelector("#breadcrumb-page").textContent = pageNames[pageId];
   history.replaceState(null, "", `#${pageId}`);
-  if (pageId === "approvals") void loadApprovalQueue();
+  const loaders = {
+    "my-requests": loadMyRequests,
+    approvals: loadApprovalQueue,
+    "pending-release": loadPendingRelease,
+    "pending-received": loadPendingReceived,
+  };
+  if (loaders[pageId]) void loaders[pageId]();
 }
 
 async function loadApprovalQueue() {
-  const list = document.querySelector("#approval-list");
-  const status = document.querySelector("#approval-list-status");
-  status.textContent = "Loading requests awaiting approval…";
+  await loadWorkflowQueue("approval_queue", "approval-list", "approval-list-status", "Pending requests");
+}
+
+async function loadMyRequests() {
+  await loadWorkflowQueue("my_requests", "my-requests-list", "my-requests-status", "Your requests");
+}
+
+async function loadPendingRelease() {
+  await loadWorkflowQueue("pending_release", "pending-release-list", "pending-release-status", "Requests ready to release");
+}
+
+async function loadPendingReceived() {
+  await loadWorkflowQueue("pending_received", "pending-received-list", "pending-received-status", "Requests ready to receive");
+}
+
+async function loadWorkflowQueue(action, listId, statusId, emptyMessage) {
+  const list = document.querySelector(`#${listId}`);
+  const status = document.querySelector(`#${statusId}`);
+  status.textContent = "Loading requests…";
   list.replaceChildren();
   try {
-    const result = await requestSheetData("approval_queue");
+    const result = await requestSheetData(action);
     const requests = Array.isArray(result.requests) ? result.requests : [];
-    if (!requests.length) {
-      status.textContent = "There are no requests waiting for approval.";
-      return;
-    }
-    status.textContent = `${requests.length} request${requests.length === 1 ? "" : "s"} waiting for approval.`;
-    for (const request of requests) {
-      const card = document.createElement("article");
-      card.className = "approval-card";
-      const heading = document.createElement("div");
-      heading.className = "approval-card-heading";
-      const title = document.createElement("h2");
-      title.textContent = request.request_number;
-      const badge = document.createElement("span");
-      badge.className = "approval-pending-badge";
-      badge.textContent = "PENDING";
-      heading.append(title, badge);
-
-      const details = document.createElement("dl");
-      details.className = "approval-request-details";
-      for (const [label, value] of [
-        ["Form", request.form_type],
-        ["Date", request.request_date],
-        ["Outgoing", request.outgoing_department],
-        ["Incoming", request.incoming_department],
-        ["Supplier", request.supplier || "—"],
-        ["Submitted by", request.submitted_by],
-      ]) {
-        const pair = document.createElement("div");
-        const term = document.createElement("dt");
-        term.textContent = label;
-        const description = document.createElement("dd");
-        description.textContent = value || "—";
-        pair.append(term, description);
-        details.append(pair);
-      }
-
-      const tableScroll = document.createElement("div");
-      tableScroll.className = "approval-items-scroll";
-      const table = document.createElement("table");
-      table.className = "approval-items-table";
-      const head = document.createElement("thead");
-      const headerRow = document.createElement("tr");
-      for (const label of ["SKU", "Product", "Transfer Qty", "Remarks"]) {
-        const cell = document.createElement("th");
-        cell.scope = "col";
-        cell.textContent = label;
-        headerRow.append(cell);
-      }
-      head.append(headerRow);
-      const body = document.createElement("tbody");
-      for (const item of request.items || []) {
-        const row = document.createElement("tr");
-        for (const value of [item.sku_code, item.product_description, item.transfer_qty, item.remarks]) {
-          const cell = document.createElement("td");
-          cell.textContent = value || "—";
-          row.append(cell);
-        }
-        body.append(row);
-      }
-      table.append(head, body);
-      tableScroll.append(table);
-      card.append(heading, details, tableScroll);
-      list.append(card);
-    }
+    status.textContent = requests.length
+      ? `${requests.length} request${requests.length === 1 ? "" : "s"}.`
+      : `${emptyMessage}: none found.`;
+    renderWorkflowRequests(list, requests, action);
   } catch (error) {
-    console.error("Unable to load requests awaiting approval.", error);
-    status.textContent = `Could not load approvals: ${error.message || "Request failed."}`;
+    console.error(`Unable to load ${emptyMessage.toLocaleLowerCase()}.`, error);
+    status.textContent = `Could not load requests: ${error.message || "Request failed."}`;
   }
+}
+
+function renderWorkflowRequests(container, requests, action) {
+  container.replaceChildren();
+  for (const form of FORM_TYPES) {
+    const categoryRequests = requests.filter(request => request.form_type_id === form.id);
+    if (!categoryRequests.length) continue;
+    const category = document.createElement("section");
+    category.className = "approval-category";
+    const categoryHeading = document.createElement("h2");
+    categoryHeading.className = "approval-category-title";
+    categoryHeading.textContent = form.name;
+    category.append(categoryHeading);
+    for (const request of categoryRequests) category.append(makeWorkflowRequestCard(request, action));
+    container.append(category);
+  }
+}
+
+function makeWorkflowRequestCard(request, action) {
+  const card = document.createElement("article");
+  card.className = "approval-card";
+  card.dataset.requestNumber = request.request_number;
+  const heading = document.createElement("div");
+  heading.className = "approval-card-heading";
+  const title = document.createElement("h3");
+  title.textContent = request.request_number;
+  const badge = document.createElement("span");
+  badge.className = "approval-pending-badge";
+  badge.textContent = String(request.status || "PENDING").toLocaleUpperCase();
+  heading.append(title, badge);
+
+  const details = document.createElement("dl");
+  details.className = "approval-request-details";
+  for (const [label, value] of [
+    ["Date", request.request_date],
+    ["Outgoing", request.outgoing_department],
+    ["Incoming", request.incoming_department],
+    ["Supplier", request.supplier || "—"],
+    ["Submitted by", request.submitted_by],
+  ]) {
+    const pair = document.createElement("div");
+    const term = document.createElement("dt");
+    term.textContent = label;
+    const description = document.createElement("dd");
+    description.textContent = value || "—";
+    pair.append(term, description);
+    details.append(pair);
+  }
+
+  const tableScroll = document.createElement("div");
+  tableScroll.className = "approval-items-scroll";
+  const table = document.createElement("table");
+  table.className = "approval-items-table";
+  const head = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+  for (const label of ["SKU", "Product", "Transfer Qty", "Approved Qty", "Remarks"]) {
+    const cell = document.createElement("th");
+    cell.scope = "col";
+    cell.textContent = label;
+    headerRow.append(cell);
+  }
+  head.append(headerRow);
+  const body = document.createElement("tbody");
+  for (const [index, item] of (request.items || []).entries()) {
+    const row = document.createElement("tr");
+    for (const value of [item.sku_code, item.product_description, item.transfer_qty]) {
+      const cell = document.createElement("td");
+      cell.textContent = value || "—";
+      row.append(cell);
+    }
+    const approvedCell = document.createElement("td");
+    if (action === "approval_queue") {
+      const input = document.createElement("input");
+      input.className = "approved-quantity-input";
+      input.type = "number";
+      input.min = "0";
+      input.step = "any";
+      input.value = item.transfer_qty || "";
+      input.required = true;
+      input.dataset.approvedQuantity = String(index);
+      input.setAttribute("aria-label", `Approved quantity for ${item.sku_code}`);
+      approvedCell.append(input);
+    } else {
+      approvedCell.textContent = item.approved_qty || "—";
+    }
+    row.append(approvedCell);
+    const remarks = document.createElement("td");
+    remarks.textContent = item.remarks || "—";
+    row.append(remarks);
+    body.append(row);
+  }
+  table.append(head, body);
+  tableScroll.append(table);
+  card.append(heading, details);
+  if (request.approved_by) {
+    const signature = document.createElement("div");
+    signature.className = "approval-signature";
+    const name = document.createElement("strong");
+    name.textContent = request.approved_by;
+    const label = document.createElement("span");
+    label.textContent = "APPROVED BY · APPROVAL SIGNATURE";
+    signature.append(name, label);
+    card.append(signature);
+  }
+  card.append(tableScroll);
+
+  if (action === "approval_queue" || action === "pending_release" || action === "pending_received") {
+    const actions = document.createElement("div");
+    actions.className = "approval-card-actions";
+    const button = document.createElement("button");
+    button.className = "button button-primary";
+    button.type = "button";
+    button.textContent = action === "approval_queue" ? "Approve form" : action === "pending_release" ? "Mark released" : "Mark received";
+    button.addEventListener("click", async () => {
+      button.disabled = true;
+      const payload = {
+        action: action === "approval_queue" ? "approve" : action === "pending_release" ? "release" : "receive",
+        request_number: request.request_number,
+      };
+      if (action === "approval_queue") {
+        const inputs = [...card.querySelectorAll("[data-approved-quantity]")];
+        if (inputs.some(input => !input.reportValidity())) {
+          button.disabled = false;
+          return;
+        }
+        payload.approved_quantities = inputs.map(input => input.value);
+      }
+      try {
+        await requestSheetData("workflow_action", payload);
+        card.remove();
+        const refresh = action === "approval_queue" ? loadApprovalQueue
+          : action === "pending_release" ? loadPendingRelease : loadPendingReceived;
+        await refresh();
+      } catch (error) {
+        console.error("Unable to update request workflow status.", error);
+        window.alert(`Could not update ${request.request_number}: ${error.message || "Request failed."}`);
+        button.disabled = false;
+      }
+    });
+    actions.append(button);
+    card.append(actions);
+  }
+  return card;
 }
 
 async function submitRequest(event) {
@@ -887,6 +1009,9 @@ document.querySelector("#toggle-login-password").addEventListener("click", (even
   button.setAttribute("aria-pressed", String(visible));
 });
 document.querySelector("#refresh-approvals").addEventListener("click", loadApprovalQueue);
+document.querySelector("#refresh-my-requests").addEventListener("click", loadMyRequests);
+document.querySelector("#refresh-pending-release").addEventListener("click", loadPendingRelease);
+document.querySelector("#refresh-pending-received").addEventListener("click", loadPendingReceived);
 requestFormBody.addEventListener("input", (event) => {
   if (event.target instanceof HTMLInputElement && event.target.type === "text") {
     const start = event.target.selectionStart;

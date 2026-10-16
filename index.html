@@ -38,7 +38,10 @@
         <div class="workspace-label">REQUESTS</div>
         <nav class="nav-list">
           <a class="nav-link user-only active" href="#user-forms" data-page="user-forms"><span class="nav-icon">♙</span>My forms</a>
-          <a class="nav-link user-only" href="#approvals" data-page="approvals"><span class="nav-icon">✓</span>Approvals</a>
+          <a class="nav-link user-only" href="#my-requests" data-page="my-requests"><span class="nav-icon">▤</span>My requests</a>
+          <a class="nav-link user-only admin-only" href="#approvals" data-page="approvals"><span class="nav-icon">✓</span>Approvals</a>
+          <a class="nav-link user-only" href="#pending-release" data-page="pending-release"><span class="nav-icon">↗</span>Pending to release</a>
+          <a class="nav-link user-only" href="#pending-received" data-page="pending-received"><span class="nav-icon">✓</span>Pending to received</a>
           <button class="nav-link nav-link-disabled user-only" type="button" disabled aria-label="Reports and history, coming soon"><span class="nav-icon" aria-hidden="true">▤</span><span>Reports &amp; History</span><small>SOON</small></button>
         </nav>
         <div class="sidebar-bottom">
@@ -71,11 +74,38 @@
 
           <section class="section-block user-only portal-page" id="approvals" data-page-section hidden>
             <div class="section-heading">
-              <div><p class="eyebrow">REQUEST REVIEW</p><h1>Approvals</h1><p class="section-description">Requests currently waiting for approval, from all form types.</p></div>
+              <div><p class="eyebrow">MASTER ADMIN REVIEW</p><h1>Approvals</h1><p class="section-description">Review each request by form category. Adjust Approved Qty before approving; the approving username is saved as the approval signature.</p></div>
               <button class="button button-secondary" id="refresh-approvals" type="button">Refresh</button>
             </div>
             <p class="field-hint" id="approval-list-status" role="status" aria-live="polite"></p>
             <div class="approval-list" id="approval-list"></div>
+          </section>
+
+          <section class="section-block user-only portal-page" id="my-requests" data-page-section hidden>
+            <div class="section-heading">
+              <div><p class="eyebrow">REQUEST STATUS</p><h1>My requests</h1><p class="section-description">See the current status of requests submitted by your account.</p></div>
+              <button class="button button-secondary" id="refresh-my-requests" type="button">Refresh</button>
+            </div>
+            <p class="field-hint" id="my-requests-status" role="status" aria-live="polite"></p>
+            <div class="approval-list" id="my-requests-list"></div>
+          </section>
+
+          <section class="section-block user-only portal-page" id="pending-release" data-page-section hidden>
+            <div class="section-heading">
+              <div><p class="eyebrow">OUTGOING DEPARTMENT</p><h1>Pending to release</h1><p class="section-description">Approved requests awaiting release from your saved department.</p></div>
+              <button class="button button-secondary" id="refresh-pending-release" type="button">Refresh</button>
+            </div>
+            <p class="field-hint" id="pending-release-status" role="status" aria-live="polite"></p>
+            <div class="approval-list" id="pending-release-list"></div>
+          </section>
+
+          <section class="section-block user-only portal-page" id="pending-received" data-page-section hidden>
+            <div class="section-heading">
+              <div><p class="eyebrow">INCOMING DEPARTMENT</p><h1>Pending to received</h1><p class="section-description">Requests released by the outgoing department and awaiting receipt by your saved department.</p></div>
+              <button class="button button-secondary" id="refresh-pending-received" type="button">Refresh</button>
+            </div>
+            <p class="field-hint" id="pending-received-status" role="status" aria-live="polite"></p>
+            <div class="approval-list" id="pending-received-list"></div>
           </section>
 
           <details class="section-block setup-details admin-tools" id="supabase-connection" hidden>
