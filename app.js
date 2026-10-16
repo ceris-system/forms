@@ -918,6 +918,7 @@ function printReleaseForm(sheet, requestNumber) {
     .release-form-items tr { break-inside: avoid; }
     .release-form-items th { padding: 6px 3px; border: 1px solid #171719; background: #171719 !important; background-color: #171719 !important; box-shadow: inset 0 0 0 1000px #171719; color: #fff !important; font-size: 6px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .release-form-items td { padding: 5px 3px; border-bottom: 1px solid #d9ddd9; font-size: 7px; overflow-wrap: anywhere; }
+    .release-form-items td:nth-child(n+3):nth-child(-n+11) { text-align: center; }
     .release-form-items th:nth-child(1) { width: 12%; }
     .release-form-items th:nth-child(2) { width: 22%; }
     .release-form-items th:nth-child(3) { width: 4%; }
@@ -927,13 +928,13 @@ function printReleaseForm(sheet, requestNumber) {
     .release-form-items th:nth-child(9), .release-form-items th:nth-child(10) { width: 7%; }
     .release-form-items th:nth-child(11) { width: 19%; }
     .release-form-signatures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 16px; margin-top: 28px; break-inside: avoid; }
-    .release-form-signatures > div { display: grid; min-height: 82px; grid-template-rows: 46px 1px 11px 11px; gap: 4px; text-align: center; }
+    .release-form-signatures > div { display: grid; min-height: 100px; grid-template-rows: 64px 1px 11px 11px; gap: 4px; text-align: center; }
     .release-approval-name { position: relative; display: grid; align-items: end; justify-items: center; min-width: 0; }
     .release-form-signatures strong, .release-form-signatures b { align-self: end; font-size: 8px; }
     .release-form-signatures .release-signature-line { height: 1px; border-top: 1px solid #171719; background: transparent; }
     .release-form-unsigned-signature .release-signature-space { background: transparent; }
     .release-form-signatures small { font-size: 7px; font-weight: 600; }
-    .release-form-approved-signature img { position: absolute; z-index: 2; top: 10px; left: 50%; width: 52px; height: 32px; max-width: 100%; transform: translateX(-50%); object-fit: cover; object-position: center 55%; }
+    .release-form-approved-signature img { position: absolute; z-index: 2; top: 0; left: 50%; width: 56px; height: 64px; max-width: 100%; transform: translateX(-50%); object-fit: contain; mix-blend-mode: multiply; }
     .release-form-approved-signature strong { position: relative; z-index: 1; max-width: 100%; overflow-wrap: anywhere; font-size: 8px; }
     @media screen { body { padding: 20px; } }
   `;
