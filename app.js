@@ -25,9 +25,17 @@ let catalogRows = [];
 let selectedCatalogRows = new Set();
 let supabaseClient = null;
 let currentSession = null;
-let currentUserProfile = { username: "", department: "", status: "active", mustChangePassword: false };
+let currentUserProfile = {
+  username: "",
+  department: "",
+  status: "active",
+  role: "user",
+  allowedFormTypes: [],
+  mustChangePassword: false,
+};
 let authSubscription = null;
 let isMasterAdmin = false;
+let isAdmin = false;
 let profileUserId = "";
 let adminStatusUserId = "";
 let lookupCache = null;
@@ -63,6 +71,10 @@ function openRequestForm(form) {
   if (!currentSession) {
     if (!supabaseClient) {
       saveStatus.textContent = "The portal is not connected yet. Contact your administrator.";
+      return;
+    }
+    if (!isAdmin && !currentUserProfile.allowedFormTypes.includes(form.id)) {
+      saveStatus.textContent = "Your account is not assigned access to this form. Contact an administrator.";
       return;
     }
     saveStatus.textContent = "Sign in with your invited user account to open and submit forms.";
@@ -276,6 +288,8 @@ async function refreshUserProfile(session) {
       username: profile.username,
       department: profile.department,
       status: profile.status,
+      role: profile.role || "user",
+      allowedFormTypes: Array.isArray(profile.allowed_form_types) ? profile.allowed_form_types : [],
       mustChangePassword: profile.status === "default",
     };
     const incomingDepartment = requestFormBody.querySelector("#incoming-department");
@@ -283,6 +297,7 @@ async function refreshUserProfile(session) {
       incomingDepartment.replaceChildren(new Option(profile.department || "Department not assigned", profile.department || ""));
       incomingDepartment.disabled = !profile.department;
     }
+    renderUserForms();
     updateSessionUi(session, false);
   } catch (error) {
     console.error("Unable to load the signed-in user's profile.", error);
@@ -401,13 +416,22 @@ function updateSessionUi(session, navigate = true) {
   const previousUserId = currentSession?.user.id || "";
   const nextUserId = session?.user.id || "";
   if (previousUserId !== nextUserId) {
-    currentUserProfile = { username: "", department: "", status: "active", mustChangePassword: false };
+    currentUserProfile = {
+      username: "",
+      department: "",
+      status: "active",
+      role: "user",
+      allowedFormTypes: [],
+      mustChangePassword: false,
+    };
     profileUserId = "";
     adminStatusUserId = "";
     isMasterAdmin = false;
+    isAdmin = false;
     lookupCache = null;
     setNotificationCount(0);
     document.body.classList.remove("admin-mode");
+    document.body.classList.remove("master-admin-mode");
   }
   currentSession = session;
   const signedIn = Boolean(session);
@@ -418,25 +442,42 @@ function updateSessionUi(session, navigate = true) {
       username: metadata.portal_username || "",
       department: metadata.department || "",
       status: metadata.must_change_password ? "default" : "active",
+      role: "user",
+      allowedFormTypes: [],
       mustChangePassword: Boolean(metadata.must_change_password),
     };
   }
-  if (!signedIn) currentUserProfile = { username: "", department: "", status: "active", mustChangePassword: false };
+  if (!signedIn) {
+    currentUserProfile = {
+      username: "",
+      department: "",
+      status: "active",
+      role: "user",
+      allowedFormTypes: [],
+      mustChangePassword: false,
+    };
+  }
   updateNotificationPolling(Boolean(signedIn && !currentUserProfile.mustChangePassword));
   const accountName = signedIn ? currentUserProfile.username || "Signed-in user" : "Guest";
   document.body.classList.add("user-mode");
   document.querySelector("#toggle-user-mode").textContent = signedIn ? "Sign out" : "Sign in";
   document.querySelector("#account-avatar").textContent = signedIn ? accountName.slice(0, 1).toUpperCase() : "G";
   document.querySelector("#account-name").textContent = accountName;
-  document.querySelector("#account-role").textContent = signedIn ? currentUserProfile.department || "Signed-in user" : "Request portal";
-  document.querySelector("#account-badge").textContent = signedIn ? "USER" : "GUEST";
+  document.querySelector("#account-role").textContent = signedIn
+    ? [isMasterAdmin ? "Master Admin" : isAdmin ? "Admin" : "", currentUserProfile.department].filter(Boolean).join(" · ") || "Signed-in user"
+    : "Request portal";
+  document.querySelector("#account-badge").textContent = signedIn
+    ? isMasterAdmin ? "MASTER ADMIN" : isAdmin ? "ADMIN" : "USER"
+    : "GUEST";
   document.querySelector("#session-status").textContent = signedIn ? "Signed in" : supabaseClient ? "Ready to sign in" : "Setup needed";
   if (!signedIn && catalogDialog.open) catalogDialog.close();
   if (!signedIn && requestDialog.open) requestDialog.close();
   if (!signedIn || currentUserProfile.mustChangePassword) {
     isMasterAdmin = false;
+    isAdmin = false;
     adminStatusUserId = "";
     document.body.classList.remove("admin-mode");
+    document.body.classList.remove("master-admin-mode");
     document.querySelector("#supabase-connection").hidden = true;
     if (requestDialog.open) requestDialog.close();
     if (catalogDialog.open) catalogDialog.close();
@@ -451,8 +492,9 @@ function updateSessionUi(session, navigate = true) {
     const requestedPage = navigate && previousUserId !== nextUserId
       ? "user-forms"
       : location.hash.slice(1) || activePageId || "user-forms";
-    const validPages = new Set(["user-forms", "my-requests", "approvals", "pending-release", "pending-received", "notifications"]);
+    const validPages = new Set(["user-forms", "my-requests", "approvals", "pending-release", "pending-received", "notifications", "reports-history"]);
     activatePortalPage(validPages.has(requestedPage) ? requestedPage : "user-forms", false);
+    void refreshWorkflowCounts();
   }
 }
 
@@ -462,7 +504,11 @@ function unsubscribeFromAuthChanges() {
 }
 
 function renderUserForms() {
-  for (const form of FORM_TYPES) userFormGrid.append(makeUserFormButton(form));
+  userFormGrid.replaceChildren();
+  const forms = isAdmin ? FORM_TYPES : FORM_TYPES.filter(form => currentUserProfile.allowedFormTypes.includes(form.id));
+  for (const form of forms) userFormGrid.append(makeUserFormButton(form));
+  document.querySelector("#assigned-form-count").textContent = `${forms.length} ASSIGNED FORM${forms.length === 1 ? "" : "S"}`;
+  document.querySelector("#assigned-forms-empty").hidden = forms.length > 0;
 }
 
 function buildSettings() {
@@ -522,19 +568,30 @@ async function refreshAdminTools() {
   adminStatusUserId = userId;
   panel.hidden = true;
   isMasterAdmin = false;
+  isAdmin = false;
   document.body.classList.remove("admin-mode");
+  document.body.classList.remove("master-admin-mode");
   try {
     const access = await callPortalAdmin({ action: "status" });
     if (currentSession?.user.id !== userId) return;
-    if (!access.is_master_admin) return;
-    isMasterAdmin = true;
+    isMasterAdmin = Boolean(access.is_master_admin);
+    isAdmin = Boolean(access.is_admin);
+    if (!isAdmin) return;
     document.body.classList.add("admin-mode");
+    if (isMasterAdmin) document.body.classList.add("master-admin-mode");
     panel.hidden = false;
+    const adminRoleOption = document.querySelector(".master-admin-only-option");
+    adminRoleOption.hidden = !isMasterAdmin;
+    adminRoleOption.disabled = !isMasterAdmin;
     await loadAdminState();
+    renderUserForms();
+    document.querySelector("#account-role").textContent =
+      [isMasterAdmin ? "Master Admin" : "Admin", currentUserProfile.department].filter(Boolean).join(" · ");
+    document.querySelector("#account-badge").textContent = isMasterAdmin ? "MASTER ADMIN" : "ADMIN";
   } catch (error) {
     if (currentSession?.user.id === userId) adminStatusUserId = "";
-    console.error("Unable to verify Master Admin access.", error);
-    saveStatus.textContent = `Master Admin access could not be checked: ${error.message || "Check the portal-admin function deployment."}`;
+    console.error("Unable to verify administrator access.", error);
+    saveStatus.textContent = `Administrator access could not be checked: ${error.message || "Check the portal-admin function deployment."}`;
     document.querySelector("#session-status").textContent = "Admin setup error";
   }
 }
@@ -546,6 +603,13 @@ async function loadAdminState() {
   document.querySelector("#outgoing-departments-tab").value = state.outgoing_departments_tab || "area";
   document.querySelector("#incoming-departments-tab").value = state.incoming_departments_tab || "area";
   document.querySelector("#suppliers-tab").value = state.suppliers_tab || "dd";
+}
+
+function updateUserFormAccess() {
+  const role = document.querySelector("#new-user-role").value;
+  const formAccess = document.querySelector("#new-user-form-access");
+  const isUnrestrictedAdmin = role === "admin";
+  formAccess.disabled = isUnrestrictedAdmin;
 }
 
 async function saveWorkbook() {
@@ -581,14 +645,22 @@ async function addUser(event) {
   button.disabled = true;
   status.textContent = "Creating portal account…";
   try {
+    const role = document.querySelector("#new-user-role").value;
+    const allowedFormTypes = [...document.querySelectorAll('input[name="allowed-form-types"]:checked')].map(input => input.value);
+    if (role === "user" && !allowedFormTypes.length) throw new Error("Select at least one form for this user.");
     const result = await callPortalAdmin({
       action: "create_user",
       username: document.querySelector("#new-user-username").value.trim().toLowerCase(),
       department: document.querySelector("#new-user-department").value.trim(),
+      role,
+      allowed_form_types: role === "admin"
+        ? FORM_TYPES.map(form => form.id)
+        : allowedFormTypes,
       password: document.querySelector("#new-user-password").value,
       status: document.querySelector("#new-user-status").value,
     });
     form.reset();
+    updateUserFormAccess();
     status.textContent = `User "${result.username}" added. Give the username and temporary password privately.`;
   } catch (error) {
     console.error("Unable to create a portal user.", error);
@@ -621,6 +693,8 @@ async function signIn(event) {
       username: data.username || username,
       department: data.department || "",
       status: data.must_change_password ? "default" : "active",
+      role: "user",
+      allowedFormTypes: [],
       mustChangePassword: Boolean(data.must_change_password),
     };
     const { error: sessionError } = await supabaseClient.auth.setSession({
@@ -692,6 +766,7 @@ function setActiveNavigation() {
 }
 
 function activatePortalPage(pageId, refresh = true) {
+  if (pageId === "approvals" && !isAdmin) pageId = "user-forms";
   const selectedPage = document.querySelector(`[data-page-section]#${CSS.escape(pageId)}`);
   if (!selectedPage || !currentSession) return;
   const pageChanged = activePageId !== pageId;
@@ -708,6 +783,7 @@ function activatePortalPage(pageId, refresh = true) {
     "pending-release": "Pending to release",
     "pending-received": "Pending to received",
     notifications: "Notifications",
+    "reports-history": "Reports & History",
   };
   document.querySelector("#breadcrumb-page").textContent = pageNames[pageId];
   if (location.hash !== `#${pageId}`) history.replaceState(null, "", `#${pageId}`);
@@ -719,6 +795,7 @@ function activatePortalPage(pageId, refresh = true) {
     "pending-release": loadPendingRelease,
     "pending-received": loadPendingReceived,
     notifications: loadNotifications,
+    "reports-history": loadReportsHistory,
   };
   void refreshNotificationCount();
   if (loaders[pageId]) void loaders[pageId]();
@@ -737,11 +814,39 @@ function setNotificationCount(count) {
 function updateNotificationPolling(enabled) {
   if (enabled && !notificationRefreshTimer) {
     notificationRefreshTimer = window.setInterval(() => {
-      if (document.visibilityState === "visible") void refreshNotificationCount();
+      if (document.visibilityState === "visible") {
+        void refreshNotificationCount();
+        void refreshWorkflowCounts();
+      }
     }, 60_000);
   } else if (!enabled && notificationRefreshTimer) {
     window.clearInterval(notificationRefreshTimer);
     notificationRefreshTimer = null;
+  }
+}
+
+function setWorkflowCount(selector, count) {
+  const badge = document.querySelector(selector);
+  const value = Math.max(0, Number(count) || 0);
+  badge.textContent = value > 99 ? "99+" : String(value);
+  badge.hidden = value === 0;
+  badge.setAttribute("aria-label", `${value} pending request${value === 1 ? "" : "s"}`);
+}
+
+async function refreshWorkflowCounts() {
+  if (!currentSession || currentUserProfile.mustChangePassword) {
+    setWorkflowCount("#approval-nav-count", 0);
+    setWorkflowCount("#release-nav-count", 0);
+    setWorkflowCount("#receive-nav-count", 0);
+    return;
+  }
+  try {
+    const result = await requestSheetData("workflow_counts");
+    setWorkflowCount("#approval-nav-count", result.approval_count);
+    setWorkflowCount("#release-nav-count", result.release_count);
+    setWorkflowCount("#receive-nav-count", result.receive_count);
+  } catch (error) {
+    console.error("Unable to refresh workflow queue counts.", error);
   }
 }
 
@@ -911,6 +1016,10 @@ async function loadPendingReceived() {
   await loadWorkflowQueue("pending_received", "pending-received-list", "pending-received-status", "Requests ready to receive");
 }
 
+async function loadReportsHistory() {
+  await loadWorkflowQueue("reports_history", "reports-history-list", "reports-history-status", "Form history");
+}
+
 async function loadWorkflowQueue(action, listId, statusId, emptyMessage) {
   const list = document.querySelector(`#${listId}`);
   const status = document.querySelector(`#${statusId}`);
@@ -921,6 +1030,9 @@ async function loadWorkflowQueue(action, listId, statusId, emptyMessage) {
     const result = await requestSheetData(action);
     if (workflowLoadIds.get(action) !== loadId) return;
     const requests = Array.isArray(result.requests) ? result.requests : [];
+    if (action === "approval_queue") setWorkflowCount("#approval-nav-count", requests.length);
+    if (action === "pending_release") setWorkflowCount("#release-nav-count", requests.length);
+    if (action === "pending_received") setWorkflowCount("#receive-nav-count", requests.length);
     status.textContent = requests.length
       ? `${requests.length} request${requests.length === 1 ? "" : "s"}.`
       : `${emptyMessage}: none found.`;
@@ -931,6 +1043,7 @@ async function loadWorkflowQueue(action, listId, statusId, emptyMessage) {
       "pending-release": "pending_release",
       "pending-received": "pending_received",
       "my-requests": "my_requests",
+      "reports-history": "reports_history",
     };
     if (notificationTarget && destinationActions[notificationTarget.destinationPage] === action) {
       const targetCard = [...list.querySelectorAll("[data-request-number]")]
@@ -1193,6 +1306,14 @@ function makeWorkflowRequestCard(request, action) {
     ["Incoming", request.incoming_department],
     ["Supplier", request.supplier || "—"],
     ["Submitted by", request.submitted_by],
+    ...(action === "reports_history" ? [
+      ["Approved by", request.approved_by || "—"],
+      ["Approved date", request.approved_date || "—"],
+      ["Released by", request.released_by || "—"],
+      ["Released date", request.released_date || "—"],
+      ["Received by", request.received_by || "—"],
+      ["Received date", request.received_date || "—"],
+    ] : []),
   ]) {
     const pair = document.createElement("div");
     const term = document.createElement("dt");
@@ -1294,6 +1415,7 @@ function makeWorkflowActionButton(request, action, card) {
       const refresh = action === "approval_queue" ? loadApprovalQueue
         : action === "pending_release" ? loadPendingRelease : loadPendingReceived;
       await refresh();
+      void refreshWorkflowCounts();
       if (result.notification_warning) window.alert(result.notification_warning);
     } catch (error) {
       console.error("Unable to update request workflow status.", error);
@@ -1481,6 +1603,7 @@ document.querySelector("#refresh-my-requests").addEventListener("click", loadMyR
 document.querySelector("#refresh-pending-release").addEventListener("click", loadPendingRelease);
 document.querySelector("#refresh-pending-received").addEventListener("click", loadPendingReceived);
 document.querySelector("#refresh-notifications").addEventListener("click", loadNotifications);
+document.querySelector("#refresh-reports-history").addEventListener("click", loadReportsHistory);
 document.querySelector("#load-more-notifications").addEventListener("click", () => void loadNotifications(true));
 document.querySelector("#mark-all-notifications-read").addEventListener("click", markAllNotificationsRead);
 requestFormBody.addEventListener("input", (event) => {
@@ -1492,5 +1615,6 @@ requestFormBody.addEventListener("input", (event) => {
   }
 });
 document.querySelector("#add-user-form").addEventListener("submit", addUser);
+document.querySelector("#new-user-role").addEventListener("change", updateUserFormAccess);
 document.querySelector("#password-change-form").addEventListener("submit", changeTemporaryPassword);
 passwordChangeDialog.addEventListener("cancel", event => event.preventDefault());

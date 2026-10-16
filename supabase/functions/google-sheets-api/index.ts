@@ -427,10 +427,11 @@ async function previewRequestSequence(
 
 async function loadWorkflowRequests(
   spreadsheetId: string,
-  filter: "pending" | "approved" | "released" | "mine",
+  filter: "pending" | "approved" | "released" | "mine" | "department" | "all",
   department = "",
   username = "",
   allDepartments = false,
+  allowedFormTypes: string[] = Object.keys(requestTabs),
 ): Promise<Record<string, unknown>[]> {
   const metadata = await getSheetMetadata(spreadsheetId);
   const availableTabs = new Map<string, string>(
@@ -440,6 +441,7 @@ async function loadWorkflowRequests(
     ]),
   );
   const rowsByTab = await Promise.all(Object.entries(requestTabs).map(async ([formType, tabName]) => {
+    if (!allowedFormTypes.includes(formType)) return [];
     const actualTab = availableTabs.get(tabName.toLocaleLowerCase());
     if (!actualTab) return [];
     const rows = await ensureRequestHeaders(spreadsheetId, actualTab, metadata, 0, false);
@@ -461,7 +463,12 @@ async function loadWorkflowRequests(
         ? status === "approved" && (allDepartments || outgoing.toLocaleLowerCase() === department.toLocaleLowerCase())
         : filter === "released"
         ? status === "released" && (allDepartments || incoming.toLocaleLowerCase() === department.toLocaleLowerCase())
-        : submittedBy.toLocaleLowerCase() === username.toLocaleLowerCase();
+        : filter === "mine"
+        ? submittedBy.toLocaleLowerCase() === username.toLocaleLowerCase()
+        : filter === "department"
+        ? outgoing.toLocaleLowerCase() === department.toLocaleLowerCase()
+          || incoming.toLocaleLowerCase() === department.toLocaleLowerCase()
+        : true;
       if (!matches) continue;
 
       let request = requests.get(requestNumber);
@@ -524,10 +531,17 @@ async function getPortalUsername(
 async function getPortalUserContext(
   adminClient: ReturnType<typeof createClient>,
   userId: string,
-): Promise<{ userId: string; username: string; department: string; isMasterAdmin: boolean }> {
+): Promise<{
+  userId: string;
+  username: string;
+  department: string;
+  isMasterAdmin: boolean;
+  isAdmin: boolean;
+  allowedFormTypes: string[];
+}> {
   const [{ data: profile, error: profileError }, { data: admin, error: adminError }] = await Promise.all([
     adminClient.from("login_usernames")
-      .select("username, department")
+      .select("username, department, role, allowed_form_types")
       .eq("user_id", userId)
       .maybeSingle(),
     adminClient.from("mw_portal_admins")
@@ -543,6 +557,10 @@ async function getPortalUserContext(
     username: profile.username,
     department: String(profile.department || ""),
     isMasterAdmin: Boolean(admin),
+    isAdmin: Boolean(admin) || String(profile.role || "").toLocaleLowerCase() === "admin",
+    allowedFormTypes: Array.isArray(profile.allowed_form_types)
+      ? profile.allowed_form_types.map((value: unknown) => String(value))
+      : Object.keys(requestTabs),
   };
 }
 
@@ -582,23 +600,37 @@ async function createFormNotifications(
 
   let recipientIds: string[] = [];
   if (details.event === "submitted") {
-    const { data: admins, error } = await adminClient.from("mw_portal_admins").select("user_id");
-    if (error) throw error;
-    recipientIds = (admins || []).map(admin => String(admin.user_id));
+    const [masterAdmins, admins] = await Promise.all([
+      adminClient.from("mw_portal_admins").select("user_id"),
+      adminClient.from("login_usernames").select("user_id").eq("role", "admin"),
+    ]);
+    if (masterAdmins.error) throw masterAdmins.error;
+    if (admins.error) throw admins.error;
+    recipientIds = [...new Set([
+      ...(masterAdmins.data || []).map(admin => String(admin.user_id)),
+      ...(admins.data || []).map(admin => String(admin.user_id)),
+    ])];
   } else {
     const targetDepartment = details.event === "approved" || details.event === "received"
       ? details.outgoingDepartment
       : details.incomingDepartment;
     const [requesterResult, departmentResult] = await Promise.all([
       adminClient.from("login_usernames").select("user_id").eq("username", details.submittedBy.trim().toLocaleLowerCase()).maybeSingle(),
-      adminClient.from("login_usernames").select("user_id, department"),
+      adminClient.from("login_usernames").select("user_id, department, role, allowed_form_types"),
     ]);
     if (requesterResult.error) throw requesterResult.error;
     if (departmentResult.error) throw departmentResult.error;
     recipientIds = [
       ...(requesterResult.data ? [String(requesterResult.data.user_id)] : []),
       ...(departmentResult.data || [])
-        .filter(profile => String(profile.department || "").trim().toLocaleLowerCase() === targetDepartment.trim().toLocaleLowerCase())
+        .filter(profile =>
+          String(profile.department || "").trim().toLocaleLowerCase() === targetDepartment.trim().toLocaleLowerCase()
+          && (
+            String(profile.role || "").toLocaleLowerCase() === "admin"
+            || !Array.isArray(profile.allowed_form_types)
+            || profile.allowed_form_types.includes(details.formType)
+          )
+        )
         .map(profile => String(profile.user_id)),
     ];
   }
@@ -642,7 +674,14 @@ function formTypeFromRequestNumber(requestNumber: string): string {
 async function applyWorkflowAction(
   adminClient: ReturnType<typeof createClient>,
   spreadsheetId: string,
-  user: { userId: string; username: string; department: string; isMasterAdmin: boolean },
+  user: {
+    userId: string;
+    username: string;
+    department: string;
+    isMasterAdmin: boolean;
+    isAdmin: boolean;
+    allowedFormTypes: string[];
+  },
   value: unknown,
 ): Promise<{ notification_warning?: string }> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -652,13 +691,16 @@ async function applyWorkflowAction(
   const action = requiredText(body.action, "Workflow action");
   const requestNumber = requiredText(body.request_number, "Request number");
   const formType = formTypeFromRequestNumber(requestNumber);
-  if (action === "approve" && !user.isMasterAdmin) {
-    throw new Error("Only a Master Admin can approve requests.");
+  if (action === "approve" && !user.isAdmin) {
+    throw new Error("Admin access is required to approve requests.");
   }
   if (action !== "approve" && action !== "release" && action !== "receive") {
     throw new Error("Unknown request workflow action.");
   }
-  if (action !== "approve" && !user.isMasterAdmin && !user.department) {
+  if (!user.isAdmin && !user.allowedFormTypes.includes(formType)) {
+    throw new Error("Your account is not assigned access to this form.");
+  }
+  if (action !== "approve" && !user.isAdmin && !user.department) {
     throw new Error("Your account has no department assigned. Ask the Master Admin to update your account.");
   }
 
@@ -676,12 +718,12 @@ async function applyWorkflowAction(
     if (matchingRows.some(({ row }) => String(row[18] || "").trim().toLocaleLowerCase() !== expectedStatus.toLocaleLowerCase())) {
       throw new Error(`This request is no longer ${expectedStatus}. Refresh the list and try again.`);
     }
-    if (action === "release" && !user.isMasterAdmin && matchingRows.some(({ row }) =>
+    if (action === "release" && !user.isAdmin && matchingRows.some(({ row }) =>
       String(row[3] || "").trim().toLocaleLowerCase() !== user.department.trim().toLocaleLowerCase()
     )) {
       throw new Error("Only the request's outgoing department can release it.");
     }
-    if (action === "receive" && !user.isMasterAdmin && matchingRows.some(({ row }) =>
+    if (action === "receive" && !user.isAdmin && matchingRows.some(({ row }) =>
       String(row[4] || "").trim().toLocaleLowerCase() !== user.department.trim().toLocaleLowerCase()
     )) {
       throw new Error("Only the request's incoming department can receive it.");
@@ -863,6 +905,10 @@ Deno.serve(async (request: Request) => {
     }));
     if (body.action === "sequence_preview") {
       const formType = requiredText(body.form_type, "Form type");
+      const user = await getPortalUserContext(adminClient, authData.user.id);
+      if (!user.isAdmin && !user.allowedFormTypes.includes(formType)) {
+        return respond({ error: "Your account is not assigned access to this form." }, 403);
+      }
       const sequenceNumber = await previewRequestSequence(adminClient, settings.spreadsheet_id, formType);
       if (!Number.isSafeInteger(sequenceNumber) || sequenceNumber < 1) {
         throw new Error("The next request sequence number is invalid.");
@@ -873,38 +919,106 @@ Deno.serve(async (request: Request) => {
       || body.action === "my_requests"
       || body.action === "pending_release"
       || body.action === "pending_received"
+      || body.action === "reports_history"
+      || body.action === "workflow_counts"
       || body.action === "workflow_action") {
       const user = await getPortalUserContext(adminClient, authData.user.id);
       if (body.action === "approval_queue") {
-        if (!user.isMasterAdmin) return respond({ error: "Only a Master Admin can review and approve requests." }, 403);
-        return respond({ requests: await loadWorkflowRequests(settings.spreadsheet_id, "pending") });
+        if (!user.isAdmin) return respond({ error: "Admin access is required to review and approve requests." }, 403);
+        return respond({
+          requests: await loadWorkflowRequests(settings.spreadsheet_id, "pending", "", "", true, Object.keys(requestTabs)),
+        });
       }
       if (body.action === "my_requests") {
-        return respond({ requests: await loadWorkflowRequests(settings.spreadsheet_id, "mine", "", user.username) });
+        return respond({
+          requests: await loadWorkflowRequests(
+            settings.spreadsheet_id,
+            "mine",
+            "",
+            user.username,
+            false,
+            user.isAdmin ? Object.keys(requestTabs) : user.allowedFormTypes,
+          ),
+        });
       }
       if (body.action === "pending_release") {
         return respond({
-          requests: await loadWorkflowRequests(settings.spreadsheet_id, "approved", user.department, "", user.isMasterAdmin),
+          requests: await loadWorkflowRequests(
+            settings.spreadsheet_id,
+            "approved",
+            user.department,
+            "",
+            user.isAdmin,
+            user.isAdmin ? Object.keys(requestTabs) : user.allowedFormTypes,
+          ),
         });
       }
       if (body.action === "pending_received") {
         return respond({
-          requests: await loadWorkflowRequests(settings.spreadsheet_id, "released", user.department, "", user.isMasterAdmin),
+          requests: await loadWorkflowRequests(
+            settings.spreadsheet_id,
+            "released",
+            user.department,
+            "",
+            user.isAdmin,
+            user.isAdmin ? Object.keys(requestTabs) : user.allowedFormTypes,
+          ),
+        });
+      }
+      if (body.action === "reports_history") {
+        return respond({
+          requests: await loadWorkflowRequests(
+            settings.spreadsheet_id,
+            user.isAdmin ? "all" : "department",
+            user.department,
+            user.username,
+            user.isAdmin,
+            user.isAdmin ? Object.keys(requestTabs) : user.allowedFormTypes,
+          ),
+        });
+      }
+      if (body.action === "workflow_counts") {
+        const requests = await loadWorkflowRequests(
+          settings.spreadsheet_id,
+          "all",
+          "",
+          "",
+          true,
+          user.isAdmin ? Object.keys(requestTabs) : user.allowedFormTypes,
+        );
+        return respond({
+          approval_count: user.isAdmin ? requests.filter(request => String(request.status).toLocaleLowerCase() === "pending").length : 0,
+          release_count: requests.filter(request =>
+            String(request.status).toLocaleLowerCase() === "approved"
+            && (user.isAdmin || String(request.outgoing_department).trim().toLocaleLowerCase() === user.department.trim().toLocaleLowerCase())
+          ).length,
+          receive_count: requests.filter(request =>
+            String(request.status).toLocaleLowerCase() === "released"
+            && (user.isAdmin || String(request.incoming_department).trim().toLocaleLowerCase() === user.department.trim().toLocaleLowerCase())
+          ).length,
         });
       }
       const workflowAction = body.workflow && typeof body.workflow === "object"
         ? body.workflow as Record<string, unknown>
         : null;
-      if (workflowAction?.action === "approve" && !user.isMasterAdmin) {
-        return respond({ error: "Only a Master Admin can approve requests." }, 403);
+      if (workflowAction?.action === "approve" && !user.isAdmin) {
+        return respond({ error: "Admin access is required to approve requests." }, 403);
       }
       const result = await applyWorkflowAction(adminClient, settings.spreadsheet_id, user, body.workflow);
       return respond({ ok: true, ...result });
     }
     if (body.action === "submit") {
+      const user = await getPortalUserContext(adminClient, authData.user.id);
+      const submission = body.submission && typeof body.submission === "object"
+        ? body.submission as Record<string, unknown>
+        : {};
+      const formType = typeof submission.form_type === "string" ? submission.form_type : "";
+      if (!user.isAdmin && !user.allowedFormTypes.includes(formType)) {
+        return respond({ error: "Your account is not assigned access to this form." }, 403);
+      }
       const result = await saveSubmissionDirect(
         adminClient,
-        await getPortalUsername(adminClient, authData.user.id),
+        user.username,
         settings.spreadsheet_id,
         body.submission,
       );

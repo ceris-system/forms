@@ -32,6 +32,21 @@ create table if not exists public.login_usernames (
   user_id uuid not null unique references auth.users(id) on delete cascade,
   department text not null default '',
   status text not null default 'active' check (status in ('active', 'default')),
+  role text not null default 'user' check (role in ('user', 'admin')),
+  allowed_form_types text[] not null default array[
+    'release-request',
+    'transfer',
+    'pull-out',
+    'purchase-order'
+  ]::text[] check (
+    cardinality(allowed_form_types) between 1 and 4
+    and allowed_form_types <@ array[
+      'release-request',
+      'transfer',
+      'pull-out',
+      'purchase-order'
+    ]::text[]
+  ),
   created_at timestamptz not null default now()
 );
 

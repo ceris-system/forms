@@ -34,13 +34,13 @@
         </a>
         <div class="workspace-label">REQUESTS</div>
         <nav class="nav-list">
-          <a class="nav-link user-only active" href="#user-forms" data-page="user-forms"><span class="nav-icon">♙</span>My forms</a>
-          <a class="nav-link user-only" href="#my-requests" data-page="my-requests"><span class="nav-icon">▤</span>My requests</a>
-          <a class="nav-link user-only admin-only" href="#approvals" data-page="approvals"><span class="nav-icon">✓</span>Approvals</a>
-          <a class="nav-link user-only" href="#pending-release" data-page="pending-release"><span class="nav-icon">↗</span>Pending to release</a>
-          <a class="nav-link user-only" href="#pending-received" data-page="pending-received"><span class="nav-icon">✓</span>Pending to received</a>
-          <a class="nav-link user-only" href="#notifications" data-page="notifications"><span class="nav-icon">♧</span>Notifications<span class="notification-nav-count" id="notification-nav-count" hidden>0</span></a>
-          <button class="nav-link nav-link-disabled user-only" type="button" disabled aria-label="Reports and history, coming soon"><span class="nav-icon" aria-hidden="true">▤</span><span>Reports &amp; History</span><small>SOON</small></button>
+          <a class="nav-link user-only active" href="#user-forms" data-page="user-forms"><span class="nav-icon" aria-hidden="true">📝</span><span>My forms</span></a>
+          <a class="nav-link user-only" href="#my-requests" data-page="my-requests"><span class="nav-icon" aria-hidden="true">📂</span><span>My requests</span></a>
+          <a class="nav-link user-only admin-only" href="#approvals" data-page="approvals"><span class="nav-icon" aria-hidden="true">✅</span><span>Approvals</span><span class="workflow-nav-count" id="approval-nav-count" hidden>0</span></a>
+          <a class="nav-link user-only" href="#pending-release" data-page="pending-release"><span class="nav-icon" aria-hidden="true">📦</span><span>Pending to release</span><span class="workflow-nav-count" id="release-nav-count" hidden>0</span></a>
+          <a class="nav-link user-only" href="#pending-received" data-page="pending-received"><span class="nav-icon" aria-hidden="true">📥</span><span>Pending to received</span><span class="workflow-nav-count" id="receive-nav-count" hidden>0</span></a>
+          <a class="nav-link user-only" href="#notifications" data-page="notifications"><span class="nav-icon" aria-hidden="true">🔔</span><span>Notifications</span><span class="notification-nav-count" id="notification-nav-count" hidden>0</span></a>
+          <a class="nav-link user-only" href="#reports-history" data-page="reports-history"><span class="nav-icon" aria-hidden="true">📊</span><span>Reports &amp; History</span></a>
         </nav>
         <div class="sidebar-bottom">
           <span class="admin-avatar" id="account-avatar" aria-hidden="true">G</span>
@@ -61,18 +61,19 @@
         <div class="page-content">
           <section class="section-block user-only portal-page" id="user-forms" data-page-section>
             <div class="section-heading">
-              <div><p class="eyebrow">MOTHER'S WONDERLAND</p><h1>What do you need today?</h1><p class="section-description">Choose a form to start a request. You can add products and submit once signed in.</p></div>
-              <span class="section-count">4 FORMS</span>
+              <div><p class="eyebrow">MOTHER'S WONDERLAND</p><h1>What do you need today?</h1><p class="section-description">Choose one of your assigned forms to start a request. You can add products and submit once signed in.</p></div>
+              <span class="section-count" id="assigned-form-count">ASSIGNED FORMS</span>
             </div>
             <details class="outgoing-group" open>
               <summary>Outgoing</summary>
+              <p class="field-hint assigned-forms-empty" id="assigned-forms-empty" hidden>No forms are assigned to your account. Contact an administrator.</p>
               <div class="user-form-grid" id="user-form-grid"></div>
             </details>
           </section>
 
           <section class="section-block user-only portal-page" id="approvals" data-page-section hidden>
             <div class="section-heading">
-              <div><p class="eyebrow">MASTER ADMIN REVIEW</p><h1>Approvals</h1><p class="section-description">Review each request by form category. Adjust Approved Qty before approving; the approving username is saved as the approval signature.</p></div>
+              <div><p class="eyebrow">ADMIN REVIEW</p><h1>Approvals</h1><p class="section-description">Review each request by form category. Adjust Approved Qty before approving; the approving username is saved as the approval signature.</p></div>
               <button class="button button-secondary" id="refresh-approvals" type="button">Refresh</button>
             </div>
             <p class="field-hint" id="approval-list-status" role="status" aria-live="polite"></p>
@@ -119,8 +120,17 @@
             <button class="button button-secondary notification-load-more" id="load-more-notifications" type="button" hidden>Load older updates</button>
           </section>
 
+          <section class="section-block user-only portal-page" id="reports-history" data-page-section hidden>
+            <div class="section-heading">
+              <div><p class="eyebrow">READ-ONLY OVERVIEW</p><h1>Reports &amp; History</h1><p class="section-description">Review completed and in-progress forms available to your account. This page is read-only.</p></div>
+              <button class="button button-secondary" id="refresh-reports-history" type="button">Refresh</button>
+            </div>
+            <p class="field-hint" id="reports-history-status" role="status" aria-live="polite"></p>
+            <div class="approval-list" id="reports-history-list"></div>
+          </section>
+
           <details class="section-block setup-details admin-tools" id="supabase-connection" hidden>
-            <summary>Master Admin settings</summary>
+            <summary>Administration settings</summary>
             <div class="department-panel">
             <div class="department-copy">
               <div class="department-icon" aria-hidden="true">⚙</div>
@@ -148,7 +158,7 @@
             </div>
             </div>
             <div class="section-heading assignment-heading">
-              <div><p class="eyebrow">STAFF ACCOUNTS</p><h2>Add a user</h2><p class="section-description">Create an account with a username, department, initial password, and status. Users set a new password when signing in with Default status.</p></div>
+              <div><p class="eyebrow">STAFF ACCOUNTS</p><h2>Add a user</h2><p class="section-description">Create an account with a username, department, role, assigned forms, initial password, and status. Users set a new password when signing in with Default status. Only a Master Admin can grant Admin access.</p></div>
             </div>
             <form class="add-user-form" id="add-user-form">
               <label class="add-user-field" for="new-user-username">Username
@@ -156,6 +166,12 @@
               </label>
               <label class="add-user-field" for="new-user-department">Department
                 <input id="new-user-department" name="department" type="text" maxlength="100" required>
+              </label>
+              <label class="add-user-field" for="new-user-role">Role
+                <select id="new-user-role" name="role" required>
+                  <option value="user" selected>User — assigned forms only</option>
+                  <option class="master-admin-only-option" value="admin">Admin — manage users and all requests</option>
+                </select>
               </label>
               <label class="add-user-field" for="new-user-password">Temporary password
                 <input id="new-user-password" name="password" type="password" minlength="6" maxlength="256" autocomplete="new-password" required>
@@ -166,6 +182,13 @@
                   <option value="active">Active — no forced password change</option>
                 </select>
               </label>
+              <fieldset class="add-user-form-access" id="new-user-form-access">
+                <legend>Forms this user can access</legend>
+                <label><input type="checkbox" name="allowed-form-types" value="release-request"> Release &amp; Request</label>
+                <label><input type="checkbox" name="allowed-form-types" value="transfer"> Transfer</label>
+                <label><input type="checkbox" name="allowed-form-types" value="pull-out"> Pull Out</label>
+                <label><input type="checkbox" name="allowed-form-types" value="purchase-order"> Purchase Order</label>
+              </fieldset>
               <button class="button button-primary" id="add-user-button" type="submit">Add user</button>
               <p class="field-hint add-user-status" id="add-user-status" role="status" aria-live="polite"></p>
             </form>

@@ -5,6 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
+const allowedFormTypes = ["release-request", "transfer", "pull-out", "purchase-order"];
 
 function respond(body: Record<string, unknown>, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -64,12 +65,22 @@ Deno.serve(async (request: Request) => {
     const adminClient = createClient(supabaseUrl, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    const { data: admin, error: adminError } = await adminClient
-      .from("mw_portal_admins")
-      .select("user_id")
-      .eq("user_id", authData.user.id)
-      .maybeSingle();
-    if (adminError) throw adminError;
+    const [adminResult, profileResult] = await Promise.all([
+      adminClient.from("mw_portal_admins")
+        .select("user_id")
+        .eq("user_id", authData.user.id)
+        .maybeSingle(),
+      adminClient.from("login_usernames")
+        .select("username, department, status, role, allowed_form_types")
+        .eq("user_id", authData.user.id)
+        .maybeSingle(),
+    ]);
+    if (adminResult.error) throw adminResult.error;
+    if (profileResult.error) throw profileResult.error;
+    const admin = adminResult.data;
+    const currentProfile = profileResult.data;
+    const isMasterAdmin = Boolean(admin);
+    const isAdmin = isMasterAdmin || String(currentProfile?.role || "").toLocaleLowerCase() === "admin";
 
     let body: Record<string, unknown>;
     try {
@@ -78,16 +89,15 @@ Deno.serve(async (request: Request) => {
       return respond({ error: "Enter a valid administration request." }, 400);
     }
 
-    if (body.action === "status") return respond({ is_master_admin: Boolean(admin) });
+    if (body.action === "status") return respond({ is_master_admin: isMasterAdmin, is_admin: isAdmin });
     if (body.action === "profile") {
-      const { data: profile, error } = await adminClient
-        .from("login_usernames")
-        .select("username, department, status")
-        .eq("user_id", authData.user.id)
-        .maybeSingle();
-      if (error) throw error;
-      if (!profile) return respond({ error: "Your account profile could not be found." }, 404);
-      return respond(profile);
+      if (!currentProfile) return respond({ error: "Your account profile could not be found." }, 404);
+      return respond({
+        ...currentProfile,
+        is_admin: isAdmin,
+        is_master_admin: isMasterAdmin,
+        allowed_form_types: isAdmin ? allowedFormTypes : currentProfile.allowed_form_types,
+      });
     }
     if (body.action === "notifications_count") {
       const { count, error } = await adminClient.from("mw_form_notifications")
@@ -166,7 +176,7 @@ Deno.serve(async (request: Request) => {
       if (statusError) throw statusError;
       return respond({ ok: true });
     }
-    if (!admin) return respond({ error: "Master Admin access is required." }, 403);
+    if (!isAdmin) return respond({ error: "Admin access is required." }, 403);
 
     if (body.action === "reset_request_history") {
       const userClient = createClient(supabaseUrl, anonKey, {
@@ -184,7 +194,9 @@ Deno.serve(async (request: Request) => {
           .select("spreadsheet_url, products_tab, outgoing_departments_tab, incoming_departments_tab, suppliers_tab")
           .eq("singleton", true)
           .maybeSingle(),
-        adminClient.from("login_usernames").select("user_id, username, department, status").order("username"),
+        adminClient.from("login_usernames")
+          .select("user_id, username, department, status, role, allowed_form_types")
+          .order("username"),
         adminClient.from("mw_sheet_assignments").select("user_id, output_tab"),
       ]);
       if (settingsResult.error) throw settingsResult.error;
@@ -206,6 +218,18 @@ Deno.serve(async (request: Request) => {
       const department = typeof body.department === "string" ? body.department.trim() : "";
       const password = typeof body.password === "string" ? body.password : "";
       const status = body.status === "active" ? "active" : body.status === "default" ? "default" : "";
+      const role = body.role === "admin" ? "admin" : body.role === "user" ? "user" : "";
+      const requestedForms = Array.isArray(body.allowed_form_types)
+        ? [...new Set(body.allowed_form_types.filter((value): value is string => typeof value === "string"))]
+        : [];
+      const formTypes = role === "admin" ? allowedFormTypes : requestedForms;
+      if (!role) return respond({ error: "Choose a valid account role." }, 400);
+      if (role === "admin" && !isMasterAdmin) {
+        return respond({ error: "Only a Master Admin can grant Admin access." }, 403);
+      }
+      if (formTypes.length < 1 || formTypes.some(formType => !allowedFormTypes.includes(formType))) {
+        return respond({ error: "Select at least one valid form for this user." }, 400);
+      }
       if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
         return respond({ error: "Username must be 3–32 letters, numbers, periods, underscores, or hyphens." }, 400);
       }
@@ -231,6 +255,8 @@ Deno.serve(async (request: Request) => {
         user_metadata: {
           portal_username: username,
           department,
+          role,
+          allowed_form_types: formTypes,
           must_change_password: status === "default",
         },
       });
@@ -239,7 +265,7 @@ Deno.serve(async (request: Request) => {
 
       const { error: mappingError } = await adminClient
         .from("login_usernames")
-        .insert({ username, user_id: created.user.id, department, status });
+        .insert({ username, user_id: created.user.id, department, status, role, allowed_form_types: formTypes });
       if (mappingError) {
         const { error: cleanupError } = await adminClient.auth.admin.deleteUser(created.user.id);
         if (cleanupError) {
@@ -251,7 +277,7 @@ Deno.serve(async (request: Request) => {
         throw new Error(`The portal username could not be saved, so the new Auth account was removed: ${mappingError.message}`);
       }
 
-      return respond({ ok: true, username, department, status, user_id: created.user.id }, 201);
+      return respond({ ok: true, username, department, status, role, allowed_form_types: formTypes, user_id: created.user.id }, 201);
     }
 
     if (body.action === "save_workbook") {
