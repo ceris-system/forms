@@ -366,6 +366,18 @@
         <div><small>Item Description</small><strong id="inventory-item-description"></strong></div>
       </div>
       <form id="inventory-adjustment-form">
+        <section class="inventory-editor-section inventory-adjustment-section" aria-labelledby="inventory-adjustment-heading">
+          <h3 id="inventory-adjustment-heading" class="inventory-subheading"><span aria-hidden="true">◆</span> Adjustment</h3>
+          <label for="inventory-adjustment-category">Category
+            <select id="inventory-adjustment-category" disabled><option value="">Loading categories…</option></select>
+          </label>
+          <label for="inventory-adjustment-qty">Qty
+            <input id="inventory-adjustment-qty" type="number" step="any">
+          </label>
+          <label for="inventory-adjustment-remarks">Remarks
+            <textarea id="inventory-adjustment-remarks" rows="3" maxlength="500"></textarea>
+          </label>
+        </section>
         <section class="inventory-editor-section" aria-labelledby="inventory-batches-heading">
           <h3 id="inventory-batches-heading" class="inventory-subheading"><span aria-hidden="true">▤</span> Expiration batches</h3>
           <div class="inventory-batch-editor" id="inventory-item-batches"></div>
@@ -385,21 +397,9 @@
             <div class="inventory-readonly-wide"><small>Total available qty</small><strong id="inventory-item-total"></strong></div>
           </div>
         </section>
-        <section class="inventory-editor-section inventory-adjustment-section" aria-labelledby="inventory-adjustment-heading">
-          <h3 id="inventory-adjustment-heading" class="inventory-subheading"><span aria-hidden="true">◆</span> Adjustment</h3>
-          <label for="inventory-adjustment-category">Category
-            <select id="inventory-adjustment-category" disabled><option value="">Loading categories…</option></select>
-          </label>
-          <label for="inventory-adjustment-qty">Qty
-            <input id="inventory-adjustment-qty" type="number" step="any">
-          </label>
-          <label for="inventory-adjustment-remarks">Remarks
-            <textarea id="inventory-adjustment-remarks" rows="3" maxlength="500"></textarea>
-          </label>
-        </section>
+        <progress class="inventory-save-progress" id="inventory-save-progress" aria-label="Saving inventory changes" hidden></progress>
         <p class="field-hint" id="inventory-adjustment-status" role="status" aria-live="polite"></p>
         <div class="inventory-drawer-actions">
-          <button class="button button-secondary" id="cancel-inventory-adjustment" type="button">Close</button>
           <button class="button button-primary" id="update-inventory-adjustment" type="submit">💾 Update inventory</button>
         </div>
       </form>

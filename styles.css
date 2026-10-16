@@ -219,39 +219,40 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .history-table th:nth-child(n + 5), .history-table td:nth-child(n + 5) { text-align: center; }
 .inventory-form-toolbar { min-height: 55px; }
 .inventory-print-heading { display: none; }
-.inventory-drawer { position: fixed; inset: 0 0 0 auto; width: min(430px, 100%); max-width: 100%; height: 100dvh; max-height: 100dvh; margin: 0 0 0 auto; padding: 18px 20px 20px; overflow-y: auto; border: 1px solid #263345; border-right: 0; border-radius: 12px 0 0 12px; background: #0b101a; color: #dbe6f0; box-shadow: -18px 0 50px rgb(0 0 0 / 35%); }
-.inventory-drawer::backdrop { background: rgb(3 8 15 / 72%); }
-.inventory-drawer-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin: -1px 0 16px; padding: 0 0 12px; border-bottom: 1px solid #243040; }
-.inventory-drawer-heading .eyebrow { margin: 0 0 5px; color: #5ce8f2; font-size: 9px; letter-spacing: 1.4px; }
-.inventory-drawer-heading h2 { margin: 0; color: #e9f1f8; font-size: 19px; letter-spacing: -.3px; }
-.inventory-drawer-heading .dialog-close { width: 34px; height: 34px; border-color: #293545; border-radius: 9px; background: #141b27; color: #f08a9a; }
+.inventory-drawer { position: fixed; inset: 0 0 0 auto; width: min(430px, 100%); max-width: 100%; height: 100dvh; max-height: 100dvh; margin: 0 0 0 auto; padding: 18px 20px 20px; overflow-y: auto; border: 1px solid #e1e8e2; border-right: 0; border-radius: 12px 0 0 12px; background: #fff; color: var(--ink); color-scheme: light; box-shadow: -18px 0 50px rgb(25 45 32 / 20%); }
+.inventory-drawer::backdrop { background: rgb(24 38 29 / 45%); }
+.inventory-drawer-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin: -1px 0 16px; padding: 0 0 12px; border-bottom: 1px solid #e7ece7; }
+.inventory-drawer-heading .eyebrow { margin: 0 0 5px; color: var(--green); font-size: 9px; letter-spacing: 1.4px; }
+.inventory-drawer-heading h2 { margin: 0; color: var(--ink); font-size: 19px; letter-spacing: -.3px; }
+.inventory-drawer-heading .dialog-close { width: 34px; height: 34px; border-color: #e1e8e2; border-radius: 9px; background: #f5f8f5; color: var(--green-dark); }
 .inventory-item-identity { display: grid; gap: 11px; }
 .inventory-item-identity > div, .inventory-readonly-grid > div { display: grid; gap: 5px; min-width: 0; padding: 0; border: 0; background: transparent; }
-.inventory-item-identity small, .inventory-readonly-grid small { color: #7f91a6; font-size: 9px; font-weight: 700; letter-spacing: .65px; text-transform: uppercase; }
-.inventory-item-identity strong, .inventory-readonly-grid strong { overflow-wrap: anywhere; color: #aab8c8; font-size: 12px; font-weight: 550; line-height: 1.45; }
-.inventory-item-identity > div:first-child strong { color: #b6c4d5; }
+.inventory-item-identity small, .inventory-readonly-grid small { color: #77877e; font-size: 9px; font-weight: 700; letter-spacing: .65px; text-transform: uppercase; }
+.inventory-item-identity strong, .inventory-readonly-grid strong { overflow-wrap: anywhere; color: #3e5045; font-size: 12px; font-weight: 550; line-height: 1.45; }
+.inventory-item-identity > div:first-child strong { color: var(--green-dark); }
 .inventory-editor-section { display: grid; gap: 11px; padding-top: 15px; }
-.inventory-subheading { display: flex; align-items: center; gap: 8px; margin: 0; padding-bottom: 8px; border-bottom: 1px solid #202b39; color: #c2d1dd; font-size: 12px; font-weight: 750; letter-spacing: .4px; text-transform: uppercase; }
-.inventory-subheading span { color: #63e7ef; font-size: 12px; }
+.inventory-subheading { display: flex; align-items: center; gap: 8px; margin: 0; padding-bottom: 8px; border-bottom: 1px solid #e7ece7; color: #31483a; font-size: 12px; font-weight: 750; letter-spacing: .4px; text-transform: uppercase; }
+.inventory-subheading span { color: var(--green); font-size: 12px; }
 .inventory-batch-editor { display: grid; gap: 11px; }
 .inventory-batch-editor-row, .inventory-readonly-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.inventory-batch-editor-row label, .inventory-editor-section > label { display: grid; gap: 6px; min-width: 0; color: #8c9cb0; font-size: 9px; font-weight: 700; letter-spacing: .45px; text-transform: uppercase; }
-.inventory-batch-editor-row input, #inventory-adjustment-form select, #inventory-adjustment-form input, #inventory-adjustment-form textarea { width: 100%; min-width: 0; min-height: 39px; padding: 8px 10px; border: 1px solid #293545; border-radius: 8px; background: #121925; color: #e4edf5; color-scheme: dark; font: inherit; font-size: 12px; letter-spacing: 0; text-transform: none; }
-.inventory-batch-editor-row input:focus, #inventory-adjustment-form select:focus, #inventory-adjustment-form input:focus, #inventory-adjustment-form textarea:focus { border-color: #36dcea; outline: 3px solid rgb(54 220 234 / 14%); }
+.inventory-batch-editor-row label, .inventory-editor-section > label { display: grid; gap: 6px; min-width: 0; color: #67766c; font-size: 9px; font-weight: 700; letter-spacing: .45px; text-transform: uppercase; }
+.inventory-batch-editor-row input, #inventory-adjustment-form select, #inventory-adjustment-form input, #inventory-adjustment-form textarea { width: 100%; min-width: 0; min-height: 39px; padding: 8px 10px; border: 1px solid #dce5dd; border-radius: 8px; background: #fff; color: var(--ink); color-scheme: light; font: inherit; font-size: 12px; letter-spacing: 0; text-transform: none; }
+.inventory-batch-editor-row input:focus, #inventory-adjustment-form select:focus, #inventory-adjustment-form input:focus, #inventory-adjustment-form textarea:focus { border-color: #5d9a6b; outline: 3px solid rgb(54 118 83 / 14%); }
 .inventory-readonly-grid { align-items: start; }
 .inventory-readonly-grid > div { min-height: 38px; }
 .inventory-readonly-wide { grid-column: 1 / -1; }
 .inventory-adjustment-section { gap: 11px; }
 #inventory-adjustment-form { display: grid; gap: 11px; margin: 0; padding: 0; border: 0; background: transparent; }
 #inventory-adjustment-form .inventory-subheading { margin: 0; }
-#inventory-adjustment-form select:disabled { border-color: #293545; background: #121925; color: #79879a; }
+#inventory-adjustment-form select:disabled { border-color: #e1e8e2; background: #f5f7f5; color: #77877e; }
 #inventory-adjustment-form textarea { min-height: 82px; resize: vertical; }
 #inventory-adjustment-form .field-hint:empty { display: none; }
-.inventory-drawer-actions { position: sticky; bottom: -20px; display: flex; justify-content: center; gap: 8px; margin: 0 -20px -20px; padding: 12px 20px 20px; border-top: 1px solid #263345; background: rgb(11 16 26 / 96%); }
+#inventory-save-progress { display: block; width: 100%; height: 7px; margin: 3px 0 0; overflow: hidden; accent-color: var(--green); }
+#inventory-save-progress[hidden] { display: none; }
+.inventory-drawer-actions { position: sticky; bottom: -20px; display: flex; justify-content: center; margin: 0 -20px -20px; padding: 12px 20px 20px; border-top: 1px solid #e7ece7; background: rgb(255 255 255 / 96%); }
 .inventory-drawer-actions .button { min-height: 39px; border-radius: 8px; font-size: 11px; }
-.inventory-drawer-actions .button-primary { min-width: 170px; background: #00cde1; color: #06121a; box-shadow: 0 5px 15px rgb(0 205 225 / 18%); }
-.inventory-drawer-actions .button-primary:hover { background: #52e8f2; }
-.inventory-drawer-actions .button-secondary { border-color: #293545; background: #141b27; color: #b7c5d5; }
+.inventory-drawer-actions .button-primary { min-width: 190px; background: var(--green); color: #fff; box-shadow: 0 5px 15px rgb(54 118 83 / 18%); }
+.inventory-drawer-actions .button-primary:hover { background: var(--green-dark); }
 .inventory-print-table { min-width: 1180px; }
 .section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 19px; padding: 20px 22px; border: 1px solid #e1e9e2; border-radius: 14px; background: linear-gradient(112deg, #fff 0%, #f2f8f3 100%); box-shadow: 0 7px 18px rgb(30 52 39 / 4%); }
 #user-forms > .section-heading { position: relative; min-height: 164px; align-items: center; overflow: hidden; padding: 25px 28px; border-color: #244d3b; background: radial-gradient(circle at 88% 16%, rgb(222 242 220 / 16%) 0 68px, transparent 69px), radial-gradient(circle at 100% 115%, rgb(225 238 206 / 13%) 0 130px, transparent 131px), linear-gradient(118deg, #173d2d 0%, #285c42 58%, #477b56 100%); box-shadow: 0 12px 26px rgb(29 70 46 / 16%); }

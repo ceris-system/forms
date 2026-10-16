@@ -366,10 +366,13 @@ async function updateInventoryAdjustment(
 
   const data: Record<string, unknown>[] = [];
   if (batchValues) {
-    data.push({
-      range: range(department, `H${sheetRow}:M${sheetRow}`),
-      values: [batchValues],
-    });
+    const columns = ["H", "I", "J", "K", "L", "M"];
+    for (const [index, column] of columns.entries()) {
+      data.push({
+        range: a1Range(department, `${column}${sheetRow}:${column}${sheetRow}`),
+        values: [[batchValues[index]]],
+      });
+    }
   }
   const requestedCategory = typeof body.category === "string" ? body.category.trim() : "";
   const adjustmentQtyText = String(body.qty ?? "").trim();
@@ -382,13 +385,13 @@ async function updateInventoryAdjustment(
       throw new InventoryRequestError("Enter a valid adjustment quantity.", 400);
     }
     data.push({
-      range: range(department, `R${sheetRow}:T${sheetRow}`),
+      range: a1Range(department, `R${sheetRow}:T${sheetRow}`),
       values: [[category, adjustmentQty, remarks]],
     });
     adjustmentUpdated = true;
   }
   if (!data.length) throw new InventoryRequestError("There are no inventory changes to save.", 400);
-  await googleRequest(
+  const updateResult = await googleRequest(
     `spreadsheets/${spreadsheetId}/values:batchUpdate`,
     { method: "POST", body: JSON.stringify({ valueInputOption: "RAW", data }) },
   );
@@ -398,6 +401,10 @@ async function updateInventoryAdjustment(
     sheet_row: sheetRow,
     batches: batchValues,
     adjustment_updated: adjustmentUpdated,
+    updated_ranges: Array.isArray(updateResult.responses)
+      ? updateResult.responses.map((response: Record<string, unknown>) => response.updatedRange).filter(Boolean)
+      : [],
+    updated_cells: Number(updateResult.totalUpdatedCells || 0),
   };
 }
 

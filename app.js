@@ -449,7 +449,7 @@ async function loadInventoryPage(pageId, refresh = false) {
   }
   try {
     const result = await requestSheetData("inventory_load", { department: requestedDepartment });
-    if (inventoryLoadIds.get(pageId) !== loadId || activePageId !== pageId || currentSession?.user.id !== userId) return;
+    if (inventoryLoadIds.get(pageId) !== loadId || activePageId !== pageId || currentSession?.user.id !== userId) return false;
     inventoryCategories = result.categories || [];
     inventoryDepartment = result.department || "";
     setInventoryDepartmentOptions(result.departments || []);
@@ -457,14 +457,16 @@ async function loadInventoryPage(pageId, refresh = false) {
     if (!inventoryDepartment) {
       if (isInventoryForm) renderInventoryFormRows();
       else renderInventoryRows();
-      return;
+      return true;
     }
     if (isInventoryForm) renderInventoryFormRows();
     else renderInventoryRows();
+    return true;
   } catch (error) {
-    if (inventoryLoadIds.get(pageId) !== loadId || activePageId !== pageId || currentSession?.user.id !== userId) return;
+    if (inventoryLoadIds.get(pageId) !== loadId || activePageId !== pageId || currentSession?.user.id !== userId) return false;
     console.error("Unable to load department inventory.", error);
     status.textContent = `Could not load inventory: ${error.message || "Request failed."}`;
+    return false;
   }
 }
 
@@ -568,6 +570,7 @@ function showInventoryItem(sheetRow) {
     [2, row.expiration_2, row.qty_2],
     [3, row.expiration_3, row.qty_3],
   ]) {
+    const batchLabel = ["1ST", "2ND", "3RD"][index - 1];
     const batch = document.createElement("div");
     batch.className = "inventory-batch-editor-row";
     const dateLabel = document.createElement("label");
@@ -577,7 +580,7 @@ function showInventoryItem(sheetRow) {
     dateInput.dataset.inventoryBatchDate = String(index);
     dateInput.value = toDateInputValue(String(date ?? ""));
     dateLabel.htmlFor = dateInput.id;
-    dateLabel.append(document.createTextNode(`Expiration date (${["1st", "2nd", "3rd"][index - 1]})`), dateInput);
+    dateLabel.append(document.createTextNode(`EXPIRATION DATE ${batchLabel}`), dateInput);
 
     const qtyLabel = document.createElement("label");
     const qtyInput = document.createElement("input");
@@ -588,7 +591,7 @@ function showInventoryItem(sheetRow) {
     qtyInput.dataset.inventoryBatchQty = String(index);
     qtyInput.value = qty == null ? "" : String(qty);
     qtyLabel.htmlFor = qtyInput.id;
-    qtyLabel.append(document.createTextNode("Qty"), qtyInput);
+    qtyLabel.append(document.createTextNode("QTY"), qtyInput);
     batch.append(dateLabel, qtyLabel);
     batches.append(batch);
   }
@@ -610,12 +613,19 @@ async function saveInventoryAdjustment(event) {
   if (!selectedInventoryRow) return;
   const button = document.querySelector("#update-inventory-adjustment");
   const status = document.querySelector("#inventory-adjustment-status");
+  const progress = document.querySelector("#inventory-save-progress");
   const skuCode = selectedInventoryRow.sku_code;
+  const requestedDepartment = isAdmin
+    ? inventoryDepartment
+    : currentUserProfile.department;
+  const originalButtonText = button.textContent;
   button.disabled = true;
-  status.textContent = "Saving inventory…";
+  button.textContent = "Updating…";
+  progress.hidden = false;
+  status.textContent = `Saving changes to ${requestedDepartment || "your department"} sheet…`;
   try {
-    await requestSheetData("inventory_adjustment_update", {
-      department: inventoryDepartment,
+    const result = await requestSheetData("inventory_adjustment_update", {
+      department: requestedDepartment,
       sheet_row: selectedInventoryRow.sheet_row,
       sku_code: skuCode,
       batches: [...document.querySelectorAll("[data-inventory-batch-date]")].map(dateInput => {
@@ -627,14 +637,25 @@ async function saveInventoryAdjustment(event) {
       qty: document.querySelector("#inventory-adjustment-qty").value,
       remarks: document.querySelector("#inventory-adjustment-remarks").value,
     });
+    const savedDepartment = String(result.department || "").trim();
+    if (!savedDepartment || savedDepartment.toLocaleLowerCase() !== requestedDepartment.toLocaleLowerCase()) {
+      throw new Error(`The server confirmed a write to ${savedDepartment || "an unknown department"}, not ${requestedDepartment}.`);
+    }
+    status.textContent = `Saved to ${savedDepartment}. Reloading the latest inventory…`;
+    const refreshed = await loadInventoryPage("inventory", true);
+    if (!refreshed) {
+      status.textContent = `Saved to ${savedDepartment}, but the inventory table could not be reloaded. Refresh the table to verify the latest data.`;
+      return;
+    }
     document.querySelector("#inventory-item-dialog").close();
-    await loadInventoryPage("inventory", true);
-    document.querySelector("#inventory-status").textContent = `Inventory updated for ${skuCode}.`;
+    document.querySelector("#inventory-status").textContent = `Inventory updated for ${skuCode} in ${savedDepartment}.`;
   } catch (error) {
     console.error("Unable to update inventory adjustment.", error);
     status.textContent = `Could not update adjustment: ${error.message || "Request failed."}`;
   } finally {
+    progress.hidden = true;
     button.disabled = false;
+    button.textContent = originalButtonText;
   }
 }
 
@@ -2283,7 +2304,6 @@ document.querySelector("#inventory-rows").addEventListener("click", event => {
 });
 document.querySelector("#inventory-adjustment-form").addEventListener("submit", saveInventoryAdjustment);
 document.querySelector("#close-inventory-item").addEventListener("click", () => document.querySelector("#inventory-item-dialog").close());
-document.querySelector("#cancel-inventory-adjustment").addEventListener("click", () => document.querySelector("#inventory-item-dialog").close());
 document.querySelector("#print-inventory-form").addEventListener("click", () => {
   const department = inventoryDepartment || currentUserProfile.department;
   document.querySelector("#inventory-print-department").textContent = department ? `Department: ${department}` : "Department: Not selected";
