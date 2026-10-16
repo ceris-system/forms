@@ -895,15 +895,15 @@ function printReleaseForm(sheet, requestNumber) {
   printWindow.document.title = `Request ${requestNumber}`;
   const style = printWindow.document.createElement("style");
   style.textContent = `
-    @page { size: A4 landscape; margin: 12mm; }
+    @page { size: A4 portrait; margin: 10mm; }
     * { box-sizing: border-box; font-family: Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body { margin: 0; color: #171719; }
     .release-form-sheet { width: 100%; padding: 0; }
-    .release-form-header { display: grid; justify-items: center; gap: 5px; margin-bottom: 22px; text-align: center; }
+    .release-form-header { display: grid; justify-items: center; gap: 5px; margin-bottom: 18px; text-align: center; }
     .release-form-header img { width: 150px; max-height: 42px; object-fit: contain; }
     .release-form-header h2 { margin: 0; font-size: 14px; letter-spacing: 1px; text-transform: uppercase; }
     .release-form-header > strong { font-size: 11px; }
-    .release-form-details { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 20px; margin: 0 0 14px; }
+    .release-form-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin: 0 0 12px; }
     .release-form-details > div { min-width: 0; }
     .release-form-details dt { margin-bottom: 4px; font-size: 8px; font-weight: 700; text-transform: uppercase; }
     .release-form-details dd { margin: 0; overflow-wrap: anywhere; font-size: 10px; }
@@ -911,17 +911,17 @@ function printReleaseForm(sheet, requestNumber) {
     .release-form-items { width: 100%; border-collapse: collapse; table-layout: fixed; }
     .release-form-items thead { display: table-header-group; }
     .release-form-items tr { break-inside: avoid; }
-    .release-form-items th { padding: 7px 4px; border: 0; background-color: #171719 !important; color: white !important; font-size: 7px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    .release-form-items td { padding: 7px 4px; border-bottom: 1px solid #d9ddd9; font-size: 8px; overflow-wrap: anywhere; }
-    .release-form-items th:nth-child(1) { width: 8%; }
+    .release-form-items th { padding: 6px 3px; border: 1px solid #171719; background: #171719 !important; background-color: #171719 !important; box-shadow: inset 0 0 0 1000px #171719; color: #fff !important; font-size: 6px; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .release-form-items td { padding: 5px 3px; border-bottom: 1px solid #d9ddd9; font-size: 7px; overflow-wrap: anywhere; }
+    .release-form-items th:nth-child(1) { width: 12%; }
     .release-form-items th:nth-child(2) { width: 22%; }
-    .release-form-items th:nth-child(3) { width: 5%; }
-    .release-form-items th:nth-child(4), .release-form-items th:nth-child(5) { width: 7%; }
-    .release-form-items th:nth-child(6) { width: 8%; }
-    .release-form-items th:nth-child(7), .release-form-items th:nth-child(8) { width: 7%; }
-    .release-form-items th:nth-child(9), .release-form-items th:nth-child(10) { width: 8%; }
-    .release-form-items th:nth-child(11) { width: 15%; }
-    .release-form-signatures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 20px; margin-top: 38px; break-inside: avoid; }
+    .release-form-items th:nth-child(3) { width: 4%; }
+    .release-form-items th:nth-child(4), .release-form-items th:nth-child(5) { width: 5%; }
+    .release-form-items th:nth-child(6) { width: 7%; }
+    .release-form-items th:nth-child(7), .release-form-items th:nth-child(8) { width: 6%; }
+    .release-form-items th:nth-child(9), .release-form-items th:nth-child(10) { width: 7%; }
+    .release-form-items th:nth-child(11) { width: 19%; }
+    .release-form-signatures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 16px; margin-top: 28px; break-inside: avoid; }
     .release-form-signatures > div { display: grid; min-height: 110px; grid-template-rows: 72px 16px 1px 11px 11px; gap: 4px; text-align: center; }
     .release-form-signatures strong, .release-form-signatures b { align-self: end; font-size: 8px; }
     .release-form-signatures .release-signature-line { height: 1px; border-top: 1px solid #171719; background: transparent; }
