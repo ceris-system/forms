@@ -572,7 +572,7 @@ td { padding: 10px 12px; border-top: 1px solid #f0f1ef; color: #536057; font-siz
   .release-form-signatures { gap: 8px; margin-top: 24px; }
 }
 @media print {
-  @page { size: landscape; margin: 10mm; }
+  @page { size: portrait; margin: 8mm; }
   body.print-inventory * { visibility: hidden !important; }
   body.print-inventory #inventory-form,
   body.print-inventory #inventory-form * { visibility: visible !important; }
@@ -586,8 +586,21 @@ td { padding: 10px 12px; border-top: 1px solid #f0f1ef; color: #536057; font-siz
   body.print-inventory #inventory-form-status { display: none !important; }
   body.print-inventory .inventory-table-scroll { max-height: none; overflow: visible; border: 0; }
   body.print-inventory .inventory-print-table { min-width: 0; width: 100%; table-layout: fixed; border-collapse: collapse; }
+  body.print-inventory .inventory-print-table thead { display: table-header-group; }
+  body.print-inventory .inventory-print-table th:nth-child(1), body.print-inventory .inventory-print-table td:nth-child(1) { width: 10%; }
+  body.print-inventory .inventory-print-table th:nth-child(2), body.print-inventory .inventory-print-table td:nth-child(2) { width: 20%; }
+  body.print-inventory .inventory-print-table th:nth-child(3), body.print-inventory .inventory-print-table td:nth-child(3) { width: 6%; }
+  body.print-inventory .inventory-print-table th:nth-child(4), body.print-inventory .inventory-print-table td:nth-child(4) { width: 6%; }
+  body.print-inventory .inventory-print-table th:nth-child(5), body.print-inventory .inventory-print-table td:nth-child(5) { width: 8%; }
+  body.print-inventory .inventory-print-table th:nth-child(6), body.print-inventory .inventory-print-table td:nth-child(6),
+  body.print-inventory .inventory-print-table th:nth-child(8), body.print-inventory .inventory-print-table td:nth-child(8),
+  body.print-inventory .inventory-print-table th:nth-child(10), body.print-inventory .inventory-print-table td:nth-child(10) { width: 9%; }
+  body.print-inventory .inventory-print-table th:nth-child(7), body.print-inventory .inventory-print-table td:nth-child(7),
+  body.print-inventory .inventory-print-table th:nth-child(9), body.print-inventory .inventory-print-table td:nth-child(9),
+  body.print-inventory .inventory-print-table th:nth-child(11), body.print-inventory .inventory-print-table td:nth-child(11) { width: 5%; }
+  body.print-inventory .inventory-print-table th:nth-child(12), body.print-inventory .inventory-print-table td:nth-child(12) { width: 8%; }
   body.print-inventory .inventory-print-table th,
-  body.print-inventory .inventory-print-table td { padding: 4px 3px; border: 1px solid #999; color: #000; font-size: 7px; white-space: normal; }
+  body.print-inventory .inventory-print-table td { padding: 3px 2px; border: 1px solid #999; color: #000; font-size: 6px; line-height: 1.2; white-space: normal; overflow-wrap: anywhere; }
 }
 
 @media (prefers-reduced-motion: reduce) {
