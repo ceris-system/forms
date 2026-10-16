@@ -399,6 +399,7 @@ async function loadWorkflowRequests(
   filter: "pending" | "approved" | "released" | "mine",
   department = "",
   username = "",
+  allDepartments = false,
 ): Promise<Record<string, unknown>[]> {
   const metadata = await getSheetMetadata(spreadsheetId);
   const availableTabs = new Map<string, string>(
@@ -423,9 +424,9 @@ async function loadWorkflowRequests(
       const matches = filter === "pending"
         ? status === "pending"
         : filter === "approved"
-        ? status === "approved" && outgoing.toLocaleLowerCase() === department.toLocaleLowerCase()
+        ? status === "approved" && (allDepartments || outgoing.toLocaleLowerCase() === department.toLocaleLowerCase())
         : filter === "released"
-        ? status === "released" && incoming.toLocaleLowerCase() === department.toLocaleLowerCase()
+        ? status === "released" && (allDepartments || incoming.toLocaleLowerCase() === department.toLocaleLowerCase())
         : submittedBy.toLocaleLowerCase() === username.toLocaleLowerCase();
       if (!matches) continue;
 
@@ -529,7 +530,7 @@ async function applyWorkflowAction(
   if (action !== "approve" && action !== "release" && action !== "receive") {
     throw new Error("Unknown request workflow action.");
   }
-  if (action !== "approve" && !user.department) {
+  if (action !== "approve" && !user.isMasterAdmin && !user.department) {
     throw new Error("Your account has no department assigned. Ask the Master Admin to update your account.");
   }
 
@@ -546,12 +547,12 @@ async function applyWorkflowAction(
     if (matchingRows.some(({ row }) => String(row[18] || "").trim().toLocaleLowerCase() !== expectedStatus.toLocaleLowerCase())) {
       throw new Error(`This request is no longer ${expectedStatus}. Refresh the list and try again.`);
     }
-    if (action === "release" && matchingRows.some(({ row }) =>
+    if (action === "release" && !user.isMasterAdmin && matchingRows.some(({ row }) =>
       String(row[3] || "").trim().toLocaleLowerCase() !== user.department.trim().toLocaleLowerCase()
     )) {
       throw new Error("Only the request's outgoing department can release it.");
     }
-    if (action === "receive" && matchingRows.some(({ row }) =>
+    if (action === "receive" && !user.isMasterAdmin && matchingRows.some(({ row }) =>
       String(row[4] || "").trim().toLocaleLowerCase() !== user.department.trim().toLocaleLowerCase()
     )) {
       throw new Error("Only the request's incoming department can receive it.");
@@ -721,10 +722,14 @@ Deno.serve(async (request: Request) => {
         return respond({ requests: await loadWorkflowRequests(settings.spreadsheet_id, "mine", "", user.username) });
       }
       if (body.action === "pending_release") {
-        return respond({ requests: await loadWorkflowRequests(settings.spreadsheet_id, "approved", user.department) });
+        return respond({
+          requests: await loadWorkflowRequests(settings.spreadsheet_id, "approved", user.department, "", user.isMasterAdmin),
+        });
       }
       if (body.action === "pending_received") {
-        return respond({ requests: await loadWorkflowRequests(settings.spreadsheet_id, "released", user.department) });
+        return respond({
+          requests: await loadWorkflowRequests(settings.spreadsheet_id, "released", user.department, "", user.isMasterAdmin),
+        });
       }
       const workflowAction = body.workflow && typeof body.workflow === "object"
         ? body.workflow as Record<string, unknown>
