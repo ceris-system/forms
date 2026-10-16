@@ -851,6 +851,8 @@ function makeReleaseFormSheet(request) {
   const released = makeUnsignedReleaseSignature("RELEASED BY: / DESIGNATION");
   const approved = document.createElement("div");
   approved.className = "release-form-approved-signature";
+  const approvalName = document.createElement("div");
+  approvalName.className = "release-approval-name";
   const signature = document.createElement("img");
   signature.src = new URL("SIG.png", document.baseURI).href;
   signature.alt = "Approver's signature";
@@ -862,7 +864,8 @@ function makeReleaseFormSheet(request) {
   approvalLabel.textContent = "APPROVED BY";
   const approvalCaption = document.createElement("small");
   approvalCaption.textContent = "APPROVAL SIGNATURE";
-  approved.append(signature, approver, signatureLine, approvalLabel, approvalCaption);
+  approvalName.append(approver, signature);
+  approved.append(approvalName, signatureLine, approvalLabel, approvalCaption);
   const received = makeUnsignedReleaseSignature("RECEIVED BY: / DESIGNATION");
   signatures.append(released, approved, received);
   sheet.append(signatures);
@@ -875,14 +878,13 @@ function makeUnsignedReleaseSignature(label) {
   const imageSpace = document.createElement("span");
   imageSpace.className = "release-signature-space";
   imageSpace.setAttribute("aria-hidden", "true");
-  const nameSpace = imageSpace.cloneNode();
   const line = document.createElement("span");
   line.className = "release-signature-line";
   const title = document.createElement("strong");
   title.textContent = label;
   const caption = document.createElement("small");
   caption.textContent = "SIGNATURE OVER PRINTED NAME";
-  signature.append(imageSpace, nameSpace, line, title, caption);
+  signature.append(imageSpace, line, title, caption);
   return signature;
 }
 
@@ -922,13 +924,14 @@ function printReleaseForm(sheet, requestNumber) {
     .release-form-items th:nth-child(9), .release-form-items th:nth-child(10) { width: 7%; }
     .release-form-items th:nth-child(11) { width: 19%; }
     .release-form-signatures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 16px; margin-top: 28px; break-inside: avoid; }
-    .release-form-signatures > div { display: grid; min-height: 110px; grid-template-rows: 72px 16px 1px 11px 11px; gap: 4px; text-align: center; }
+    .release-form-signatures > div { display: grid; min-height: 82px; grid-template-rows: 46px 1px 11px 11px; gap: 4px; text-align: center; }
+    .release-approval-name { position: relative; display: grid; align-items: end; justify-items: center; min-width: 0; }
     .release-form-signatures strong, .release-form-signatures b { align-self: end; font-size: 8px; }
     .release-form-signatures .release-signature-line { height: 1px; border-top: 1px solid #171719; background: transparent; }
     .release-form-unsigned-signature .release-signature-space { background: transparent; }
     .release-form-signatures small { font-size: 7px; font-weight: 600; }
-    .release-form-approved-signature img { justify-self: center; width: 112px; height: 72px; max-width: 100%; object-fit: cover; object-position: center 55%; }
-    .release-form-approved-signature strong { overflow-wrap: anywhere; font-size: 8px; }
+    .release-form-approved-signature img { position: absolute; z-index: 2; top: 10px; left: 50%; width: 52px; height: 32px; max-width: 100%; transform: translateX(-50%); object-fit: cover; object-position: center 55%; }
+    .release-form-approved-signature strong { position: relative; z-index: 1; max-width: 100%; overflow-wrap: anywhere; font-size: 8px; }
     @media screen { body { padding: 20px; } }
   `;
   printWindow.document.head.append(style);

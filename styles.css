@@ -133,13 +133,14 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .release-form-items th:nth-child(9), .release-form-items th:nth-child(10) { width: 8%; }
 .release-form-items th:nth-child(11) { width: 15%; }
 .release-form-signatures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 20px; margin-top: 38px; }
-.release-form-signatures > div { display: grid; min-height: 110px; grid-template-rows: 72px 16px 1px 11px 11px; gap: 4px; text-align: center; }
+.release-form-signatures > div { display: grid; min-height: 82px; grid-template-rows: 46px 1px 11px 11px; gap: 4px; text-align: center; }
+.release-approval-name { position: relative; display: grid; align-items: end; justify-items: center; min-width: 0; }
 .release-form-signatures strong, .release-form-signatures b { align-self: end; font-size: 8px; }
 .release-form-signatures .release-signature-line { height: 1px; border-top: 1px solid #171719; background: transparent; }
 .release-form-unsigned-signature .release-signature-space { background: transparent; }
 .release-form-signatures small { font-size: 7px; font-weight: 600; }
-.release-form-approved-signature img { justify-self: center; width: 112px; height: 72px; max-width: 100%; object-fit: cover; object-position: center 55%; }
-.release-form-approved-signature strong { overflow-wrap: anywhere; font-size: 8px; }
+.release-form-approved-signature img { position: absolute; z-index: 2; top: 10px; left: 50%; width: 52px; height: 32px; max-width: 100%; transform: translateX(-50%); object-fit: cover; object-position: center 55%; }
+.release-form-approved-signature strong { position: relative; z-index: 1; max-width: 100%; overflow-wrap: anywhere; font-size: 8px; }
 .release-form-actions { gap: 8px; }
 .approval-signature { display: grid; justify-items: center; gap: 5px; margin: 0 18px 14px; padding: 10px 12px; border-bottom: 1px solid #373e39; }
 .approval-signature strong { font-family: cursive; font-size: 20px; font-weight: 500; }
