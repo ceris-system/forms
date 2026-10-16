@@ -359,7 +359,7 @@
     <dialog class="inventory-drawer" id="inventory-item-dialog" aria-labelledby="inventory-item-title">
       <div class="inventory-drawer-heading">
         <div><p class="eyebrow">INVENTORY ITEM</p><h2 id="inventory-item-title">Item details</h2></div>
-        <button class="dialog-close" id="close-inventory-item" type="button" aria-label="Close item details">×</button>
+        <button class="dialog-close" id="close-inventory-item" type="button" aria-label="Close item details">✖️</button>
       </div>
       <div class="inventory-detail-grid">
         <div><small>SKU Code</small><strong id="inventory-item-sku"></strong></div>
@@ -377,10 +377,7 @@
         <div class="inventory-detail-wide"><small>Total Available Qty</small><strong id="inventory-item-total"></strong></div>
       </div>
       <form id="inventory-adjustment-form">
-        <div class="inventory-adjustment-heading">
-          <span class="inventory-adjustment-icon" aria-hidden="true">↕</span>
-          <div><h3 class="inventory-subheading">Stock adjustment</h3><p>Record a change to this item’s inventory.</p></div>
-        </div>
+        <h3 class="inventory-subheading">Adjustment</h3>
         <label for="inventory-adjustment-category">Category
           <select id="inventory-adjustment-category" required disabled><option value="">Loading categories…</option></select>
         </label>
