@@ -138,14 +138,64 @@
               <div><p class="eyebrow">📊 REPORTS &amp; RECORDS</p><h1>Reports &amp; History</h1><p class="section-description">Choose a section to view its records and reports.</p></div>
             </div>
             <div class="report-menu-grid" aria-label="Reports and history sections">
-              <button class="report-menu-button" type="button"><span class="report-menu-icon" aria-hidden="true">📦</span><span>Inventory</span></button>
+              <button class="report-menu-button" type="button" data-report-target="inventory"><span class="report-menu-icon" aria-hidden="true">📦</span><span>Inventory</span></button>
               <button class="report-menu-button" type="button"><span class="report-menu-icon" aria-hidden="true">📤</span><span>Request and Released History</span></button>
               <button class="report-menu-button" type="button"><span class="report-menu-icon" aria-hidden="true">🔄</span><span>Transfer History</span></button>
               <button class="report-menu-button" type="button"><span class="report-menu-icon" aria-hidden="true">↩️</span><span>Pull Out History</span></button>
               <button class="report-menu-button" type="button"><span class="report-menu-icon" aria-hidden="true">🛒</span><span>P.O History</span></button>
-              <button class="report-menu-button" type="button"><span class="report-menu-icon" aria-hidden="true">📝</span><span>Inventory Form</span></button>
+              <button class="report-menu-button" type="button" data-report-target="inventory-form"><span class="report-menu-icon" aria-hidden="true">📝</span><span>Inventory Form</span></button>
               <button class="report-menu-button" type="button"><span class="report-menu-icon" aria-hidden="true">📊</span><span>Report Summary</span></button>
               <button class="report-menu-button" type="button"><span class="report-menu-icon" aria-hidden="true">👥</span><span>User Logs History</span></button>
+            </div>
+          </section>
+
+          <section class="section-block user-only portal-page" id="inventory" data-page-section hidden>
+            <div class="section-heading">
+              <div><p class="eyebrow">📦 STOCK CONTROL</p><h1>Inventory</h1><p class="section-description">Browse stock by department, search items, and open an item to view its expiration batches and make an adjustment.</p></div>
+              <div class="inventory-page-actions">
+                <button class="button button-secondary" type="button" data-back-to-reports>← Reports &amp; History</button>
+                <button class="button button-secondary" id="refresh-inventory" type="button">🔄 Refresh</button>
+              </div>
+            </div>
+            <div class="inventory-toolbar">
+              <label class="inventory-department-admin admin-only" for="inventory-department">Department
+                <select id="inventory-department" disabled><option value="">Loading departments…</option></select>
+              </label>
+              <p class="inventory-assigned-department user-only">Department: <strong id="inventory-assigned-department">Not assigned</strong></p>
+              <label class="inventory-search-label" for="inventory-search">Search inventory
+                <input class="catalog-search" id="inventory-search" type="search" placeholder="Search SKU, description, or department">
+              </label>
+            </div>
+            <p class="field-hint" id="inventory-status" role="status" aria-live="polite"></p>
+            <div class="inventory-table-scroll">
+              <table class="inventory-table">
+                <thead><tr><th scope="col">SKU Code</th><th scope="col">Product Description</th><th scope="col">UOM</th><th scope="col">Cost</th><th scope="col">SRP</th><th scope="col">Near Expiration Date</th><th scope="col">On Hand</th><th scope="col">Total On Hand</th><th scope="col">Department</th><th scope="col">View</th></tr></thead>
+                <tbody id="inventory-rows"></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section-block user-only portal-page" id="inventory-form" data-page-section hidden>
+            <div class="section-heading">
+              <div><p class="eyebrow">📝 STOCK REPORT</p><h1>Inventory Form</h1><p class="section-description">Review and print the inventory list and expiration batches for a department.</p></div>
+              <div class="inventory-page-actions">
+                <button class="button button-secondary" type="button" data-back-to-reports>← Reports &amp; History</button>
+                <button class="button button-secondary" id="refresh-inventory-form" type="button">🔄 Refresh</button>
+                <button class="button button-primary" id="print-inventory-form" type="button">🖨️ Print</button>
+              </div>
+            </div>
+            <div class="inventory-toolbar inventory-form-toolbar">
+              <label class="inventory-department-admin admin-only" for="inventory-form-department">Department
+                <select id="inventory-form-department" disabled><option value="">Loading departments…</option></select>
+              </label>
+              <p class="inventory-assigned-department user-only">Department: <strong id="inventory-form-assigned-department">Not assigned</strong></p>
+            </div>
+            <p class="field-hint" id="inventory-form-status" role="status" aria-live="polite"></p>
+            <div class="inventory-table-scroll">
+              <table class="inventory-table inventory-print-table">
+                <thead><tr><th scope="col">SKU Code</th><th scope="col">Item Description</th><th scope="col">UOM</th><th scope="col">SRP</th><th scope="col">Total Qty on Hand</th><th scope="col">Expiration Date</th><th scope="col">Qty</th><th scope="col">Expiration Date</th><th scope="col">Qty</th><th scope="col">Expiration Date</th><th scope="col">Qty</th><th scope="col">Ending Quantity</th></tr></thead>
+                <tbody id="inventory-form-rows"></tbody>
+              </table>
             </div>
           </section>
 
@@ -274,6 +324,44 @@
         </div>
       </main>
     </div>
+    <dialog class="inventory-drawer" id="inventory-item-dialog" aria-labelledby="inventory-item-title">
+      <div class="inventory-drawer-heading">
+        <div><p class="eyebrow">INVENTORY ITEM</p><h2 id="inventory-item-title">Item details</h2></div>
+        <button class="dialog-close" id="close-inventory-item" type="button" aria-label="Close item details">✖️</button>
+      </div>
+      <div class="inventory-detail-grid">
+        <div><small>SKU Code</small><strong id="inventory-item-sku"></strong></div>
+        <div class="inventory-detail-wide"><small>Item Description</small><strong id="inventory-item-description"></strong></div>
+        <div><small>Expiration Date</small><strong id="inventory-item-expiration"></strong></div>
+        <div><small>Qty</small><strong id="inventory-item-qty"></strong></div>
+      </div>
+      <h3 class="inventory-subheading">Expiration Batches</h3>
+      <div class="inventory-batch-list" id="inventory-item-batches"></div>
+      <div class="inventory-detail-grid">
+        <div><small>Cost</small><strong id="inventory-item-cost"></strong></div>
+        <div><small>SRP</small><strong id="inventory-item-srp"></strong></div>
+        <div><small>Stock Received Qty</small><strong id="inventory-item-received-qty"></strong></div>
+        <div><small>Latest Stock Received</small><strong id="inventory-item-latest-received"></strong></div>
+        <div class="inventory-detail-wide"><small>Total Available Qty</small><strong id="inventory-item-total"></strong></div>
+      </div>
+      <form id="inventory-adjustment-form">
+        <h3 class="inventory-subheading">Adjustment</h3>
+        <label for="inventory-adjustment-category">Category
+          <select id="inventory-adjustment-category" required disabled><option value="">Loading categories…</option></select>
+        </label>
+        <label for="inventory-adjustment-qty">Qty
+          <input id="inventory-adjustment-qty" type="number" step="any" required>
+        </label>
+        <label for="inventory-adjustment-remarks">Remarks
+          <textarea id="inventory-adjustment-remarks" rows="3" maxlength="500"></textarea>
+        </label>
+        <p class="field-hint" id="inventory-adjustment-status" role="status" aria-live="polite"></p>
+        <div class="inventory-drawer-actions">
+          <button class="button button-secondary" id="cancel-inventory-adjustment" type="button">Close</button>
+          <button class="button button-primary" id="update-inventory-adjustment" type="submit">Update</button>
+        </div>
+      </form>
+    </dialog>
     <dialog class="request-dialog" id="request-dialog" aria-labelledby="form-dialog-title">
       <form id="request-form">
         <div class="request-sheet-header">

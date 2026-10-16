@@ -51,6 +51,11 @@ let pendingInstallPrompt = null;
 const workflowLoadIds = new Map();
 const IDLE_SIGN_OUT_DELAY = 10 * 60 * 1000;
 let idleSignOutTimer = null;
+let inventoryRows = [];
+let inventoryCategories = [];
+let inventoryDepartment = "";
+let selectedInventoryRow = null;
+const inventoryLoadIds = new Map();
 
 function resetIdleSignOutTimer() {
   clearTimeout(idleSignOutTimer);
@@ -310,6 +315,187 @@ async function requestSheetData(action, payload) {
   return data;
 }
 
+function setInventoryDepartmentOptions(departments) {
+  for (const id of ["inventory-department", "inventory-form-department"]) {
+    const select = document.querySelector(`#${id}`);
+    const selected = inventoryDepartment;
+    select.replaceChildren(new Option("Select department…", ""));
+    for (const department of departments) select.add(new Option(department, department));
+    select.value = departments.find(value => value.toLocaleLowerCase() === selected.toLocaleLowerCase()) || "";
+    select.disabled = departments.length === 0;
+  }
+  for (const id of ["inventory-assigned-department", "inventory-form-assigned-department"]) {
+    document.querySelector(`#${id}`).textContent = inventoryDepartment || currentUserProfile.department || "Not assigned";
+  }
+}
+
+function renderInventoryRows() {
+  const search = document.querySelector("#inventory-search").value.trim().toLocaleLowerCase();
+  const filtered = inventoryRows.filter(row =>
+    [row.sku_code, row.description, row.uom, row.cost, row.srp, row.near_expiration, row.on_hand, row.total_on_hand, row.department]
+      .some(value => String(value || "").toLocaleLowerCase().includes(search))
+  );
+  const body = document.querySelector("#inventory-rows");
+  body.replaceChildren();
+  for (const row of filtered) {
+    const tr = document.createElement("tr");
+    for (const value of [row.sku_code, row.description, row.uom, row.cost, row.srp, row.near_expiration, row.on_hand, row.total_on_hand, row.department]) {
+      const cell = document.createElement("td");
+      cell.textContent = String(value || "—");
+      tr.append(cell);
+    }
+    const actionCell = document.createElement("td");
+    const view = document.createElement("button");
+    view.type = "button";
+    view.className = "button button-secondary inventory-view-button";
+    view.dataset.inventoryRow = String(row.sheet_row);
+    view.textContent = "View";
+    actionCell.append(view);
+    tr.append(actionCell);
+    body.append(tr);
+  }
+  const status = document.querySelector("#inventory-status");
+  if (inventoryRows.length) status.textContent = `${filtered.length} of ${inventoryRows.length} inventory items${inventoryDepartment ? ` · ${inventoryDepartment}` : ""}.`;
+  else if (inventoryDepartment) status.textContent = `No inventory items were found for ${inventoryDepartment}.`;
+  else status.textContent = "Select a department to load its inventory.";
+}
+
+function renderInventoryFormRows() {
+  const body = document.querySelector("#inventory-form-rows");
+  body.replaceChildren();
+  for (const row of inventoryRows) {
+    const tr = document.createElement("tr");
+    const values = [
+      row.sku_code, row.description, row.uom, row.expiration_2, row.total_on_hand,
+      row.expiration_1, row.qty_1, row.expiration_2, row.qty_2,
+      row.expiration_3, row.qty_3, row.total_on_hand,
+    ];
+    for (const value of values) {
+      const cell = document.createElement("td");
+      cell.textContent = String(value || "—");
+      tr.append(cell);
+    }
+    body.append(tr);
+  }
+}
+
+async function loadInventoryPage(pageId, refresh = false) {
+  const isInventoryForm = pageId === "inventory-form";
+  const loadId = (inventoryLoadIds.get(pageId) || 0) + 1;
+  const userId = currentSession?.user.id;
+  inventoryLoadIds.set(pageId, loadId);
+  const status = document.querySelector(isInventoryForm ? "#inventory-form-status" : "#inventory-status");
+  const departmentSelect = document.querySelector(isInventoryForm ? "#inventory-form-department" : "#inventory-department");
+  const requestedDepartment = isAdmin
+    ? departmentSelect.value || inventoryDepartment
+    : currentUserProfile.department;
+  inventoryRows = [];
+  if (isInventoryForm) renderInventoryFormRows();
+  else renderInventoryRows();
+  if (isAdmin && !requestedDepartment) {
+    inventoryDepartment = "";
+    setInventoryDepartmentOptions([]);
+    status.textContent = "Loading departments from AREA!A1:A…";
+  } else {
+    status.textContent = refresh ? "Refreshing inventory…" : "Loading inventory…";
+  }
+  try {
+    const result = await requestSheetData("inventory_load", { department: requestedDepartment });
+    if (inventoryLoadIds.get(pageId) !== loadId || activePageId !== pageId || currentSession?.user.id !== userId) return;
+    inventoryCategories = result.categories || [];
+    inventoryDepartment = result.department || "";
+    setInventoryDepartmentOptions(result.departments || []);
+    inventoryRows = result.rows || [];
+    if (!inventoryDepartment) {
+      if (isInventoryForm) renderInventoryFormRows();
+      else renderInventoryRows();
+      return;
+    }
+    if (isInventoryForm) renderInventoryFormRows();
+    else renderInventoryRows();
+  } catch (error) {
+    if (inventoryLoadIds.get(pageId) !== loadId || activePageId !== pageId || currentSession?.user.id !== userId) return;
+    console.error("Unable to load department inventory.", error);
+    status.textContent = `Could not load inventory: ${error.message || "Request failed."}`;
+  }
+}
+
+function showInventoryItem(sheetRow) {
+  selectedInventoryRow = inventoryRows.find(row => Number(row.sheet_row) === sheetRow);
+  if (!selectedInventoryRow) return;
+  const row = selectedInventoryRow;
+  const detailFields = {
+    "inventory-item-sku": row.sku_code,
+    "inventory-item-description": row.description,
+    "inventory-item-expiration": row.near_expiration,
+    "inventory-item-qty": row.on_hand,
+    "inventory-item-cost": row.cost,
+    "inventory-item-srp": row.srp,
+    "inventory-item-received-qty": row.received_qty,
+    "inventory-item-latest-received": row.latest_received,
+    "inventory-item-total": row.total_on_hand,
+  };
+  for (const [id, value] of Object.entries(detailFields)) {
+    document.querySelector(`#${id}`).textContent = String(value || "—");
+  }
+  const batches = document.querySelector("#inventory-item-batches");
+  batches.replaceChildren();
+  for (const [label, date, qty] of [
+    ["Batch 1", row.expiration_1, row.qty_1],
+    ["Batch 2", row.expiration_2, row.qty_2],
+    ["Batch 3", row.expiration_3, row.qty_3],
+  ]) {
+    const batch = document.createElement("div");
+    batch.className = "inventory-batch";
+    const name = document.createElement("strong");
+    name.textContent = label;
+    const batchDate = document.createElement("span");
+    batchDate.textContent = `Expiration: ${date || "—"}`;
+    const batchQty = document.createElement("span");
+    batchQty.textContent = `Qty: ${qty || "—"}`;
+    batch.append(name, batchDate, batchQty);
+    batches.append(batch);
+  }
+  const category = document.querySelector("#inventory-adjustment-category");
+  category.replaceChildren(new Option("Select category…", ""));
+  for (const value of inventoryCategories) category.add(new Option(value, value));
+  category.value = inventoryCategories.find(value =>
+    value.toLocaleLowerCase() === String(row.adjustment_category || "").toLocaleLowerCase()
+  ) || "";
+  category.disabled = inventoryCategories.length === 0;
+  document.querySelector("#inventory-adjustment-qty").value = row.adjustment_qty || "";
+  document.querySelector("#inventory-adjustment-remarks").value = row.adjustment_remarks || "";
+  document.querySelector("#inventory-adjustment-status").textContent = "";
+  document.querySelector("#inventory-item-dialog").showModal();
+}
+
+async function saveInventoryAdjustment(event) {
+  event.preventDefault();
+  if (!selectedInventoryRow) return;
+  const button = document.querySelector("#update-inventory-adjustment");
+  const status = document.querySelector("#inventory-adjustment-status");
+  button.disabled = true;
+  status.textContent = "Saving adjustment…";
+  try {
+    await requestSheetData("inventory_adjustment_update", {
+      department: inventoryDepartment,
+      sheet_row: selectedInventoryRow.sheet_row,
+      sku_code: selectedInventoryRow.sku_code,
+      category: document.querySelector("#inventory-adjustment-category").value,
+      qty: document.querySelector("#inventory-adjustment-qty").value,
+      remarks: document.querySelector("#inventory-adjustment-remarks").value,
+    });
+    document.querySelector("#inventory-item-dialog").close();
+    await loadInventoryPage("inventory", true);
+    document.querySelector("#inventory-status").textContent = `Adjustment updated for ${selectedInventoryRow.sku_code}.`;
+  } catch (error) {
+    console.error("Unable to update inventory adjustment.", error);
+    status.textContent = `Could not update adjustment: ${error.message || "Request failed."}`;
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function loadSequencePreview(formType, outgoingDepartment) {
   const number = requestFormBody.querySelector(".request-number");
   const outgoing = requestFormBody.querySelector("#outgoing-department");
@@ -375,6 +561,9 @@ async function refreshUserProfile(session) {
     }
     renderUserForms();
     updateSessionUi(session, false);
+    if (activePageId === "inventory" || activePageId === "inventory-form") {
+      void loadInventoryPage(activePageId);
+    }
   } catch (error) {
     console.error("Unable to load the signed-in user's profile.", error);
     if (currentSession?.user.id === session.user.id) {
@@ -492,6 +681,10 @@ function updateSessionUi(session, navigate = true) {
   const previousUserId = currentSession?.user.id || "";
   const nextUserId = session?.user.id || "";
   if (previousUserId !== nextUserId) {
+    inventoryDepartment = "";
+    inventoryRows = [];
+    inventoryCategories = [];
+    selectedInventoryRow = null;
     currentUserProfile = {
       username: "",
       department: "",
@@ -569,7 +762,7 @@ function updateSessionUi(session, navigate = true) {
     const requestedPage = navigate && previousUserId !== nextUserId
       ? "user-forms"
       : location.hash.slice(1) || activePageId || "user-forms";
-    const validPages = new Set(["user-forms", "my-requests", "approvals", "pending-release", "pending-received", "notifications", "reports-history"]);
+    const validPages = new Set(["user-forms", "my-requests", "approvals", "pending-release", "pending-received", "notifications", "reports-history", "inventory", "inventory-form"]);
     activatePortalPage(validPages.has(requestedPage) ? requestedPage : "user-forms", false);
     void refreshWorkflowCounts();
   }
@@ -662,6 +855,9 @@ async function refreshAdminTools() {
       document.querySelector("#account-role").textContent =
         ["Admin", currentUserProfile.department].filter(Boolean).join(" · ");
       document.querySelector("#account-badge").textContent = "ADMIN";
+      if (activePageId === "inventory" || activePageId === "inventory-form") {
+        void loadInventoryPage(activePageId);
+      }
       return;
     }
     document.body.classList.add("master-admin-mode");
@@ -674,6 +870,9 @@ async function refreshAdminTools() {
     document.querySelector("#account-role").textContent =
       [isMasterAdmin ? "Master Admin" : "Admin", currentUserProfile.department].filter(Boolean).join(" · ");
     document.querySelector("#account-badge").textContent = isMasterAdmin ? "MASTER ADMIN" : "ADMIN";
+    if (activePageId === "inventory" || activePageId === "inventory-form") {
+      void loadInventoryPage(activePageId);
+    }
   } catch (error) {
     if (currentSession?.user.id === userId) adminStatusUserId = "";
     console.error("Unable to verify administrator access.", error);
@@ -1041,6 +1240,13 @@ function setActiveNavigation() {
     event.preventDefault();
     activatePortalPage(link.dataset.page);
   });
+  document.querySelector(".report-menu-grid").addEventListener("click", (event) => {
+    const button = event.target.closest("[data-report-target]");
+    if (button) activatePortalPage(button.dataset.reportTarget);
+  });
+  document.querySelectorAll("[data-back-to-reports]").forEach(button => {
+    button.addEventListener("click", () => activatePortalPage("reports-history"));
+  });
   activatePortalPage("user-forms");
 }
 
@@ -1063,6 +1269,8 @@ function activatePortalPage(pageId, refresh = true) {
     "pending-received": "Pending to received",
     notifications: "Notifications",
     "reports-history": "Reports & History",
+    inventory: "Inventory",
+    "inventory-form": "Inventory Form",
   };
   document.querySelector("#breadcrumb-page").textContent = pageNames[pageId];
   if (location.hash !== `#${pageId}`) history.replaceState(null, "", `#${pageId}`);
@@ -1074,6 +1282,8 @@ function activatePortalPage(pageId, refresh = true) {
     "pending-release": loadPendingRelease,
     "pending-received": loadPendingReceived,
     notifications: loadNotifications,
+    inventory: () => loadInventoryPage("inventory"),
+    "inventory-form": () => loadInventoryPage("inventory-form"),
   };
   void refreshNotificationCount();
   if (loaders[pageId]) void loaders[pageId]();
@@ -1884,6 +2094,31 @@ document.querySelector("#refresh-pending-received").addEventListener("click", lo
 document.querySelector("#refresh-notifications").addEventListener("click", loadNotifications);
 document.querySelector("#load-more-notifications").addEventListener("click", () => void loadNotifications(true));
 document.querySelector("#mark-all-notifications-read").addEventListener("click", markAllNotificationsRead);
+document.querySelector("#refresh-inventory").addEventListener("click", () => void loadInventoryPage("inventory", true));
+document.querySelector("#refresh-inventory-form").addEventListener("click", () => void loadInventoryPage("inventory-form", true));
+document.querySelector("#inventory-department").addEventListener("change", event => {
+  inventoryDepartment = event.target.value;
+  setInventoryDepartmentOptions([...event.target.options].slice(1).map(option => option.value));
+  void loadInventoryPage("inventory", true);
+});
+document.querySelector("#inventory-form-department").addEventListener("change", event => {
+  inventoryDepartment = event.target.value;
+  setInventoryDepartmentOptions([...event.target.options].slice(1).map(option => option.value));
+  void loadInventoryPage("inventory-form", true);
+});
+document.querySelector("#inventory-search").addEventListener("input", renderInventoryRows);
+document.querySelector("#inventory-rows").addEventListener("click", event => {
+  const button = event.target.closest("[data-inventory-row]");
+  if (button) showInventoryItem(Number(button.dataset.inventoryRow));
+});
+document.querySelector("#inventory-adjustment-form").addEventListener("submit", saveInventoryAdjustment);
+document.querySelector("#close-inventory-item").addEventListener("click", () => document.querySelector("#inventory-item-dialog").close());
+document.querySelector("#cancel-inventory-adjustment").addEventListener("click", () => document.querySelector("#inventory-item-dialog").close());
+document.querySelector("#print-inventory-form").addEventListener("click", () => {
+  document.body.classList.add("print-inventory");
+  window.print();
+});
+window.addEventListener("afterprint", () => document.body.classList.remove("print-inventory"));
 requestFormBody.addEventListener("input", (event) => {
   if (event.target instanceof HTMLInputElement && event.target.type === "text") {
     const start = event.target.selectionStart;

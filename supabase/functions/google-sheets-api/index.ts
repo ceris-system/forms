@@ -166,6 +166,129 @@ async function lookupLists(
   };
 }
 
+type InventoryUser = {
+  department: string;
+  isAdmin: boolean;
+};
+
+class InventoryRequestError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "InventoryRequestError";
+  }
+}
+
+function uniqueValues(rows: unknown[][]): string[] {
+  return [...new Set(rows.map(row => String(row[0] ?? "").trim()).filter(Boolean))];
+}
+
+async function loadInventoryValues(spreadsheetId: string): Promise<{ departments: string[]; categories: string[] }> {
+  const [areaValues, categoryValues] = await Promise.all([
+    readValues(spreadsheetId, "AREA", "A1:A"),
+    readValues(spreadsheetId, "DD", "A1:A"),
+  ]);
+  return {
+    departments: uniqueValues(areaValues),
+    categories: uniqueValues(categoryValues),
+  };
+}
+
+function resolveInventoryDepartment(user: InventoryUser, requested: unknown, departments: string[]): string {
+  const requestedDepartment = user.isAdmin
+    ? typeof requested === "string" ? requested.trim() : ""
+    : user.department.trim();
+  if (!requestedDepartment) {
+    if (user.isAdmin) return "";
+    throw new InventoryRequestError("Your account has no department assigned. Ask an administrator to set your department.", 403);
+  }
+  const department = departments.find(value => value.toLocaleLowerCase() === requestedDepartment.toLocaleLowerCase());
+  if (!department) {
+    throw new InventoryRequestError(
+      user.isAdmin ? "The selected department is not listed in AREA!A1:A." : "Your assigned department is not listed in AREA!A1:A.",
+      user.isAdmin ? 400 : 403,
+    );
+  }
+  if (!user.isAdmin && department.toLocaleLowerCase() !== user.department.trim().toLocaleLowerCase()) {
+    throw new InventoryRequestError("You can only access inventory for your assigned department.", 403);
+  }
+  return department;
+}
+
+function inventoryRow(row: unknown[], index: number): Record<string, unknown> {
+  const cell = (column: number): string => String(row[column] ?? "").trim();
+  return {
+    sheet_row: index + 8,
+    sku_code: cell(0),
+    description: cell(1),
+    uom: cell(3),
+    cost: cell(4),
+    srp: cell(5),
+    expiration_1: cell(6),
+    qty_1: cell(7),
+    expiration_2: cell(8),
+    qty_2: cell(9),
+    expiration_3: cell(10),
+    qty_3: cell(11),
+    latest_received: cell(14),
+    received_qty: cell(15),
+    adjustment_category: cell(16),
+    adjustment_qty: cell(17),
+    adjustment_remarks: cell(18),
+    total_on_hand: cell(19),
+    near_expiration: cell(20),
+    on_hand: cell(21),
+    department: cell(22),
+  };
+}
+
+async function loadInventory(
+  spreadsheetId: string,
+  user: InventoryUser,
+  requestedDepartment: unknown,
+): Promise<Record<string, unknown>> {
+  const { departments, categories } = await loadInventoryValues(spreadsheetId);
+  const department = resolveInventoryDepartment(user, requestedDepartment, departments);
+  if (!department) return { department, departments, categories, rows: [] };
+  const values = await readValues(spreadsheetId, department, "B8:X");
+  const rows = values
+    .map((row, index) => inventoryRow(row, index))
+    .filter(row => row.sku_code);
+  return { department, departments, categories, rows };
+}
+
+async function updateInventoryAdjustment(
+  spreadsheetId: string,
+  user: InventoryUser,
+  body: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const { departments, categories } = await loadInventoryValues(spreadsheetId);
+  const department = resolveInventoryDepartment(user, body.department, departments);
+  if (!department) throw new InventoryRequestError("Select a department before updating an inventory adjustment.", 400);
+  const sheetRow = Number(body.sheet_row);
+  if (!Number.isSafeInteger(sheetRow) || sheetRow < 8) {
+    throw new InventoryRequestError("The selected inventory row is invalid.", 400);
+  }
+  const requestedCategory = typeof body.category === "string" ? body.category.trim() : "";
+  const category = categories.find(value => value.toLocaleLowerCase() === requestedCategory.toLocaleLowerCase());
+  if (!category) throw new InventoryRequestError("Select a valid adjustment category from DD!A1:A.", 400);
+  const qtyText = String(body.qty ?? "").trim();
+  const qty = Number(qtyText);
+  if (!qtyText || !Number.isFinite(qty)) throw new InventoryRequestError("Enter a valid adjustment quantity.", 400);
+  const remarks = typeof body.remarks === "string" ? body.remarks.trim() : "";
+  if (remarks.length > 500) throw new InventoryRequestError("Adjustment remarks must be 500 characters or fewer.", 400);
+  const skuValues = await readValues(spreadsheetId, department, `B${sheetRow}:B${sheetRow}`);
+  const actualSku = String(skuValues[0]?.[0] ?? "").trim();
+  const requestedSku = typeof body.sku_code === "string" ? body.sku_code.trim() : "";
+  if (!actualSku || actualSku !== requestedSku) {
+    throw new InventoryRequestError("The selected inventory item changed or no longer exists. Refresh the inventory and try again.", 409);
+  }
+  await googleRequest(
+    `spreadsheets/${spreadsheetId}/values/${range(department, `R${sheetRow}:T${sheetRow}`)}?valueInputOption=RAW`,
+    { method: "PUT", body: JSON.stringify({ values: [[category, qty, remarks]] }) },
+  );
+  return { ok: true, department, sheet_row: sheetRow, category, qty, remarks };
+}
+
 async function getSheetMetadata(spreadsheetId: string): Promise<Record<string, any>> {
   return googleRequest(`spreadsheets/${spreadsheetId}?fields=sheets(properties(sheetId,title,gridProperties(rowCount)))`);
 }
@@ -905,6 +1028,13 @@ Deno.serve(async (request: Request) => {
       incoming_departments_tab: settings.incoming_departments_tab || "area",
       suppliers_tab: settings.suppliers_tab || "dd",
     }));
+    if (body.action === "inventory_load" || body.action === "inventory_adjustment_update") {
+      const user = await getPortalUserContext(adminClient, authData.user.id);
+      if (body.action === "inventory_load") {
+        return respond(await loadInventory(settings.spreadsheet_id, user, body.department));
+      }
+      return respond(await updateInventoryAdjustment(settings.spreadsheet_id, user, body));
+    }
     if (body.action === "sequence_preview") {
       const formType = requiredText(body.form_type, "Form type");
       const user = await getPortalUserContext(adminClient, authData.user.id);
@@ -1033,6 +1163,9 @@ Deno.serve(async (request: Request) => {
     return respond({ error: "Unknown spreadsheet action." }, 400);
   } catch (error) {
     console.error("Google Sheets request failed.", error);
+    if (error instanceof InventoryRequestError) {
+      return respond({ error: error.message }, error.status);
+    }
     return respond({ error: error instanceof Error ? error.message : "Google Sheets request failed." }, 500);
   }
 });
