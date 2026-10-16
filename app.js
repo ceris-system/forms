@@ -866,8 +866,8 @@ function makeReleaseFormSheet(request) {
   const approvalLabel = document.createElement("b");
   approvalLabel.textContent = "APPROVED BY";
   const approvalCaption = document.createElement("small");
-  approvalCaption.textContent = "APPROVAL SIGNATURE";
-  approvalName.append(approver, signature);
+  approvalCaption.textContent = "SIGNATURE OVER PRINTED NAME";
+  approvalName.append(signature, approver);
   approved.append(approvalName, signatureLine, approvalLabel, approvalCaption);
   const received = makeUnsignedReleaseSignature("RECEIVED BY: / DESIGNATION");
   signatures.append(released, approved, received);
@@ -929,13 +929,13 @@ function printReleaseForm(sheet, requestNumber) {
     .release-form-items th:nth-child(11) { width: 19%; }
     .release-form-signatures { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: end; gap: 16px; margin-top: 28px; break-inside: avoid; }
     .release-form-signatures > div { display: grid; min-height: 100px; grid-template-rows: 64px 1px 11px 11px; gap: 4px; text-align: center; }
-    .release-approval-name { position: relative; display: grid; align-items: end; justify-items: center; min-width: 0; }
+    .release-approval-name { display: grid; grid-template-rows: 52px auto; align-content: end; justify-items: center; min-width: 0; }
     .release-form-signatures strong, .release-form-signatures b { align-self: end; font-size: 8px; }
     .release-form-signatures .release-signature-line { height: 1px; border-top: 1px solid #171719; background: transparent; }
     .release-form-unsigned-signature .release-signature-space { background: transparent; }
     .release-form-signatures small { font-size: 7px; font-weight: 600; }
-    .release-form-approved-signature img { position: absolute; z-index: 2; top: 0; left: 50%; width: 56px; height: 64px; max-width: 100%; transform: translateX(-50%); object-fit: contain; mix-blend-mode: multiply; }
-    .release-form-approved-signature strong { position: relative; z-index: 1; max-width: 100%; overflow-wrap: anywhere; font-size: 8px; }
+    .release-form-approved-signature img { width: 32px; height: 52px; max-width: 100%; object-fit: contain; mix-blend-mode: multiply; }
+    .release-form-approved-signature strong { max-width: 100%; overflow-wrap: anywhere; font-size: 8px; }
     @media screen { body { padding: 20px; } }
   `;
   printWindow.document.head.append(style);
