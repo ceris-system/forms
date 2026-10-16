@@ -148,9 +148,10 @@ async function lookupLists(
     suppliers_tab: string;
   },
 ): Promise<Record<string, unknown>> {
-  const [productValues, suppliers] = await Promise.all([
+  const [productValues, suppliers, accountDepartments] = await Promise.all([
     readValues(spreadsheetId, tabs.products_tab, "A2:I"),
     readValues(spreadsheetId, tabs.suppliers_tab, "B:B"),
+    readValues(spreadsheetId, "AREA", "A1:A"),
   ]);
   const uniqueColumn = (rows: unknown[][]): string[] => [
     ...new Set(rows.map(row => String(row[0] ?? "").trim()).filter(Boolean)),
@@ -159,6 +160,7 @@ async function lookupLists(
     products_tab: tabs.products_tab,
     products: lookupProductRows(productValues),
     outgoing_departments: uniqueColumn(productValues.map(row => [row[6]])),
+    account_departments: uniqueColumn(accountDepartments),
     incoming_departments: [],
     suppliers: uniqueColumn(suppliers),
   };

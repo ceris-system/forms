@@ -152,7 +152,7 @@
                 <label class="field-label" for="suppliers-tab">Suppliers tab name</label>
                 <input id="suppliers-tab" type="text" maxlength="100" value="dd" required>
               </div>
-              <p class="field-hint">Products are read by their header row, departments from column A, and suppliers from column B. Use the same tab name for both department lists if they share one list.</p>
+              <p class="field-hint">Products are read by their header row and suppliers from column B. Form outgoing departments come from product column G; account departments are loaded from AREA!A1:A.</p>
               <button class="button button-primary save-button" type="button" id="save-workbook">Save spreadsheet settings</button>
               <p class="field-hint" id="admin-status" role="status" aria-live="polite"></p>
             </div>
@@ -165,7 +165,9 @@
                 <input id="new-user-username" name="username" type="text" minlength="3" maxlength="32" pattern="[A-Za-z0-9._-]{3,32}" autocomplete="off" required>
               </label>
               <label class="add-user-field" for="new-user-department">Department
-                <input id="new-user-department" name="department" type="text" maxlength="100" required>
+                <select id="new-user-department" name="department" required disabled>
+                  <option value="">Load departments from AREA!A1:A</option>
+                </select>
               </label>
               <label class="add-user-field" for="new-user-role">Role
                 <select id="new-user-role" name="role" required>
@@ -192,10 +194,6 @@
               <button class="button button-primary" id="add-user-button" type="submit">Add user</button>
               <p class="field-hint add-user-status" id="add-user-status" role="status" aria-live="polite"></p>
             </form>
-            <div class="section-heading assignment-heading">
-              <div><p class="eyebrow">LEGACY REQUEST DATA</p><h2>Delete legacy Supabase requests</h2><p class="section-description">Optional cleanup for requests saved before direct-to-Sheets submissions. This does not change Google Sheets or user accounts. Sequence numbers are recalculated from each request tab automatically.</p></div>
-            </div>
-            <button class="button button-danger" id="reset-request-history" type="button">Delete legacy Supabase requests</button>
           </details>
 
           <footer class="page-footer"><span>Mother's Wonderland <span aria-hidden="true">✦</span> Request portal</span><span id="save-status" role="status" aria-live="polite">Sign in to create and submit a request.</span></footer>

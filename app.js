@@ -610,6 +610,29 @@ async function loadAdminState() {
   document.querySelector("#outgoing-departments-tab").value = state.outgoing_departments_tab || "area";
   document.querySelector("#incoming-departments-tab").value = state.incoming_departments_tab || "area";
   document.querySelector("#suppliers-tab").value = state.suppliers_tab || "dd";
+  await loadAccountDepartmentOptions();
+}
+
+async function loadAccountDepartmentOptions() {
+  const select = document.querySelector("#new-user-department");
+  const status = document.querySelector("#add-user-status");
+  select.disabled = true;
+  select.replaceChildren(new Option("Loading departments from AREA!A1:A…", ""));
+  try {
+    const lookups = await loadLookupData();
+    const departments = Array.isArray(lookups.account_departments) ? lookups.account_departments : [];
+    populateSelect(select, departments, "department");
+    select.disabled = departments.length === 0;
+    if (departments.length === 0) {
+      status.textContent = "No departments were found in the AREA sheet's column A.";
+    } else {
+      status.textContent = "";
+    }
+  } catch (error) {
+    console.error("Unable to load account departments from the AREA sheet.", error);
+    select.replaceChildren(new Option("Could not load departments from AREA!A1:A", ""));
+    status.textContent = `Could not load departments from the AREA sheet: ${error.message || "Request failed."}`;
+  }
 }
 
 function updateUserFormAccess() {
@@ -1508,27 +1531,6 @@ renderUserForms();
 setActiveNavigation();
 configureSupabase(buildSettings());
 document.querySelector("#save-workbook").addEventListener("click", saveWorkbook);
-document.querySelector("#reset-request-history").addEventListener("click", async (event) => {
-  const button = event.currentTarget;
-  const confirmation = window.prompt(
-    "This permanently deletes legacy requests and their items from Supabase. It does not change Google Sheets or user accounts. New sequence numbers are recalculated from the matching Sheets tab. Type RESET to confirm.",
-  );
-  if (confirmation !== "RESET") return;
-
-  button.disabled = true;
-  document.querySelector("#admin-status").textContent = "Deleting legacy Supabase requests…";
-  try {
-    const result = await callPortalAdmin({ action: "reset_request_history" });
-    document.querySelector("#admin-status").textContent =
-      `Deleted ${result.deleted_requests} legacy request(s). Sequences continue to follow the request rows in Google Sheets.`;
-  } catch (error) {
-    console.error("Unable to reset request history.", error);
-    document.querySelector("#admin-status").textContent =
-      `Could not reset request history: ${error.message || "Request failed."}`;
-  } finally {
-    button.disabled = false;
-  }
-});
 document.querySelector("#toggle-user-mode").addEventListener("click", async () => {
   if (!currentSession) {
     if (!supabaseClient) {

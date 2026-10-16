@@ -19,6 +19,7 @@ The current portal does not call the legacy [`google-apps-script/Code.gs`](./goo
 5. Keep the shared lookup lists in these tabs:
    - Product catalog tab, read from row 2 onward and shown in this order: SKU Code from column A, Product Description from B, UOM from C, Cost from H, SRP from I, Expiration Date from D, Onhand from E, and Total Onhand from F. Column G contains the associated outgoing department; **Select products** only shows rows whose G value matches the selected outgoing department. Rows without both a SKU Code and Product Description are skipped.
    - Outgoing department names are derived from unique non-empty values in column G of the configured Products tab, from row 2 onward.
+   - User account department choices come from non-empty values in `AREA!A1:A`.
    - Each staff member's department (set by the Master Admin) is automatically used as their Incoming Department.
    - Supplier tab, with supplier names in column B.
 6. The Master Admin will paste the common spreadsheet URL and configure each lookup tab name in the portal. The request tabs are created automatically as needed.
@@ -89,7 +90,7 @@ The **Notifications** inbox keeps form-specific updates for the signed-in user. 
 
 Only the Master Admin can create accounts, assign the **Admin** or **User** role, choose a User's assigned forms, and change workbook or portal settings. Admins can review and approve requests, handle all departments, and see every request in **Reports & History**, but cannot manage accounts or settings. Master Admin access remains controlled by `public.mw_portal_admins`.
 
-For a regular User, select one or more form types when creating the account. The user can submit and view queues only for those forms. **Reports & History** is read-only and shows requests for the assigned form types where the user's department is the outgoing or incoming department. Existing accounts keep access to all four forms after applying the role migration. The backend enforces role, form assignment, and department rules for every read and workflow action; hiding a page or form in the browser is not the security boundary.
+For a regular User, select the department from the **AREA** tab's column A and one or more form types when creating the account. The user can submit and view queues only for those forms. **Reports & History** is read-only and shows requests for the assigned form types where the user's department is the outgoing or incoming department. Existing accounts keep access to all four forms after applying the role migration. The backend enforces role, form assignment, and department rules for every read and workflow action; hiding a page or form in the browser is not the security boundary.
 
 The Approvals, Pending to release, and Pending to received navigation buttons show current pending-request counts. Navigation emoji animate subtly on hover and the motion is disabled for users who prefer reduced motion.
 
