@@ -5,6 +5,13 @@ const FORM_TYPES = [
   { id: "purchase-order", name: "Purchase Order Form", shortName: "Purchase Order", prefix: "POF", description: "Record purchase order requests.", symbol: "🛒" },
 ];
 
+const HISTORY_FORM_TYPES = {
+  "request-history": "release-request",
+  "transfer-history": "transfer",
+  "pullout-history": "pull-out",
+  "po-history": "purchase-order",
+};
+
 const DEPLOYMENT_SETTINGS = {
   supabase: {
     url: "https://kwxdjrnhkfgtpnxvygxu.supabase.co",
@@ -56,6 +63,9 @@ let inventoryCategories = [];
 let inventoryDepartment = "";
 let selectedInventoryRow = null;
 const inventoryLoadIds = new Map();
+const historyRows = new Map();
+const historyDepartments = new Map();
+const historyLoadIds = new Map();
 
 function resetIdleSignOutTimer() {
   clearTimeout(idleSignOutTimer);
@@ -420,6 +430,79 @@ async function loadInventoryPage(pageId, refresh = false) {
   }
 }
 
+function renderRequestHistory(pageId) {
+  const section = document.querySelector(`#${pageId}`);
+  const rows = historyRows.get(pageId) || [];
+  const search = section.querySelector("[data-history-search]").value.trim().toLocaleLowerCase();
+  const filtered = rows.filter(row =>
+    Object.values(row).some(value => String(value ?? "").toLocaleLowerCase().includes(search))
+  );
+  const body = section.querySelector("[data-history-rows]");
+  body.replaceChildren();
+  const fields = [
+    "serial_number", "outgoing_department", "sku_code", "product_description", "uom",
+    "expiration_date", "on_hand", "total_on_hand", "cost", "srp", "approved_transfer_qty",
+    "second_expiration_date", "received_qty", "remarks", "incoming_department", "request_date", "received_date",
+  ];
+  for (const row of filtered) {
+    const tr = document.createElement("tr");
+    for (const field of fields) {
+      const cell = document.createElement("td");
+      cell.textContent = row[field] == null ? "" : String(row[field]);
+      tr.append(cell);
+    }
+    body.append(tr);
+  }
+  const department = historyDepartments.get(pageId) || "";
+  const status = section.querySelector("[data-history-status]");
+  status.textContent = rows.length
+    ? `${filtered.length} of ${rows.length} non-pending history rows${department ? ` · ${department}` : ""}.`
+    : department ? `No non-pending history was found for ${department}.` : "Select a department to load history.";
+}
+
+function setHistoryDepartmentOptions(section, departments, selected) {
+  const select = section.querySelector("[data-history-department]");
+  select.replaceChildren(new Option("Select department…", ""));
+  for (const department of departments) select.add(new Option(department, department));
+  select.value = departments.find(value => value.toLocaleLowerCase() === selected.toLocaleLowerCase()) || "";
+  select.disabled = departments.length === 0;
+  section.querySelector("[data-history-assigned-department]").textContent =
+    selected || currentUserProfile.department || "Not assigned";
+}
+
+async function loadRequestHistory(pageId, refresh = false) {
+  const section = document.querySelector(`#${pageId}`);
+  const formType = HISTORY_FORM_TYPES[pageId];
+  if (!section || !formType) return;
+  const loadId = (historyLoadIds.get(pageId) || 0) + 1;
+  const userId = currentSession?.user.id;
+  historyLoadIds.set(pageId, loadId);
+  const status = section.querySelector("[data-history-status]");
+  const departmentSelect = section.querySelector("[data-history-department]");
+  const selectedDepartment = isAdmin
+    ? departmentSelect.value || historyDepartments.get(pageId) || ""
+    : currentUserProfile.department;
+  historyDepartments.set(pageId, selectedDepartment);
+  historyRows.set(pageId, []);
+  renderRequestHistory(pageId);
+  status.textContent = refresh ? "Refreshing history…" : "Loading history…";
+  try {
+    const result = await requestSheetData("request_history_load", {
+      form_type: formType,
+      department: selectedDepartment,
+    });
+    if (historyLoadIds.get(pageId) !== loadId || activePageId !== pageId || currentSession?.user.id !== userId) return;
+    historyDepartments.set(pageId, result.department || "");
+    setHistoryDepartmentOptions(section, result.departments || [], result.department || "");
+    historyRows.set(pageId, result.rows || []);
+    renderRequestHistory(pageId);
+  } catch (error) {
+    if (historyLoadIds.get(pageId) !== loadId || activePageId !== pageId || currentSession?.user.id !== userId) return;
+    console.error("Unable to load request history.", error);
+    status.textContent = `Could not load history: ${error.message || "Request failed."}`;
+  }
+}
+
 function showInventoryItem(sheetRow) {
   selectedInventoryRow = inventoryRows.find(row => Number(row.sheet_row) === sheetRow);
   if (!selectedInventoryRow) return;
@@ -563,6 +646,8 @@ async function refreshUserProfile(session) {
     updateSessionUi(session, false);
     if (activePageId === "inventory" || activePageId === "inventory-form") {
       void loadInventoryPage(activePageId);
+    } else if (HISTORY_FORM_TYPES[activePageId]) {
+      void loadRequestHistory(activePageId);
     }
   } catch (error) {
     console.error("Unable to load the signed-in user's profile.", error);
@@ -685,6 +770,8 @@ function updateSessionUi(session, navigate = true) {
     inventoryRows = [];
     inventoryCategories = [];
     selectedInventoryRow = null;
+    historyRows.clear();
+    historyDepartments.clear();
     currentUserProfile = {
       username: "",
       department: "",
@@ -762,7 +849,7 @@ function updateSessionUi(session, navigate = true) {
     const requestedPage = navigate && previousUserId !== nextUserId
       ? "user-forms"
       : location.hash.slice(1) || activePageId || "user-forms";
-    const validPages = new Set(["user-forms", "my-requests", "approvals", "pending-release", "pending-received", "notifications", "reports-history", "inventory", "inventory-form"]);
+    const validPages = new Set(["user-forms", "my-requests", "approvals", "pending-release", "pending-received", "notifications", "reports-history", "inventory", "inventory-form", ...Object.keys(HISTORY_FORM_TYPES)]);
     activatePortalPage(validPages.has(requestedPage) ? requestedPage : "user-forms", false);
     void refreshWorkflowCounts();
   }
@@ -857,6 +944,8 @@ async function refreshAdminTools() {
       document.querySelector("#account-badge").textContent = "ADMIN";
       if (activePageId === "inventory" || activePageId === "inventory-form") {
         void loadInventoryPage(activePageId);
+      } else if (HISTORY_FORM_TYPES[activePageId]) {
+        void loadRequestHistory(activePageId);
       }
       return;
     }
@@ -872,6 +961,8 @@ async function refreshAdminTools() {
     document.querySelector("#account-badge").textContent = isMasterAdmin ? "MASTER ADMIN" : "ADMIN";
     if (activePageId === "inventory" || activePageId === "inventory-form") {
       void loadInventoryPage(activePageId);
+    } else if (HISTORY_FORM_TYPES[activePageId]) {
+      void loadRequestHistory(activePageId);
     }
   } catch (error) {
     if (currentSession?.user.id === userId) adminStatusUserId = "";
@@ -1271,6 +1362,10 @@ function activatePortalPage(pageId, refresh = true) {
     "reports-history": "Reports & History",
     inventory: "Inventory",
     "inventory-form": "Inventory Form",
+    "request-history": "Request and Released History",
+    "transfer-history": "Transfer History",
+    "pullout-history": "Pull Out History",
+    "po-history": "P.O History",
   };
   document.querySelector("#breadcrumb-page").textContent = pageNames[pageId];
   if (location.hash !== `#${pageId}`) history.replaceState(null, "", `#${pageId}`);
@@ -1284,6 +1379,7 @@ function activatePortalPage(pageId, refresh = true) {
     notifications: loadNotifications,
     inventory: () => loadInventoryPage("inventory"),
     "inventory-form": () => loadInventoryPage("inventory-form"),
+    ...Object.fromEntries(Object.keys(HISTORY_FORM_TYPES).map(pageId => [pageId, () => loadRequestHistory(pageId)])),
   };
   void refreshNotificationCount();
   if (loaders[pageId]) void loaders[pageId]();
@@ -2105,6 +2201,15 @@ document.querySelector("#inventory-form-department").addEventListener("change", 
   inventoryDepartment = event.target.value;
   setInventoryDepartmentOptions([...event.target.options].slice(1).map(option => option.value));
   void loadInventoryPage("inventory-form", true);
+});
+document.querySelectorAll(".history-page").forEach(section => {
+  const pageId = section.id;
+  section.querySelector("[data-history-refresh]").addEventListener("click", () => void loadRequestHistory(pageId, true));
+  section.querySelector("[data-history-department]").addEventListener("change", event => {
+    historyDepartments.set(pageId, event.target.value);
+    void loadRequestHistory(pageId, true);
+  });
+  section.querySelector("[data-history-search]").addEventListener("input", () => renderRequestHistory(pageId));
 });
 document.querySelector("#inventory-search").addEventListener("input", renderInventoryRows);
 document.querySelector("#inventory-rows").addEventListener("click", event => {

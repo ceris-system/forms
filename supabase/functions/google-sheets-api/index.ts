@@ -289,6 +289,67 @@ async function updateInventoryAdjustment(
   return { ok: true, department, sheet_row: sheetRow, category, qty, remarks };
 }
 
+async function loadRequestHistory(
+  spreadsheetId: string,
+  user: Awaited<ReturnType<typeof getPortalUserContext>>,
+  formType: unknown,
+  requestedDepartment: unknown,
+): Promise<Record<string, unknown>> {
+  if (typeof formType !== "string" || !requestTabs[formType]) {
+    throw new InventoryRequestError("Choose a valid request history type.", 400);
+  }
+  if (!user.isAdmin && !user.allowedFormTypes.includes(formType)) {
+    throw new InventoryRequestError("Your account is not assigned access to this form history.", 403);
+  }
+  const { departments } = await loadInventoryValues(spreadsheetId);
+  const department = resolveInventoryDepartment(user, requestedDepartment, departments);
+  if (!department) return { department, departments, rows: [] };
+  const metadata = await getSheetMetadata(spreadsheetId);
+  const tabName = requestTabs[formType];
+  const actualTab = (metadata.sheets || []).map((sheet: Record<string, any>) => String(sheet.properties?.title || ""))
+    .find((title: string) => title.toLocaleLowerCase() === tabName.toLocaleLowerCase());
+  if (!actualTab) return { department, departments, rows: [] };
+  const values = await readValues(spreadsheetId, actualTab, "A:Z");
+  if (!values.length) return { department, departments, rows: [] };
+  const headers = values[0].map(value => String(value ?? "").trim());
+  if (requestHeaders.some((header, index) => headers[index] !== header)) {
+    throw new Error(`The "${actualTab}" sheet headers do not match the request history format.`);
+  }
+  const normalizedDepartment = department.toLocaleLowerCase();
+  const rows = values.slice(1).flatMap(row => {
+    const status = String(row[18] ?? "").trim();
+    const normalizedStatus = status.toLocaleLowerCase();
+    if (!row[0] || !status || normalizedStatus === "pending") return [];
+    const outgoingDepartment = String(row[3] ?? "");
+    const incomingDepartment = String(row[4] ?? "");
+    if (
+      outgoingDepartment.trim().toLocaleLowerCase() !== normalizedDepartment
+      && incomingDepartment.trim().toLocaleLowerCase() !== normalizedDepartment
+    ) return [];
+    return [{
+      serial_number: String(row[0] ?? ""),
+      outgoing_department: outgoingDepartment,
+      sku_code: String(row[7] ?? ""),
+      product_description: String(row[8] ?? ""),
+      uom: String(row[9] ?? ""),
+      expiration_date: String(row[10] ?? ""),
+      on_hand: String(row[11] ?? ""),
+      total_on_hand: String(row[12] ?? ""),
+      cost: String(row[13] ?? ""),
+      srp: String(row[14] ?? ""),
+      approved_transfer_qty: String(row[19] ?? ""),
+      second_expiration_date: String(row[10] ?? ""),
+      received_qty: String(row[19] ?? ""),
+      remarks: String(row[16] ?? ""),
+      incoming_department: incomingDepartment,
+      request_date: String(row[2] ?? ""),
+      received_date: String(row[25] ?? ""),
+      status,
+    }];
+  });
+  return { department, departments, rows };
+}
+
 async function getSheetMetadata(spreadsheetId: string): Promise<Record<string, any>> {
   return googleRequest(`spreadsheets/${spreadsheetId}?fields=sheets(properties(sheetId,title,gridProperties(rowCount)))`);
 }
@@ -1028,10 +1089,17 @@ Deno.serve(async (request: Request) => {
       incoming_departments_tab: settings.incoming_departments_tab || "area",
       suppliers_tab: settings.suppliers_tab || "dd",
     }));
-    if (body.action === "inventory_load" || body.action === "inventory_adjustment_update") {
+    if (
+      body.action === "inventory_load"
+      || body.action === "inventory_adjustment_update"
+      || body.action === "request_history_load"
+    ) {
       const user = await getPortalUserContext(adminClient, authData.user.id);
       if (body.action === "inventory_load") {
         return respond(await loadInventory(settings.spreadsheet_id, user, body.department));
+      }
+      if (body.action === "request_history_load") {
+        return respond(await loadRequestHistory(settings.spreadsheet_id, user, body.form_type, body.department));
       }
       return respond(await updateInventoryAdjustment(settings.spreadsheet_id, user, body));
     }

@@ -215,6 +215,8 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 #inventory .inventory-table th:nth-child(n + 3), #inventory .inventory-table td:nth-child(n + 3) { text-align: center; }
 .inventory-print-table th:nth-child(n + 3), .inventory-print-table td:nth-child(n + 3) { text-align: center; }
 .inventory-view-button { min-height: 29px; padding: 0 10px; font-size: 10px; }
+.history-table { min-width: 1900px; }
+.history-table th:nth-child(n + 5), .history-table td:nth-child(n + 5) { text-align: center; }
 .inventory-form-toolbar { min-height: 55px; }
 .inventory-print-heading { display: none; }
 .inventory-drawer { position: fixed; inset: 0 0 0 auto; width: min(470px, 100%); max-width: 100%; height: 100dvh; max-height: 100dvh; margin: 0 0 0 auto; padding: 23px; overflow-y: auto; border: 1px solid #dce5dd; border-right: 0; border-radius: 15px 0 0 15px; background: #fff; color: var(--ink); box-shadow: -15px 0 45px rgb(30 45 37 / 15%); }

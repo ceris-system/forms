@@ -92,6 +92,8 @@ The **Notifications** inbox keeps form-specific updates for the signed-in user. 
 
 The **Inventory** dashboard reads department tabs from row 8 onward, using `AREA!A1:A` for department choices and `DD!A1:A` for adjustment categories. Admins can choose any listed department; regular Users are restricted to their assigned department. Inventory adjustments write only category, quantity, and remarks to columns R:T, with the server validating the department, category, and selected SKU row. The **Inventory Form** can be refreshed and printed.
 
+The **Request and Released History**, **Transfer History**, **Pull Out History**, and **P.O History** dashboards read from `TRANSFER`, `REQUEST`, `RTV`, and `P.O REQUEST`, respectively. They include only rows whose saved status is not Pending, are searchable and refreshable, and follow the same department selector and assigned-department restrictions as Inventory. History access also respects each User's assigned form types. The Received Qty column displays the saved Approved Qty.
+
 ## Roles and form access
 
 Only the Master Admin can create accounts, assign the **Admin** or **User** role, choose a User's assigned forms, and change workbook or portal settings. The Master Admin's **User accounts** directory can edit usernames, departments, roles, form access, and account status; it can also set a new password or delete a non-Master Admin account. Master Admin accounts are protected from deletion, password resets, username changes, and role demotion. Admins can review and approve requests, handle all departments, and see every request in **Reports & History**, but cannot manage accounts or settings. Master Admin access remains controlled by `public.mw_portal_admins`.
