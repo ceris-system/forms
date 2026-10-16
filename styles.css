@@ -103,8 +103,13 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .approval-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 18px; border-bottom: 1px solid #eff0ed; }
 .approval-card-heading h2 { margin: 0; font-size: 16px; }
 .approval-pending-badge { padding: 5px 8px; border-radius: 5px; background: #fbf1df; color: #946d30; font-size: 9px; font-weight: 700; letter-spacing: .5px; }
-.approval-category { display: grid; gap: 10px; }
-.approval-category-title { margin: 12px 0 0; font-size: 17px; }
+.approval-category { overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: white; }
+.approval-category-title { display: flex; min-height: 52px; align-items: center; justify-content: space-between; gap: 12px; padding: 0 17px; color: var(--green-dark); cursor: pointer; font-size: 14px; font-weight: 700; list-style: none; }
+.approval-category-title::-webkit-details-marker { display: none; }
+.approval-category-title::after { content: "⌄"; color: #78847b; font-size: 15px; transition: transform .2s; }
+.approval-category[open] > .approval-category-title::after { transform: rotate(180deg); }
+.approval-category-title:focus-visible { outline: 2px solid var(--green); outline-offset: -3px; }
+.approval-category-list { display: grid; gap: 10px; padding: 0 12px 12px; }
 .approval-signature { display: grid; justify-items: center; gap: 5px; margin: 0 18px 14px; padding: 10px 12px; border-bottom: 1px solid #373e39; }
 .approval-signature strong { font-family: cursive; font-size: 20px; font-weight: 500; }
 .approval-signature span { font-size: 9px; font-weight: 700; letter-spacing: .4px; }

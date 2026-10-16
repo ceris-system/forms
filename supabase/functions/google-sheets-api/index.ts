@@ -564,12 +564,6 @@ async function applyWorkflowAction(
         if (!Number.isFinite(quantity) || quantity < 0) throw new Error("Approved quantities must be zero or greater.");
         return quantity;
       });
-      approvedQuantities.forEach((quantity, index) => {
-        const requestedQuantity = Number(matchingRows[index].row[15]);
-        if (Number.isFinite(requestedQuantity) && requestedQuantity >= 0 && quantity > requestedQuantity) {
-          throw new Error(`Approved quantity cannot exceed requested quantity for ${matchingRows[index].row[7]}.`);
-        }
-      });
     }
 
     const updatedStatus = action === "approve" ? "Approved" : action === "release" ? "Released" : "Received";

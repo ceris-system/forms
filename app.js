@@ -700,13 +700,16 @@ function renderWorkflowRequests(container, requests, action) {
   for (const form of FORM_TYPES) {
     const categoryRequests = requests.filter(request => request.form_type_id === form.id);
     if (!categoryRequests.length) continue;
-    const category = document.createElement("section");
+    const category = document.createElement("details");
     category.className = "approval-category";
-    const categoryHeading = document.createElement("h2");
+    const categoryHeading = document.createElement("summary");
     categoryHeading.className = "approval-category-title";
-    categoryHeading.textContent = form.name;
+    categoryHeading.textContent = `${form.name} (${categoryRequests.length})`;
     category.append(categoryHeading);
-    for (const request of categoryRequests) category.append(makeWorkflowRequestCard(request, action));
+    const categoryList = document.createElement("div");
+    categoryList.className = "approval-category-list";
+    for (const request of categoryRequests) categoryList.append(makeWorkflowRequestCard(request, action));
+    category.append(categoryList);
     container.append(category);
   }
 }
