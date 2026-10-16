@@ -3,11 +3,8 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#f8f6f2">
+    <meta name="theme-color" content="#f4f7f4">
     <title>Request Forms | Mother's Wonderland</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
     <script src="app.js" defer></script>
@@ -42,6 +39,7 @@
           <a class="nav-link user-only admin-only" href="#approvals" data-page="approvals"><span class="nav-icon">✓</span>Approvals</a>
           <a class="nav-link user-only" href="#pending-release" data-page="pending-release"><span class="nav-icon">↗</span>Pending to release</a>
           <a class="nav-link user-only" href="#pending-received" data-page="pending-received"><span class="nav-icon">✓</span>Pending to received</a>
+          <a class="nav-link user-only" href="#notifications" data-page="notifications"><span class="nav-icon">♧</span>Notifications<span class="notification-nav-count" id="notification-nav-count" hidden>0</span></a>
           <button class="nav-link nav-link-disabled user-only" type="button" disabled aria-label="Reports and history, coming soon"><span class="nav-icon" aria-hidden="true">▤</span><span>Reports &amp; History</span><small>SOON</small></button>
         </nav>
         <div class="sidebar-bottom">
@@ -106,6 +104,19 @@
             </div>
             <p class="field-hint" id="pending-received-status" role="status" aria-live="polite"></p>
             <div class="approval-list" id="pending-received-list"></div>
+          </section>
+
+          <section class="section-block user-only portal-page" id="notifications" data-page-section hidden>
+            <div class="section-heading">
+              <div><p class="eyebrow">FORM ACTIVITY</p><h1>Notifications</h1><p class="section-description">Updates for forms you submitted or need to review, release, or receive.</p></div>
+              <div class="notification-actions">
+                <button class="button button-secondary" id="mark-all-notifications-read" type="button" disabled>Mark all as read</button>
+                <button class="button button-secondary" id="refresh-notifications" type="button">Refresh</button>
+              </div>
+            </div>
+            <p class="field-hint" id="notification-list-status" role="status" aria-live="polite"></p>
+            <div class="notification-list" id="notification-list"></div>
+            <button class="button button-secondary notification-load-more" id="load-more-notifications" type="button" hidden>Load older updates</button>
           </section>
 
           <details class="section-block setup-details admin-tools" id="supabase-connection" hidden>

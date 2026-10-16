@@ -524,7 +524,7 @@ async function getPortalUsername(
 async function getPortalUserContext(
   adminClient: ReturnType<typeof createClient>,
   userId: string,
-): Promise<{ username: string; department: string; isMasterAdmin: boolean }> {
+): Promise<{ userId: string; username: string; department: string; isMasterAdmin: boolean }> {
   const [{ data: profile, error: profileError }, { data: admin, error: adminError }] = await Promise.all([
     adminClient.from("login_usernames")
       .select("username, department")
@@ -539,10 +539,95 @@ async function getPortalUserContext(
   if (adminError) throw adminError;
   if (!profile?.username) throw new Error("The signed-in account does not have a portal profile.");
   return {
+    userId,
     username: profile.username,
     department: String(profile.department || ""),
     isMasterAdmin: Boolean(admin),
   };
+}
+
+type FormNotificationEvent = "submitted" | "approved" | "released" | "received";
+
+async function createFormNotifications(
+  adminClient: ReturnType<typeof createClient>,
+  details: {
+    event: FormNotificationEvent;
+    formType: string;
+    requestNumber: string;
+    submittedBy: string;
+    outgoingDepartment: string;
+    incomingDepartment: string;
+  },
+): Promise<void> {
+  const formNames: Record<string, string> = {
+    "release-request": "Release & Request Form",
+    transfer: "Transfer Form",
+    "pull-out": "Pull Out Form",
+    "purchase-order": "Purchase Order Form",
+  };
+  const destinationPages: Record<FormNotificationEvent, string> = {
+    submitted: "approvals",
+    approved: "pending-release",
+    released: "pending-received",
+    received: "my-requests",
+  };
+  const messages: Record<FormNotificationEvent, string> = {
+    submitted: "A new request is pending approval.",
+    approved: "The request was approved and is ready for release.",
+    released: "The request was released and is ready to receive.",
+    received: "The request was marked as received.",
+  };
+  const formName = formNames[details.formType];
+  if (!formName) throw new Error("Cannot notify users about an unknown form type.");
+
+  let recipientIds: string[] = [];
+  if (details.event === "submitted") {
+    const { data: admins, error } = await adminClient.from("mw_portal_admins").select("user_id");
+    if (error) throw error;
+    recipientIds = (admins || []).map(admin => String(admin.user_id));
+  } else {
+    const targetDepartment = details.event === "approved" || details.event === "received"
+      ? details.outgoingDepartment
+      : details.incomingDepartment;
+    const [requesterResult, departmentResult] = await Promise.all([
+      adminClient.from("login_usernames").select("user_id").eq("username", details.submittedBy.trim().toLocaleLowerCase()).maybeSingle(),
+      adminClient.from("login_usernames").select("user_id, department"),
+    ]);
+    if (requesterResult.error) throw requesterResult.error;
+    if (departmentResult.error) throw departmentResult.error;
+    recipientIds = [
+      ...(requesterResult.data ? [String(requesterResult.data.user_id)] : []),
+      ...(departmentResult.data || [])
+        .filter(profile => String(profile.department || "").trim().toLocaleLowerCase() === targetDepartment.trim().toLocaleLowerCase())
+        .map(profile => String(profile.user_id)),
+    ];
+  }
+
+  const uniqueRecipientIds = [...new Set(recipientIds)];
+  if (!uniqueRecipientIds.length) throw new Error("No users are configured to receive this form notification.");
+  const { error } = await adminClient.from("mw_form_notifications").insert(uniqueRecipientIds.map(recipientId => ({
+    recipient_id: recipientId,
+    request_number: details.requestNumber,
+    form_type: details.formType,
+    event: details.event,
+    title: formName,
+    message: `${details.requestNumber}: ${messages[details.event]}`,
+    destination_page: destinationPages[details.event],
+  })));
+  if (error) throw error;
+}
+
+async function notifyAfterSheetWrite(
+  adminClient: ReturnType<typeof createClient>,
+  details: Parameters<typeof createFormNotifications>[1],
+): Promise<string | undefined> {
+  try {
+    await createFormNotifications(adminClient, details);
+    return undefined;
+  } catch (error) {
+    console.error(`Google Sheets saved ${details.requestNumber}, but its notification could not be recorded.`, error);
+    return "The form update was saved, but its notification could not be recorded. Contact a Master Admin if it is missing from the inbox.";
+  }
 }
 
 function formTypeFromRequestNumber(requestNumber: string): string {
@@ -557,9 +642,9 @@ function formTypeFromRequestNumber(requestNumber: string): string {
 async function applyWorkflowAction(
   adminClient: ReturnType<typeof createClient>,
   spreadsheetId: string,
-  user: { username: string; department: string; isMasterAdmin: boolean },
+  user: { userId: string; username: string; department: string; isMasterAdmin: boolean },
   value: unknown,
-): Promise<void> {
+): Promise<{ notification_warning?: string }> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("The workflow action is invalid.");
   }
@@ -577,7 +662,7 @@ async function applyWorkflowAction(
     throw new Error("Your account has no department assigned. Ask the Master Admin to update your account.");
   }
 
-  await withRequestSequenceLock(adminClient, formType, async () => {
+  const requestDetails = await withRequestSequenceLock(adminClient, formType, async () => {
     const tabName = requestTabs[formType];
     const metadata = await getSheetMetadata(spreadsheetId);
     const actualTab = await ensureOutputTab(spreadsheetId, tabName, metadata);
@@ -645,7 +730,20 @@ async function applyWorkflowAction(
       method: "POST",
       body: JSON.stringify({ valueInputOption: "RAW", data: valueRanges }),
     });
+    return {
+      submittedBy: String(matchingRows[0].row[6] || ""),
+      outgoingDepartment: String(matchingRows[0].row[3] || ""),
+      incomingDepartment: String(matchingRows[0].row[4] || ""),
+    };
   });
+  const event = action === "approve" ? "approved" : action === "release" ? "released" : "received";
+  const notificationWarning = await notifyAfterSheetWrite(adminClient, {
+    event,
+    formType,
+    requestNumber,
+    ...requestDetails,
+  });
+  return notificationWarning ? { notification_warning: notificationWarning } : {};
 }
 
 async function saveSubmissionDirect(
@@ -653,7 +751,7 @@ async function saveSubmissionDirect(
   submittedBy: string,
   spreadsheetId: string,
   value: unknown,
-): Promise<string> {
+): Promise<{ requestNumber: string; notificationWarning?: string }> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("The submitted request details are missing.");
   const submission = value as Record<string, unknown>;
   const formType = requiredText(submission.form_type, "Form type");
@@ -678,7 +776,7 @@ async function saveSubmissionDirect(
     return normalizeSubmittedItem(item as Record<string, unknown>);
   });
 
-  return withRequestSequenceLock(adminClient, formType, async () => {
+  const requestNumber = await withRequestSequenceLock(adminClient, formType, async () => {
     const metadata = await getSheetMetadata(spreadsheetId);
     const actualOutputTab = await ensureOutputTab(spreadsheetId, outputTab, metadata);
     let current = await ensureRequestHeaders(spreadsheetId, actualOutputTab, metadata, items.length);
@@ -711,6 +809,16 @@ async function saveSubmissionDirect(
     );
     return requestNumber;
   });
+  const notificationWarning = await notifyAfterSheetWrite(adminClient, {
+    event: "submitted",
+    formType,
+    requestNumber,
+    submittedBy: submittedBy.toLocaleUpperCase(),
+    outgoingDepartment: outgoing,
+    incomingDepartment: incoming,
+  });
+  if (notificationWarning) return { requestNumber, notificationWarning };
+  return { requestNumber };
 }
 
 Deno.serve(async (request: Request) => {
@@ -790,17 +898,21 @@ Deno.serve(async (request: Request) => {
       if (workflowAction?.action === "approve" && !user.isMasterAdmin) {
         return respond({ error: "Only a Master Admin can approve requests." }, 403);
       }
-      await applyWorkflowAction(adminClient, settings.spreadsheet_id, user, body.workflow);
-      return respond({ ok: true });
+      const result = await applyWorkflowAction(adminClient, settings.spreadsheet_id, user, body.workflow);
+      return respond({ ok: true, ...result });
     }
     if (body.action === "submit") {
-      const requestNumber = await saveSubmissionDirect(
+      const result = await saveSubmissionDirect(
         adminClient,
         await getPortalUsername(adminClient, authData.user.id),
         settings.spreadsheet_id,
         body.submission,
       );
-      return respond({ ok: true, request_number: requestNumber });
+      return respond({
+        ok: true,
+        request_number: result.requestNumber,
+        ...(result.notificationWarning ? { notification_warning: result.notificationWarning } : {}),
+      });
     }
     return respond({ error: "Unknown spreadsheet action." }, 400);
   } catch (error) {

@@ -32,6 +32,11 @@ let profileUserId = "";
 let adminStatusUserId = "";
 let lookupCache = null;
 let activePageId = "";
+let notificationCountLoadId = 0;
+let notificationOffset = 0;
+let notificationRequestToReveal = null;
+let notificationRefreshTimer = null;
+let currentUnreadNotificationCount = 0;
 const workflowLoadIds = new Map();
 
 function getLocalDate() {
@@ -401,6 +406,7 @@ function updateSessionUi(session, navigate = true) {
     adminStatusUserId = "";
     isMasterAdmin = false;
     lookupCache = null;
+    setNotificationCount(0);
     document.body.classList.remove("admin-mode");
   }
   currentSession = session;
@@ -416,6 +422,7 @@ function updateSessionUi(session, navigate = true) {
     };
   }
   if (!signedIn) currentUserProfile = { username: "", department: "", status: "active", mustChangePassword: false };
+  updateNotificationPolling(Boolean(signedIn && !currentUserProfile.mustChangePassword));
   const accountName = signedIn ? currentUserProfile.username || "Signed-in user" : "Guest";
   document.body.classList.add("user-mode");
   document.querySelector("#toggle-user-mode").textContent = signedIn ? "Sign out" : "Sign in";
@@ -440,10 +447,11 @@ function updateSessionUi(session, navigate = true) {
     void refreshAdminTools();
   }
   if (signedIn && !currentUserProfile.mustChangePassword) {
+    void refreshNotificationCount();
     const requestedPage = navigate && previousUserId !== nextUserId
       ? "user-forms"
       : location.hash.slice(1) || activePageId || "user-forms";
-    const validPages = new Set(["user-forms", "my-requests", "approvals", "pending-release", "pending-received"]);
+    const validPages = new Set(["user-forms", "my-requests", "approvals", "pending-release", "pending-received", "notifications"]);
     activatePortalPage(validPages.has(requestedPage) ? requestedPage : "user-forms", false);
   }
 }
@@ -699,6 +707,7 @@ function activatePortalPage(pageId, refresh = true) {
     approvals: "Approvals",
     "pending-release": "Pending to release",
     "pending-received": "Pending to received",
+    notifications: "Notifications",
   };
   document.querySelector("#breadcrumb-page").textContent = pageNames[pageId];
   if (location.hash !== `#${pageId}`) history.replaceState(null, "", `#${pageId}`);
@@ -709,8 +718,181 @@ function activatePortalPage(pageId, refresh = true) {
     approvals: loadApprovalQueue,
     "pending-release": loadPendingRelease,
     "pending-received": loadPendingReceived,
+    notifications: loadNotifications,
   };
+  void refreshNotificationCount();
   if (loaders[pageId]) void loaders[pageId]();
+}
+
+function setNotificationCount(count) {
+  const badge = document.querySelector("#notification-nav-count");
+  const unreadCount = Math.max(0, Number(count) || 0);
+  currentUnreadNotificationCount = unreadCount;
+  badge.textContent = unreadCount > 99 ? "99+" : String(unreadCount);
+  badge.hidden = unreadCount === 0;
+  badge.setAttribute("aria-label", unreadCount === 1 ? "1 unread notification" : `${unreadCount} unread notifications`);
+  document.querySelector("#mark-all-notifications-read").disabled = unreadCount === 0;
+}
+
+function updateNotificationPolling(enabled) {
+  if (enabled && !notificationRefreshTimer) {
+    notificationRefreshTimer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void refreshNotificationCount();
+    }, 60_000);
+  } else if (!enabled && notificationRefreshTimer) {
+    window.clearInterval(notificationRefreshTimer);
+    notificationRefreshTimer = null;
+  }
+}
+
+async function refreshNotificationCount() {
+  const userId = currentSession?.user.id;
+  if (!userId) {
+    setNotificationCount(0);
+    return;
+  }
+  const loadId = ++notificationCountLoadId;
+  try {
+    const result = await callPortalAdmin({ action: "notifications_count" });
+    if (currentSession?.user.id !== userId || loadId !== notificationCountLoadId) return;
+    const previousCount = currentUnreadNotificationCount;
+    setNotificationCount(result.unread_count);
+    if (activePageId === "notifications" && result.unread_count > previousCount) void loadNotifications();
+  } catch (error) {
+    if (currentSession?.user.id !== userId || loadId !== notificationCountLoadId) return;
+    console.error("Unable to refresh the unread notification count.", error);
+  }
+}
+
+async function loadNotifications(append = false) {
+  const status = document.querySelector("#notification-list-status");
+  const list = document.querySelector("#notification-list");
+  const loadMoreButton = document.querySelector("#load-more-notifications");
+  const userId = currentSession?.user.id;
+  if (!userId) return;
+  if (!append) notificationOffset = 0;
+  status.textContent = append ? "Loading older updates…" : list.childElementCount ? "Refreshing your inbox…" : "Loading your inbox…";
+  loadMoreButton.disabled = true;
+  try {
+    const result = await callPortalAdmin({ action: "notifications_list", offset: notificationOffset });
+    if (currentSession?.user.id !== userId || activePageId !== "notifications") return;
+    const notifications = Array.isArray(result.notifications) ? result.notifications : [];
+    renderNotifications(list, notifications, append);
+    notificationOffset += notifications.length;
+    loadMoreButton.hidden = !result.has_more;
+    loadMoreButton.disabled = false;
+    setNotificationCount(result.unread_count);
+    status.textContent = notificationOffset
+      ? `Showing ${notificationOffset} form update${notificationOffset === 1 ? "" : "s"}.`
+      : "Your inbox is clear. New form updates will appear here.";
+  } catch (error) {
+    if (currentSession?.user.id !== userId) return;
+    console.error("Unable to load form notifications.", error);
+    status.textContent = `Could not load notifications: ${error.message || "Request failed."}`;
+    loadMoreButton.disabled = false;
+  }
+}
+
+function renderNotifications(container, notifications, append = false) {
+  if (!append) container.replaceChildren();
+  for (const notification of notifications) {
+    const card = document.createElement("article");
+    card.className = "notification-card";
+    if (!notification.is_read) card.classList.add("notification-unread");
+
+    const main = document.createElement("div");
+    main.className = "notification-card-main";
+    const top = document.createElement("div");
+    top.className = "notification-card-top";
+    const title = document.createElement("h2");
+    title.textContent = notification.title;
+    const state = document.createElement("span");
+    state.className = "notification-state";
+    state.textContent = notification.is_read ? "Read" : "New";
+    top.append(title, state);
+
+    const message = document.createElement("p");
+    message.textContent = notification.message;
+    const metadata = document.createElement("p");
+    metadata.className = "notification-card-meta";
+    const eventNames = { submitted: "Submitted", approved: "Approved", released: "Released", received: "Received" };
+    const formNames = {
+      "release-request": "Release & Request",
+      transfer: "Transfer",
+      "pull-out": "Pull Out",
+      "purchase-order": "Purchase Order",
+    };
+    const createdAt = new Date(notification.created_at);
+    const dateText = Number.isNaN(createdAt.getTime())
+      ? ""
+      : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(createdAt);
+    metadata.textContent = [formNames[notification.form_type], eventNames[notification.event], dateText]
+      .filter(Boolean)
+      .join(" · ");
+    main.append(top, message, metadata);
+
+    const actions = document.createElement("div");
+    actions.className = "notification-card-actions";
+    const openButton = document.createElement("button");
+    openButton.className = "button button-primary";
+    openButton.type = "button";
+    openButton.textContent = "Open related page";
+    openButton.addEventListener("click", () => void openNotification(notification));
+    actions.append(openButton);
+    if (!notification.is_read) {
+      const readButton = document.createElement("button");
+      readButton.className = "button button-secondary";
+      readButton.type = "button";
+      readButton.textContent = "Mark as read";
+      readButton.addEventListener("click", () => void markNotificationRead(notification.id));
+      actions.append(readButton);
+    }
+    card.append(main, actions);
+    container.append(card);
+  }
+}
+
+async function markNotificationRead(notificationId) {
+  try {
+    await callPortalAdmin({ action: "notification_mark_read", notification_id: notificationId });
+    await loadNotifications();
+  } catch (error) {
+    console.error("Unable to mark the notification as read.", error);
+    window.alert(`Could not update this notification: ${error.message || "Request failed."}`);
+  }
+}
+
+async function markAllNotificationsRead() {
+  const button = document.querySelector("#mark-all-notifications-read");
+  button.disabled = true;
+  try {
+    await callPortalAdmin({ action: "notifications_mark_all_read" });
+    await loadNotifications();
+  } catch (error) {
+    console.error("Unable to mark all notifications as read.", error);
+    window.alert(`Could not update your notifications: ${error.message || "Request failed."}`);
+    button.disabled = false;
+  }
+}
+
+async function openNotification(notification) {
+  try {
+    if (!notification.is_read) {
+      await callPortalAdmin({ action: "notification_mark_read", notification_id: notification.id });
+      notification.is_read = true;
+      await refreshNotificationCount();
+    }
+    const validPages = new Set(["approvals", "pending-release", "pending-received", "my-requests"]);
+    if (!validPages.has(notification.destination_page)) throw new Error("This notification has an invalid destination.");
+    notificationRequestToReveal = {
+      requestNumber: notification.request_number,
+      destinationPage: notification.destination_page,
+    };
+    activatePortalPage(notification.destination_page);
+  } catch (error) {
+    console.error("Unable to open the related form page.", error);
+    window.alert(`Could not open this notification: ${error.message || "Request failed."}`);
+  }
 }
 
 async function loadApprovalQueue() {
@@ -743,6 +925,23 @@ async function loadWorkflowQueue(action, listId, statusId, emptyMessage) {
       ? `${requests.length} request${requests.length === 1 ? "" : "s"}.`
       : `${emptyMessage}: none found.`;
     renderWorkflowRequests(list, requests, action);
+    const notificationTarget = notificationRequestToReveal;
+    const destinationActions = {
+      approvals: "approval_queue",
+      "pending-release": "pending_release",
+      "pending-received": "pending_received",
+      "my-requests": "my_requests",
+    };
+    if (notificationTarget && destinationActions[notificationTarget.destinationPage] === action) {
+      const targetCard = [...list.querySelectorAll("[data-request-number]")]
+        .find(card => card.dataset.requestNumber === notificationTarget.requestNumber);
+      if (targetCard) {
+        const category = targetCard.closest(".approval-category");
+        if (category) category.open = true;
+        targetCard.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      notificationRequestToReveal = null;
+    }
   } catch (error) {
     if (workflowLoadIds.get(action) !== loadId) return;
     console.error(`Unable to load ${emptyMessage.toLocaleLowerCase()}.`, error);
@@ -1090,11 +1289,12 @@ function makeWorkflowActionButton(request, action, card) {
       payload.approved_quantities = inputs.map(input => input.value);
     }
     try {
-      await requestSheetData("workflow_action", payload);
+      const result = await requestSheetData("workflow_action", payload);
       card.remove();
       const refresh = action === "approval_queue" ? loadApprovalQueue
         : action === "pending_release" ? loadPendingRelease : loadPendingReceived;
       await refresh();
+      if (result.notification_warning) window.alert(result.notification_warning);
     } catch (error) {
       console.error("Unable to update request workflow status.", error);
       window.alert(`Could not update ${request.request_number}: ${error.message || "Request failed."}`);
@@ -1164,7 +1364,9 @@ async function submitRequest(event) {
     });
     if (!result?.request_number) throw new Error("Google Sheets did not return the saved request number.");
     requestFormBody.querySelector(".request-number").textContent = result.request_number;
-    setRequestNotice(`Request ${result.request_number} was saved to Google Sheets.`);
+    setRequestNotice(result.notification_warning
+      ? `Request ${result.request_number} was saved to Google Sheets. ${result.notification_warning}`
+      : `Request ${result.request_number} was saved to Google Sheets.`);
   } catch (error) {
     console.error("Unable to submit request.", error);
     setRequestNotice(`Request was not saved to Google Sheets: ${error.message || "Request failed."}`);
@@ -1278,6 +1480,9 @@ document.querySelector("#refresh-approvals").addEventListener("click", loadAppro
 document.querySelector("#refresh-my-requests").addEventListener("click", loadMyRequests);
 document.querySelector("#refresh-pending-release").addEventListener("click", loadPendingRelease);
 document.querySelector("#refresh-pending-received").addEventListener("click", loadPendingReceived);
+document.querySelector("#refresh-notifications").addEventListener("click", loadNotifications);
+document.querySelector("#load-more-notifications").addEventListener("click", () => void loadNotifications(true));
+document.querySelector("#mark-all-notifications-read").addEventListener("click", markAllNotificationsRead);
 requestFormBody.addEventListener("input", (event) => {
   if (event.target instanceof HTMLInputElement && event.target.type === "text") {
     const start = event.target.selectionStart;

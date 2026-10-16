@@ -89,6 +89,64 @@ Deno.serve(async (request: Request) => {
       if (!profile) return respond({ error: "Your account profile could not be found." }, 404);
       return respond(profile);
     }
+    if (body.action === "notifications_count") {
+      const { count, error } = await adminClient.from("mw_form_notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("recipient_id", authData.user.id)
+        .eq("is_read", false);
+      if (error) throw error;
+      return respond({ unread_count: count || 0 });
+    }
+    if (body.action === "notifications_list") {
+      const requestedOffset = Number(body.offset ?? 0);
+      if (!Number.isSafeInteger(requestedOffset) || requestedOffset < 0 || requestedOffset > 100_000) {
+        return respond({ error: "The notification page is invalid." }, 400);
+      }
+      const [notificationsResult, unreadResult] = await Promise.all([
+        adminClient.from("mw_form_notifications")
+          .select("id, request_number, form_type, event, title, message, destination_page, is_read, created_at")
+          .eq("recipient_id", authData.user.id)
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(requestedOffset, requestedOffset + 50),
+        adminClient.from("mw_form_notifications")
+          .select("id", { count: "exact", head: true })
+          .eq("recipient_id", authData.user.id)
+          .eq("is_read", false),
+      ]);
+      if (notificationsResult.error) throw notificationsResult.error;
+      if (unreadResult.error) throw unreadResult.error;
+      return respond({
+        notifications: (notificationsResult.data || []).slice(0, 50),
+        has_more: (notificationsResult.data || []).length > 50,
+        unread_count: unreadResult.count || 0,
+      });
+    }
+    if (body.action === "notification_mark_read") {
+      const notificationId = typeof body.notification_id === "string" ? body.notification_id : "";
+      if (!/^[0-9a-f-]{36}$/i.test(notificationId)) {
+        return respond({ error: "Choose a valid notification." }, 400);
+      }
+      const { data: notification, error } = await adminClient
+        .from("mw_form_notifications")
+        .update({ is_read: true })
+        .eq("id", notificationId)
+        .eq("recipient_id", authData.user.id)
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      if (!notification) return respond({ error: "That notification was not found in your inbox." }, 404);
+      return respond({ ok: true });
+    }
+    if (body.action === "notifications_mark_all_read") {
+      const { error } = await adminClient
+        .from("mw_form_notifications")
+        .update({ is_read: true })
+        .eq("recipient_id", authData.user.id)
+        .eq("is_read", false);
+      if (error) throw error;
+      return respond({ ok: true });
+    }
     if (body.action === "complete_password_change") {
       const password = typeof body.password === "string" ? body.password : "";
       if (password.length < 8 || password.length > 256) {
