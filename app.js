@@ -792,6 +792,9 @@ function makeReleaseFormSheet(request) {
     ["Incoming department (requesting)", request.incoming_department],
     ["Supplier", request.supplier],
     ["Submitted by", request.submitted_by],
+    ["Approved date", request.approved_date],
+    ["Released date", request.released_date],
+    ["Received date", request.received_date],
   ]) {
     if (!value && label === "Supplier") continue;
     const pair = document.createElement("div");

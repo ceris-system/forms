@@ -12,6 +12,7 @@ const requestHeaders = [
   "Product Description", "UOM", "Expiration Date", "Onhand",
   "Total Onhand", "Cost", "SRP", "Transfer Qty", "Remarks", "Sequence Number", "Status",
   "Approved Qty", "Approved By", "Released By", "Received By",
+  "Approved Date", "Released Date", "Received Date",
 ];
 const requestPrefixes: Record<string, string> = {
   "release-request": "RRF",
@@ -271,7 +272,7 @@ async function writeRequestColumns(
   values: unknown[][],
 ): Promise<void> {
   await googleRequest(
-    `spreadsheets/${spreadsheetId}/values/${range(tabName, `R1:W${values.length}`)}?valueInputOption=RAW`,
+    `spreadsheets/${spreadsheetId}/values/${range(tabName, `R1:Z${values.length}`)}?valueInputOption=RAW`,
     { method: "PUT", body: JSON.stringify({ values }) },
   );
 }
@@ -279,7 +280,7 @@ async function writeRequestColumns(
 async function ensureRequestHeaders(spreadsheetId: string, tabName: string): Promise<unknown[][]> {
   let current = await readValues(spreadsheetId, tabName, "A:Z");
   if (!current.length) {
-    await googleRequest(`spreadsheets/${spreadsheetId}/values/${range(tabName, "A1:W1")}?valueInputOption=RAW`, {
+    await googleRequest(`spreadsheets/${spreadsheetId}/values/${range(tabName, "A1:Z1")}?valueInputOption=RAW`, {
       method: "PUT",
       body: JSON.stringify({ values: [requestHeaders] }),
     });
@@ -331,6 +332,9 @@ async function ensureRequestHeaders(spreadsheetId: string, tabName: string): Pro
       hasLegacyId ? "" : row[20] ?? "",
       hasLegacyId ? "" : row[21] ?? "",
       hasLegacyId ? "" : row[22] ?? "",
+      hasLegacyId ? "" : row[23] ?? "",
+      hasLegacyId ? "" : row[24] ?? "",
+      hasLegacyId ? "" : row[25] ?? "",
     ];
   });
   const workflowHeadersChanged = requestHeaders.slice(17).some((header, index) => headers[index + 17] !== header);
@@ -472,6 +476,9 @@ async function loadWorkflowRequests(
           approved_by: String(row[20] || ""),
           released_by: String(row[21] || ""),
           received_by: String(row[22] || ""),
+          approved_date: String(row[23] ?? ""),
+          released_date: String(row[24] ?? ""),
+          received_date: String(row[25] ?? ""),
           form_type_id: formType,
           items: [],
         };
@@ -606,20 +613,29 @@ async function applyWorkflowAction(
     }
 
     const updatedStatus = action === "approve" ? "Approved" : action === "release" ? "Released" : "Received";
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Manila",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
     const valueRanges = matchingRows.map(({ row, sheetRow }, index) => {
       const updated = [...row];
       updated[18] = updatedStatus;
       if (action === "approve") {
         updated[19] = approvedQuantities[index];
         updated[20] = user.username;
+        updated[23] = today;
       } else if (action === "release") {
         updated[21] = user.username;
+        updated[24] = today;
       } else {
         updated[22] = user.username;
+        updated[25] = today;
       }
       return {
-        range: a1Range(actualTab, `S${sheetRow}:W${sheetRow}`),
-        values: [[...updated.slice(18, 23)]],
+        range: a1Range(actualTab, `S${sheetRow}:Z${sheetRow}`),
+        values: [[...updated.slice(18, 26)]],
       };
     });
     await googleRequest(`spreadsheets/${spreadsheetId}/values:batchUpdate`, {
