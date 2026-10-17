@@ -61,6 +61,8 @@ let activityLogs = [];
 let activityLogOffset = 0;
 let activityLogsHaveMore = false;
 let activityLogLoadId = 0;
+let reportSummaryRequests = [];
+let reportSummaryLoadId = 0;
 let pendingInstallPrompt = null;
 const workflowLoadIds = new Map();
 const IDLE_SIGN_OUT_DELAY = 10 * 60 * 1000;
@@ -1038,7 +1040,7 @@ function updateSessionUi(session, navigate = true) {
     const requestedPage = navigate && previousUserId !== nextUserId
       ? "user-forms"
       : location.hash.slice(1) || activePageId || "user-forms";
-    const validPages = new Set(["user-forms", "my-requests", "approvals", "pending-release", "pending-received", "notifications", "reports-history", "user-logs-history", "inventory", "inventory-form", ...Object.keys(HISTORY_FORM_TYPES)]);
+    const validPages = new Set(["user-forms", "my-requests", "approvals", "pending-release", "pending-received", "notifications", "reports-history", "report-summary", "user-logs-history", "inventory", "inventory-form", ...Object.keys(HISTORY_FORM_TYPES)]);
     activatePortalPage(validPages.has(requestedPage) ? requestedPage : "user-forms", false);
     void refreshWorkflowCounts();
   }
@@ -1659,6 +1661,7 @@ function activatePortalPage(pageId, refresh = true) {
     "pending-received": "Pending to received",
     notifications: "Notifications",
     "reports-history": "Reports & History",
+    "report-summary": "Report Summary",
     "user-logs-history": "User Logs History",
     inventory: "Inventory",
     "inventory-form": "Inventory Form",
@@ -1678,6 +1681,7 @@ function activatePortalPage(pageId, refresh = true) {
     "pending-release": loadPendingRelease,
     "pending-received": loadPendingReceived,
     notifications: loadNotifications,
+    "report-summary": loadReportSummary,
     "user-logs-history": loadActivityLogs,
     inventory: () => loadInventoryPage("inventory"),
     "inventory-form": () => loadInventoryPage("inventory-form"),
@@ -1840,6 +1844,170 @@ function renderNotifications(container, notifications, append = false) {
     }
     card.append(main, actions);
     container.append(card);
+  }
+}
+
+function normalizedRequestStatus(request) {
+  const status = String(request.status || "Pending").trim().toLocaleLowerCase();
+  return ["pending", "approved", "released", "received"].includes(status) ? status : "other";
+}
+
+function selectedReportSummaryRequests() {
+  const statusFilter = document.querySelector("#report-summary-status-filter").value;
+  const formFilter = document.querySelector("#report-summary-form-filter").value;
+  const departmentFilter = document.querySelector("#report-summary-department-filter").value.toLocaleLowerCase();
+  return reportSummaryRequests.filter(request =>
+    (!statusFilter || normalizedRequestStatus(request) === statusFilter)
+    && (!formFilter || request.form_type_id === formFilter)
+    && (!departmentFilter
+      || String(request.outgoing_department || "").trim().toLocaleLowerCase() === departmentFilter
+      || String(request.incoming_department || "").trim().toLocaleLowerCase() === departmentFilter)
+  );
+}
+
+function appendReportSummaryRow(tableBody, values, empty = false) {
+  const row = document.createElement("tr");
+  for (const value of values) {
+    const cell = document.createElement("td");
+    cell.textContent = String(value ?? "—");
+    row.append(cell);
+  }
+  if (empty) row.className = "report-summary-empty";
+  tableBody.append(row);
+}
+
+function renderReportSummary() {
+  const requests = selectedReportSummaryRequests();
+  const cards = document.querySelector("#report-summary-cards");
+  cards.replaceChildren();
+  const statusCounts = new Map([
+    ["total", requests.length],
+    ["pending", 0],
+    ["approved", 0],
+    ["released", 0],
+    ["received", 0],
+  ]);
+  for (const request of requests) {
+    const status = normalizedRequestStatus(request);
+    if (statusCounts.has(status)) statusCounts.set(status, statusCounts.get(status) + 1);
+  }
+  for (const [key, label] of [
+    ["total", "Total requests"],
+    ["pending", "Pending"],
+    ["approved", "Approved"],
+    ["released", "Released"],
+    ["received", "Received"],
+  ]) {
+    const card = document.createElement("article");
+    card.className = `report-summary-card${key === "total" ? " report-summary-card-total" : ""}`;
+    const value = document.createElement("strong");
+    value.textContent = String(statusCounts.get(key) || 0);
+    const caption = document.createElement("span");
+    caption.textContent = label;
+    card.append(value, caption);
+    cards.append(card);
+  }
+
+  const formBody = document.querySelector("#report-summary-forms");
+  formBody.replaceChildren();
+  for (const form of FORM_TYPES) {
+    const formRequests = requests.filter(request => request.form_type_id === form.id);
+    const counts = new Map([["pending", 0], ["approved", 0], ["released", 0], ["received", 0]]);
+    for (const request of formRequests) {
+      const status = normalizedRequestStatus(request);
+      if (counts.has(status)) counts.set(status, counts.get(status) + 1);
+    }
+    appendReportSummaryRow(formBody, [
+      form.shortName,
+      formRequests.length,
+      counts.get("pending"),
+      counts.get("approved"),
+      counts.get("released"),
+      counts.get("received"),
+    ]);
+  }
+
+  const recentBody = document.querySelector("#report-summary-recent");
+  recentBody.replaceChildren();
+  const sortedRequests = [...requests].sort((left, right) =>
+    String(right.request_date || "").localeCompare(String(left.request_date || ""))
+    || String(right.request_number || "").localeCompare(String(left.request_number || ""))
+  );
+  for (const request of sortedRequests.slice(0, 20)) {
+    const form = FORM_TYPES.find(candidate => candidate.id === request.form_type_id);
+    const date = formatDisplayDate(request.request_date) || "—";
+    const department = [request.outgoing_department, request.incoming_department]
+      .filter(Boolean)
+      .join(" → ") || "—";
+    appendReportSummaryRow(recentBody, [
+      date,
+      request.request_number || "—",
+      form?.shortName || request.form_type || "—",
+      department,
+      request.submitted_by || "—",
+      String(request.status || "Pending"),
+    ]);
+  }
+  if (!sortedRequests.length) {
+    appendReportSummaryRow(recentBody, ["No requests match these filters."], true);
+    recentBody.lastElementChild.firstElementChild.colSpan = 6;
+  }
+
+  const statusFilter = document.querySelector("#report-summary-status-filter");
+  const formFilter = document.querySelector("#report-summary-form-filter");
+  const departmentFilter = document.querySelector("#report-summary-department-filter");
+  const filterDescriptions = [
+    statusFilter.value ? statusFilter.selectedOptions[0].textContent : "",
+    formFilter.value ? formFilter.selectedOptions[0].textContent : "",
+    departmentFilter.value ? departmentFilter.selectedOptions[0].textContent : "",
+  ].filter(Boolean);
+  const total = reportSummaryRequests.length;
+  document.querySelector("#report-summary-status").textContent =
+    `Showing ${requests.length} of ${total} request${total === 1 ? "" : "s"}${filterDescriptions.length ? ` · ${filterDescriptions.join(" · ")}` : ""}.`;
+}
+
+function updateReportSummaryFilterOptions() {
+  const formSelect = document.querySelector("#report-summary-form-filter");
+  const selectedForm = formSelect.value;
+  formSelect.replaceChildren(new Option("All form types", ""));
+  for (const form of FORM_TYPES) formSelect.add(new Option(form.shortName, form.id));
+  formSelect.value = FORM_TYPES.some(form => form.id === selectedForm) ? selectedForm : "";
+
+  const departmentSelect = document.querySelector("#report-summary-department-filter");
+  const selectedDepartment = departmentSelect.value;
+  const departments = new Set();
+  for (const request of reportSummaryRequests) {
+    for (const value of [request.outgoing_department, request.incoming_department]) {
+      const department = String(value || "").trim();
+      if (department) departments.add(department);
+    }
+  }
+  departmentSelect.replaceChildren(new Option("All departments", ""));
+  for (const department of [...departments].sort((left, right) => left.localeCompare(right))) {
+    departmentSelect.add(new Option(department, department));
+  }
+  departmentSelect.value = [...departments].find(value => value.toLocaleLowerCase() === selectedDepartment.toLocaleLowerCase()) || "";
+}
+
+async function loadReportSummary() {
+  const loadId = ++reportSummaryLoadId;
+  const userId = currentSession?.user.id;
+  const status = document.querySelector("#report-summary-status");
+  const button = document.querySelector("#refresh-report-summary");
+  button.disabled = true;
+  status.textContent = "Loading request summary…";
+  try {
+    const result = await requestSheetData("reports_history");
+    if (loadId !== reportSummaryLoadId || activePageId !== "report-summary" || currentSession?.user.id !== userId) return;
+    reportSummaryRequests = Array.isArray(result.requests) ? result.requests : [];
+    updateReportSummaryFilterOptions();
+    renderReportSummary();
+  } catch (error) {
+    if (loadId !== reportSummaryLoadId || currentSession?.user.id !== userId) return;
+    console.error("Unable to load the report summary.", error);
+    status.textContent = `Could not load report summary: ${error.message || "Request failed."}`;
+  } finally {
+    if (loadId === reportSummaryLoadId) button.disabled = false;
   }
 }
 
@@ -2497,6 +2665,10 @@ document.querySelector("#refresh-my-requests").addEventListener("click", loadMyR
 document.querySelector("#refresh-pending-release").addEventListener("click", loadPendingRelease);
 document.querySelector("#refresh-pending-received").addEventListener("click", loadPendingReceived);
 document.querySelector("#refresh-notifications").addEventListener("click", loadNotifications);
+document.querySelector("#refresh-report-summary").addEventListener("click", () => void loadReportSummary());
+for (const filter of document.querySelectorAll("#report-summary-status-filter, #report-summary-form-filter, #report-summary-department-filter")) {
+  filter.addEventListener("change", renderReportSummary);
+}
 document.querySelector("#load-more-notifications").addEventListener("click", () => void loadNotifications(true));
 document.querySelector("#mark-all-notifications-read").addEventListener("click", markAllNotificationsRead);
 document.querySelector("#refresh-inventory").addEventListener("click", () => void loadInventoryPage("inventory", true));

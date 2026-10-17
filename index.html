@@ -144,8 +144,57 @@
               <button class="report-menu-button" type="button" data-report-target="pullout-history"><span class="report-menu-icon" aria-hidden="true">↩️</span><span>Pull Out History</span></button>
               <button class="report-menu-button" type="button" data-report-target="po-history"><span class="report-menu-icon" aria-hidden="true">🛒</span><span>P.O History</span></button>
               <button class="report-menu-button" type="button" data-report-target="inventory-form"><span class="report-menu-icon" aria-hidden="true">📝</span><span>Inventory Form</span></button>
-              <button class="report-menu-button" type="button"><span class="report-menu-icon" aria-hidden="true">📊</span><span>Report Summary</span></button>
+              <button class="report-menu-button" type="button" data-report-target="report-summary"><span class="report-menu-icon" aria-hidden="true">📊</span><span>Report Summary</span></button>
               <button class="report-menu-button master-admin-only" type="button" data-report-target="user-logs-history"><span class="report-menu-icon" aria-hidden="true">👥</span><span>User Logs History</span></button>
+            </div>
+          </section>
+
+          <section class="section-block user-only portal-page" id="report-summary" data-page-section hidden>
+            <div class="section-heading">
+              <div><p class="eyebrow">📊 REQUEST OVERVIEW</p><h1>Report Summary</h1><p class="section-description">A summary of requests visible to your account, grouped by status and form type.</p></div>
+              <div class="inventory-page-actions">
+                <button class="button button-secondary" type="button" data-back-to-reports>← Reports &amp; History</button>
+                <button class="button button-secondary" id="refresh-report-summary" type="button">🔄 Refresh</button>
+              </div>
+            </div>
+            <div class="report-summary-filters">
+              <label for="report-summary-status-filter">Status
+                <select id="report-summary-status-filter">
+                  <option value="">All statuses</option>
+                  <option value="pending">Pending</option>
+                  <option value="approved">Approved</option>
+                  <option value="released">Released</option>
+                  <option value="received">Received</option>
+                </select>
+              </label>
+              <label for="report-summary-form-filter">Form type
+                <select id="report-summary-form-filter"><option value="">All form types</option></select>
+              </label>
+              <label for="report-summary-department-filter">Department
+                <select id="report-summary-department-filter"><option value="">All departments</option></select>
+              </label>
+            </div>
+            <p class="field-hint" id="report-summary-status" role="status" aria-live="polite"></p>
+            <div class="report-summary-cards" id="report-summary-cards"></div>
+            <div class="report-summary-grid">
+              <section class="report-summary-panel">
+                <h2>Requests by form type</h2>
+                <div class="user-accounts-scroll">
+                  <table class="user-accounts-table report-summary-table">
+                    <thead><tr><th>Form type</th><th>Total</th><th>Pending</th><th>Approved</th><th>Released</th><th>Received</th></tr></thead>
+                    <tbody id="report-summary-forms"></tbody>
+                  </table>
+                </div>
+              </section>
+              <section class="report-summary-panel">
+                <h2>Recent requests</h2>
+                <div class="user-accounts-scroll">
+                  <table class="user-accounts-table report-summary-table">
+                    <thead><tr><th>Date</th><th>Request</th><th>Form</th><th>Department</th><th>Submitted by</th><th>Status</th></tr></thead>
+                    <tbody id="report-summary-recent"></tbody>
+                  </table>
+                </div>
+              </section>
             </div>
           </section>
 

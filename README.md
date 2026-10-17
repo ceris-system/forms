@@ -78,6 +78,8 @@ Signed-in sessions are stored for the current browser tab, automatically sign ou
 
 The Master Admin's **User Logs History** page is available from **Reports & History** and is stored in Supabase, independently of the Google workbook. It records successful sign-ins, pages viewed, successful portal actions, and sign-outs, with the user's department, session, and full local timestamp. Use **Filter by user**, **Refresh logs**, and **Load more activity** to review them. Activity is recorded after the migration is applied; it is not retroactive.
 
+**Report Summary** uses the existing request data in the Google workbook. It shows total requests by workflow status and form type, plus the 20 most recent requests. Status, form type, and department filters apply to the totals and both tables. Users see requests associated with their department; Admins see requests across departments.
+
 ## Master Admin setup in the portal
 
 1. Sign in using the account granted access through `public.mw_portal_admins`.
