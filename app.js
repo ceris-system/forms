@@ -1328,12 +1328,16 @@ async function loadActivityLogs(append = false) {
   const loadId = ++activityLogLoadId;
   const status = document.querySelector("#activity-log-status");
   const button = document.querySelector("#refresh-activity-logs");
+  const loadMoreButton = document.querySelector("#load-more-activity-logs");
   const selectedUserId = document.querySelector("#activity-user-filter").value;
   if (!append) {
     activityLogOffset = 0;
     activityLogs = [];
+    activityLogsHaveMore = false;
+    renderActivityLogs();
   }
   button.disabled = true;
+  loadMoreButton.disabled = true;
   status.textContent = append ? "Loading more activity…" : "Loading user activity logs…";
   try {
     const result = await callPortalAdmin({
@@ -1353,7 +1357,10 @@ async function loadActivityLogs(append = false) {
     console.error("Unable to load user activity logs.", error);
     status.textContent = `Could not load user activity logs: ${error.message || "Request failed."}`;
   } finally {
-    if (loadId === activityLogLoadId) button.disabled = false;
+    if (loadId === activityLogLoadId) {
+      button.disabled = false;
+      loadMoreButton.disabled = false;
+    }
   }
 }
 
@@ -1427,6 +1434,7 @@ async function saveUserAccount(event) {
       status: document.querySelector("#edit-user-status").value,
       password: document.querySelector("#edit-user-password").value,
     });
+    await recordUserActivity("Updated user account", result.username || document.querySelector("#edit-user-login").value.trim());
     await refreshUserAccounts();
     status.textContent = result.warning || "Account updated.";
     if (!result.warning) document.querySelector("#account-edit-dialog").close();
@@ -1447,6 +1455,7 @@ async function deleteUserAccount(account) {
   status.textContent = `Deleting "${account.username}"…`;
   try {
     const result = await callPortalAdmin({ action: "delete_user", user_id: account.user_id });
+    await recordUserActivity("Deleted user account", result.username || account.username);
     adminUserAccounts = adminUserAccounts.filter(item => item.user_id !== account.user_id);
     renderUserAccounts();
     status.textContent = `Account "${result.username}" deleted.`;
@@ -1470,6 +1479,7 @@ async function saveWorkbook() {
       incoming_departments_tab: document.querySelector("#incoming-departments-tab").value.trim(),
       suppliers_tab: document.querySelector("#suppliers-tab").value.trim(),
     });
+    await recordUserActivity("Updated spreadsheet settings");
     input.value = result.spreadsheet_url;
     lookupCache = null;
     document.querySelector("#admin-status").textContent = "Spreadsheet and lookup tabs saved. Make sure the workbook is shared with the Google service account as an Editor.";
@@ -1503,6 +1513,7 @@ async function addUser(event) {
       password: document.querySelector("#new-user-password").value,
       status: document.querySelector("#new-user-status").value,
     });
+    await recordUserActivity("Created user account", `${result.username} · ${role}`);
     form.reset();
     updateUserFormAccess();
     await refreshUserAccounts();
@@ -1585,6 +1596,7 @@ async function changeTemporaryPassword(event) {
     await callPortalAdmin({ action: "complete_password_change", password });
     const { data, error } = await supabaseClient.auth.getUser();
     if (error) throw error;
+    await recordUserActivity("Changed password");
     currentSession = { ...currentSession, user: data.user };
     currentUserProfile.mustChangePassword = false;
     currentUserProfile.status = "active";
@@ -2376,6 +2388,7 @@ document.querySelector("#toggle-user-mode").addEventListener("click", async () =
     return;
   }
   try {
+    await logActivitySessionEnd("Signed out from the portal.");
     const { error } = await supabaseClient.auth.signOut();
     if (error) throw error;
   } catch (error) {
@@ -2520,6 +2533,9 @@ requestFormBody.addEventListener("input", (event) => {
 document.querySelector("#add-user-form").addEventListener("submit", addUser);
 document.querySelector("#new-user-role").addEventListener("change", updateUserFormAccess);
 document.querySelector("#refresh-user-accounts").addEventListener("click", refreshUserAccounts);
+document.querySelector("#refresh-activity-logs").addEventListener("click", () => void loadActivityLogs());
+document.querySelector("#activity-user-filter").addEventListener("change", () => void loadActivityLogs());
+document.querySelector("#load-more-activity-logs").addEventListener("click", () => void loadActivityLogs(true));
 document.querySelector("#account-edit-form").addEventListener("submit", saveUserAccount);
 document.querySelector("#edit-user-role").addEventListener("change", () =>
   updateUserFormAccess("edit-user-role", "edit-user-form-access", "edit-allowed-form-types"));
