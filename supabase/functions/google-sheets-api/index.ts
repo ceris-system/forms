@@ -1251,6 +1251,7 @@ Deno.serve(async (request: Request) => {
       || body.action === "pending_release"
       || body.action === "pending_received"
       || body.action === "reports_history"
+      || body.action === "report_summary"
       || body.action === "workflow_counts"
       || body.action === "workflow_action") {
       const user = await getPortalUserContext(adminClient, authData.user.id);
@@ -1307,6 +1308,27 @@ Deno.serve(async (request: Request) => {
             user.isAdmin ? Object.keys(requestTabs) : user.allowedFormTypes,
           ),
         });
+      }
+      if (body.action === "report_summary") {
+        if (!user.isAdmin) return respond({ error: "Admin access is required to view the summary report." }, 403);
+        const [requests, productRows] = await Promise.all([
+          loadWorkflowRequests(settings.spreadsheet_id, "all", "", "", true, Object.keys(requestTabs)),
+          readValues(settings.spreadsheet_id, settings.products_tab || "data", "A2:N"),
+        ]);
+        const stockRows = productRows
+          .filter(row => String(row[0] ?? "").trim() || String(row[1] ?? "").trim())
+          .map(row => ({
+            sku_code: String(row[0] ?? "").trim(),
+            description: String(row[1] ?? "").trim(),
+            expiration_date: String(row[3] ?? "").trim(),
+            on_hand: String(row[5] ?? "").trim(),
+            department: String(row[6] ?? "").trim(),
+            srp: String(row[8] ?? "").trim(),
+            last_received: String(row[9] ?? "").trim(),
+            status: String(row[12] ?? "").trim(),
+            expiry: String(row[13] ?? "").trim(),
+          }));
+        return respond({ requests, stock_rows: stockRows, products_tab: settings.products_tab || "data" });
       }
       if (body.action === "workflow_counts") {
         const requests = await loadWorkflowRequests(
