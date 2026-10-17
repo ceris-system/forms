@@ -307,6 +307,23 @@
                 <tbody id="user-accounts-list"></tbody>
               </table>
             </div>
+            <div class="section-heading assignment-heading activity-log-heading">
+              <div><p class="eyebrow">AUDIT TRAIL · MASTER ADMIN</p><h2>User activity logs</h2><p class="section-description">Review successful sign-ins, pages viewed, completed portal actions, and sign-outs with full timestamps.</p></div>
+              <div class="activity-log-controls">
+                <label for="activity-user-filter">Filter by user
+                  <select id="activity-user-filter"><option value="">All users</option></select>
+                </label>
+                <button class="button button-secondary" id="refresh-activity-logs" type="button">Refresh logs</button>
+              </div>
+            </div>
+            <p class="field-hint" id="activity-log-status" role="status" aria-live="polite"></p>
+            <div class="user-accounts-scroll activity-log-scroll">
+              <table class="user-accounts-table activity-log-table">
+                <thead><tr><th scope="col">User</th><th scope="col">Department</th><th scope="col">Activity</th><th scope="col">Details</th><th scope="col">Result</th><th scope="col">Timestamp</th><th scope="col">Session</th></tr></thead>
+                <tbody id="activity-log-list"></tbody>
+              </table>
+            </div>
+            <button class="button button-secondary" id="load-more-activity-logs" type="button" hidden>Load more activity</button>
           </details>
 
           <dialog class="account-edit-dialog" id="account-edit-dialog" aria-labelledby="account-edit-title">

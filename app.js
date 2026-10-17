@@ -48,12 +48,19 @@ let profileUserId = "";
 let adminStatusUserId = "";
 let lookupCache = null;
 let activePageId = "";
+let activitySessionId = "";
+let activitySessionUserId = "";
+let endedActivitySessionId = "";
 let notificationCountLoadId = 0;
 let notificationOffset = 0;
 let notificationRequestToReveal = null;
 let notificationRefreshTimer = null;
 let currentUnreadNotificationCount = 0;
 let adminUserAccounts = [];
+let activityLogs = [];
+let activityLogOffset = 0;
+let activityLogsHaveMore = false;
+let activityLogLoadId = 0;
 let pendingInstallPrompt = null;
 const workflowLoadIds = new Map();
 const IDLE_SIGN_OUT_DELAY = 10 * 60 * 1000;
@@ -75,6 +82,7 @@ function resetIdleSignOutTimer() {
     const userId = currentSession?.user.id;
     if (!userId) return;
     try {
+      await logActivitySessionEnd("Signed out after 10 minutes of inactivity.");
       const { error } = await supabaseClient.auth.signOut({ scope: "local" });
       if (error) throw error;
       if (!currentSession) saveStatus.textContent = "You were signed out after 10 minutes of inactivity.";
@@ -89,6 +97,7 @@ function resetIdleSignOutTimer() {
 async function signOutOnPageExit() {
   if (!currentSession || !supabaseClient) return;
   try {
+    await logActivitySessionEnd("Signed out when leaving the portal.");
     const { error } = await supabaseClient.auth.signOut({ scope: "local" });
     if (error) throw error;
   } catch (error) {
@@ -357,7 +366,90 @@ async function requestSheetData(action, payload) {
   });
   if (error) throw new Error(await edgeFunctionErrorMessage(error));
   if (data?.error) throw new Error(data.error);
+  const activity = describeSuccessfulSheetAction(action, payload, data);
+  if (activity) await recordUserActivity(activity.action, activity.details);
   return data;
+}
+
+function createActivitySessionId() {
+  if (window.crypto?.randomUUID) return window.crypto.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, character => {
+    const random = Math.random() * 16 | 0;
+    return (character === "x" ? random : (random & 3 | 8)).toString(16);
+  });
+}
+
+function ensureActivitySession(userId) {
+  if (activitySessionUserId === userId && activitySessionId) return activitySessionId;
+  const key = `mw-activity-session:${userId}`;
+  const stored = sessionStorage.getItem(key);
+  activitySessionId = stored && /^[0-9a-f-]{36}$/i.test(stored) ? stored : createActivitySessionId();
+  sessionStorage.setItem(key, activitySessionId);
+  activitySessionUserId = userId;
+  endedActivitySessionId = "";
+  return activitySessionId;
+}
+
+async function recordUserActivity(activity, details = "") {
+  if (!supabaseClient || !currentSession?.user.id) return false;
+  const sessionId = ensureActivitySession(currentSession.user.id);
+  try {
+    const { data, error } = await supabaseClient.functions.invoke("portal-admin", {
+      body: { action: "activity_log_create", session_id: sessionId, activity, details },
+    });
+    if (error) throw new Error(await edgeFunctionErrorMessage(error));
+    if (data?.error) throw new Error(data.error);
+    return true;
+  } catch (error) {
+    console.error(`Could not record user activity "${activity}".`, error);
+    const status = document.querySelector("#activity-log-status");
+    if (status) status.textContent = `Activity logging error: ${error.message || "Request failed."}`;
+    else saveStatus.textContent = `Activity logging error: ${error.message || "Request failed."}`;
+    return false;
+  }
+}
+
+async function logActivitySessionEnd(details) {
+  const userId = currentSession?.user.id;
+  if (!userId) return;
+  const sessionId = ensureActivitySession(userId);
+  if (endedActivitySessionId === sessionId) return;
+  const logged = await recordUserActivity("Signed out", details);
+  if (logged) endedActivitySessionId = sessionId;
+}
+
+function describeSuccessfulSheetAction(action, payload, result) {
+  if (action === "submit") {
+    const form = FORM_TYPES.find(item => item.id === payload?.form_type)?.shortName || "request form";
+    return {
+      action: `Submitted ${form}`,
+      details: [
+        result?.request_number ? `Request ${result.request_number}` : "",
+        payload?.outgoing_department && payload?.incoming_department
+          ? `${payload.outgoing_department} to ${payload.incoming_department}`
+          : "",
+      ].filter(Boolean).join(" · "),
+    };
+  }
+  if (action === "workflow_action") {
+    const actionName = {
+      approve: "Approved",
+      release: "Marked released",
+      receive: "Marked received",
+    }[payload?.action] || "Updated workflow";
+    return {
+      action: `${actionName} request`,
+      details: String(payload?.request_number || ""),
+    };
+  }
+  if (action === "inventory_adjustment_update") {
+    return {
+      action: "Updated inventory",
+      details: [String(result?.department || payload?.department || ""), String(payload?.sku_code || "")]
+        .filter(Boolean).join(" · "),
+    };
+  }
+  return null;
 }
 
 function setInventoryDepartmentOptions(departments) {
@@ -870,6 +962,14 @@ function updateSessionUi(session, navigate = true) {
     document.body.classList.remove("master-admin-mode");
   }
   currentSession = session;
+  if (nextUserId) {
+    ensureActivitySession(nextUserId);
+  } else if (previousUserId) {
+    sessionStorage.removeItem(`mw-activity-session:${previousUserId}`);
+    activitySessionId = "";
+    activitySessionUserId = "";
+    endedActivitySessionId = "";
+  }
   if (previousUserId !== nextUserId) resetIdleSignOutTimer();
   const signedIn = Boolean(session);
   document.body.classList.toggle("signed-out", !signedIn);
@@ -1161,6 +1261,102 @@ function renderUserAccounts() {
   }
 }
 
+function formatActivityTimestamp(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value || "");
+  const day = new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
+  const time = new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(date).toLocaleLowerCase();
+  return `${day} at ${time}`;
+}
+
+function renderActivityLogs() {
+  const list = document.querySelector("#activity-log-list");
+  list.replaceChildren();
+  if (!activityLogs.length) {
+    const row = document.createElement("tr");
+    const cell = document.createElement("td");
+    cell.colSpan = 7;
+    cell.textContent = "No user activity logs found.";
+    row.append(cell);
+    list.append(row);
+  } else {
+    for (const entry of activityLogs) {
+      const row = document.createElement("tr");
+      const values = [
+        entry.username,
+        entry.department || "—",
+        entry.action,
+        entry.details || "—",
+        entry.succeeded ? "Success" : "Failed",
+        formatActivityTimestamp(entry.occurred_at),
+        String(entry.session_id || "").slice(0, 8),
+      ];
+      for (const value of values) {
+        const cell = document.createElement("td");
+        cell.textContent = String(value ?? "");
+        row.append(cell);
+      }
+      list.append(row);
+    }
+  }
+  document.querySelector("#load-more-activity-logs").hidden = !activityLogsHaveMore;
+}
+
+function updateActivityUserOptions(logUsers) {
+  const select = document.querySelector("#activity-user-filter");
+  const selected = select.value;
+  const users = new Map();
+  for (const user of [...(logUsers || []), ...adminUserAccounts]) {
+    if (user.user_id && user.username) users.set(user.user_id, user.username);
+  }
+  select.replaceChildren(new Option("All users", ""));
+  for (const [userId, username] of [...users.entries()].sort((left, right) => left[1].localeCompare(right[1]))) {
+    select.add(new Option(username, userId));
+  }
+  select.value = users.has(selected) ? selected : "";
+}
+
+async function loadActivityLogs(append = false) {
+  const loadId = ++activityLogLoadId;
+  const status = document.querySelector("#activity-log-status");
+  const button = document.querySelector("#refresh-activity-logs");
+  const selectedUserId = document.querySelector("#activity-user-filter").value;
+  if (!append) {
+    activityLogOffset = 0;
+    activityLogs = [];
+  }
+  button.disabled = true;
+  status.textContent = append ? "Loading more activity…" : "Loading user activity logs…";
+  try {
+    const result = await callPortalAdmin({
+      action: "activity_logs_read",
+      user_id: selectedUserId,
+      offset: activityLogOffset,
+    });
+    if (loadId !== activityLogLoadId || selectedUserId !== document.querySelector("#activity-user-filter").value) return;
+    updateActivityUserOptions(result.users || []);
+    activityLogs = append ? [...activityLogs, ...(result.logs || [])] : result.logs || [];
+    activityLogOffset += (result.logs || []).length;
+    activityLogsHaveMore = Boolean(result.has_more);
+    renderActivityLogs();
+    status.textContent = `${activityLogs.length} activity log${activityLogs.length === 1 ? "" : "s"} loaded${selectedUserId ? ` for ${document.querySelector("#activity-user-filter").selectedOptions[0]?.textContent || "selected user"}` : ""}.`;
+  } catch (error) {
+    if (loadId !== activityLogLoadId) return;
+    console.error("Unable to load user activity logs.", error);
+    status.textContent = `Could not load user activity logs: ${error.message || "Request failed."}`;
+  } finally {
+    if (loadId === activityLogLoadId) button.disabled = false;
+  }
+}
+
 function openAccountEditor(account) {
   const dialog = document.querySelector("#account-edit-dialog");
   document.querySelector("#account-edit-form").reset();
@@ -1351,6 +1547,7 @@ async function signIn(event) {
       refresh_token: data.refresh_token,
     });
     if (sessionError) throw sessionError;
+    await recordUserActivity("Signed in", "Successfully signed in to the portal.");
     document.querySelector("#auth-username").value = "";
     const passwordInput = document.querySelector("#auth-password");
     passwordInput.value = "";
@@ -1450,6 +1647,7 @@ function activatePortalPage(pageId, refresh = true) {
   document.querySelector("#breadcrumb-page").textContent = pageNames[pageId];
   if (location.hash !== `#${pageId}`) history.replaceState(null, "", `#${pageId}`);
   activePageId = pageId;
+  if (pageChanged) void recordUserActivity("Viewed page", pageNames[pageId]);
   if (!pageChanged && !refresh) return;
   const loaders = {
     "my-requests": loadMyRequests,

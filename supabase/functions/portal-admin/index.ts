@@ -157,6 +157,64 @@ Deno.serve(async (request: Request) => {
       if (error) throw error;
       return respond({ ok: true });
     }
+    if (body.action === "activity_log_create") {
+      const action = typeof body.activity === "string" ? body.activity.trim() : "";
+      const details = typeof body.details === "string" ? body.details.trim() : "";
+      const sessionId = typeof body.session_id === "string" ? body.session_id : "";
+      if (!action || action.length > 120) return respond({ error: "Activity name must be 1–120 characters." }, 400);
+      if (details.length > 500) return respond({ error: "Activity details must be 500 characters or fewer." }, 400);
+      if (!/^[0-9a-f-]{36}$/i.test(sessionId)) return respond({ error: "The activity session is invalid." }, 400);
+      const { error } = await adminClient.from("mw_user_activity_logs").insert({
+        user_id: authData.user.id,
+        username: String(currentProfile?.username || authData.user.user_metadata?.portal_username || "Unknown user"),
+        department: String(currentProfile?.department || authData.user.user_metadata?.department || ""),
+        session_id: sessionId,
+        action,
+        details,
+        succeeded: true,
+      });
+      if (error) throw error;
+      return respond({ ok: true });
+    }
+    if (body.action === "activity_logs_read") {
+      if (!isMasterAdmin) return respond({ error: "Only the Master Admin can view user activity logs." }, 403);
+      const requestedOffset = Number(body.offset ?? 0);
+      const requestedUserId = typeof body.user_id === "string" ? body.user_id : "";
+      if (!Number.isSafeInteger(requestedOffset) || requestedOffset < 0 || requestedOffset > 100_000) {
+        return respond({ error: "The activity log page is invalid." }, 400);
+      }
+      if (requestedUserId && !/^[0-9a-f-]{36}$/i.test(requestedUserId)) {
+        return respond({ error: "Choose a valid user filter." }, 400);
+      }
+      let logsQuery = adminClient.from("mw_user_activity_logs")
+        .select("id, user_id, username, department, session_id, action, details, succeeded, occurred_at")
+        .order("occurred_at", { ascending: false })
+        .order("id", { ascending: false });
+      let userOptionsQuery = adminClient.from("mw_user_activity_logs")
+        .select("user_id, username")
+        .order("occurred_at", { ascending: false })
+        .limit(2000);
+      if (requestedUserId) logsQuery = logsQuery.eq("user_id", requestedUserId);
+      const [logsResult, userOptionsResult] = await Promise.all([
+        logsQuery.range(requestedOffset, requestedOffset + 100),
+        userOptionsQuery,
+      ]);
+      if (logsResult.error) throw logsResult.error;
+      if (userOptionsResult.error) throw userOptionsResult.error;
+      const seenUsers = new Set<string>();
+      const users = (userOptionsResult.data || []).flatMap(entry => {
+        const userId = String(entry.user_id || "");
+        if (!userId || seenUsers.has(userId)) return [];
+        seenUsers.add(userId);
+        return [{ user_id: userId, username: String(entry.username || "Unknown user") }];
+      });
+      const logs = logsResult.data || [];
+      return respond({
+        logs: logs.slice(0, 100),
+        users,
+        has_more: logs.length > 100,
+      });
+    }
     if (body.action === "complete_password_change") {
       const password = typeof body.password === "string" ? body.password : "";
       if (password.length < 8 || password.length > 256) {
