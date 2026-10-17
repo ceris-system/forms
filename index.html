@@ -84,6 +84,25 @@
             </details>
           </section>
 
+          <section class="section-block user-only portal-page request-form-page" id="request-form-page" data-page-section aria-labelledby="form-dialog-title" hidden>
+            <div class="request-dialog">
+              <form id="request-form">
+                <div class="request-sheet-header">
+                  <button class="dialog-close" id="close-request-dialog" type="button" aria-label="Close form">✖️</button>
+                  <img src="assets/mothers-wonderland-logo.png" alt="Mother's Wonderland">
+                  <p class="request-sheet-title" id="form-dialog-title"></p>
+                </div>
+                <div class="request-dialog-body" id="request-form-body"></div>
+                <div class="request-sheet-signatures">
+                  <div><strong>RELEASED BY: / DESIGNATION</strong><span></span><small>SIGNATURE OVER PRINTED NAME</small></div>
+                  <div><strong>APPROVED BY</strong><span></span><small>APPROVAL SIGNATURE</small></div>
+                  <div><strong>RECEIVED BY: / DESIGNATION</strong><span></span><small>SIGNATURE OVER PRINTED NAME</small></div>
+                </div>
+                <div class="request-form-footer"><p class="request-form-notice">Sign in to submit requests.</p></div>
+              </form>
+            </div>
+          </section>
+
           <section class="section-block user-only portal-page" id="approvals" data-page-section hidden>
             <div class="section-heading">
               <div><p class="eyebrow">✅ ADMIN REVIEW</p><h1>Approvals</h1><p class="section-description">Review each request by form category. Adjust Approved Qty before approving; the approving username is saved as the approval signature.</p></div>
@@ -298,7 +317,7 @@
                 <label class="field-label" for="suppliers-tab">Suppliers tab name</label>
                 <input id="suppliers-tab" type="text" maxlength="100" value="dd" required>
               </div>
-              <p class="field-hint">Products are read by their header row and suppliers from column B. Form outgoing departments come from product column G; account departments are loaded from AREA!A1:A.</p>
+              <p class="field-hint">Products are read by their header row and suppliers from column B. Outgoing departments come from product column G, or from column A of the configured outgoing-departments tab if product departments are empty. Account departments are loaded from AREA!A1:A.</p>
               <button class="button button-primary save-button" type="button" id="save-workbook">Save spreadsheet settings</button>
               <p class="field-hint" id="admin-status" role="status" aria-live="polite"></p>
             </div>
@@ -446,22 +465,6 @@
         <div class="inventory-drawer-actions">
           <button class="button button-primary" id="update-inventory-adjustment" type="submit">💾 Update inventory</button>
         </div>
-      </form>
-    </dialog>
-    <dialog class="request-dialog" id="request-dialog" aria-labelledby="form-dialog-title">
-      <form id="request-form">
-        <div class="request-sheet-header">
-          <button class="dialog-close" id="close-request-dialog" type="button" aria-label="Close form">✖️</button>
-          <img src="assets/mothers-wonderland-logo.png" alt="Mother's Wonderland">
-          <p class="request-sheet-title" id="form-dialog-title"></p>
-        </div>
-        <div class="request-dialog-body" id="request-form-body"></div>
-        <div class="request-sheet-signatures">
-          <div><strong>RELEASED BY: / DESIGNATION</strong><span></span><small>SIGNATURE OVER PRINTED NAME</small></div>
-          <div><strong>APPROVED BY</strong><span></span><small>APPROVAL SIGNATURE</small></div>
-          <div><strong>RECEIVED BY: / DESIGNATION</strong><span></span><small>SIGNATURE OVER PRINTED NAME</small></div>
-        </div>
-        <div class="request-form-footer"><p class="request-form-notice">Sign in to submit requests.</p></div>
       </form>
     </dialog>
     <dialog class="catalog-dialog auth-dialog" id="password-change-dialog" aria-labelledby="password-change-title">

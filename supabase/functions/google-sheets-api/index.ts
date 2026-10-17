@@ -201,10 +201,14 @@ async function lookupLists(
   const uniqueColumn = (rows: unknown[][]): string[] => [
     ...new Set(rows.map(row => String(row[0] ?? "").trim()).filter(Boolean)),
   ];
+  const productDepartments = uniqueColumn(productValues.map(row => [row[6]]));
+  const outgoingDepartments = productDepartments.length
+    ? productDepartments
+    : uniqueColumn(await readValues(spreadsheetId, tabs.outgoing_departments_tab, "A:A"));
   return {
     products_tab: tabs.products_tab,
     products: lookupProductRows(productValues),
-    outgoing_departments: uniqueColumn(productValues.map(row => [row[6]])),
+    outgoing_departments: outgoingDepartments,
     account_departments: uniqueColumn(accountDepartments),
     incoming_departments: [],
     suppliers: uniqueColumn(suppliers),

@@ -17,7 +17,6 @@ body:not(.user-mode) .user-only { display: none; }
 body.user-mode:not(.admin-mode) .admin-only { display: none !important; }
 body:not(.master-admin-mode) .master-admin-only-option { display: none; }
 body:not(.master-admin-mode) .report-menu-button.master-admin-only { display: none; }
-body.report-summary-open { overflow: hidden; }
 body.user-mode section.user-only { display: block; }
 body.user-mode .nav-link.user-only { display: flex; }
 body.signed-out .app-shell { display: none; }
@@ -113,8 +112,8 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .report-menu-button:nth-child(4n + 2) .report-menu-icon { background: #f1eff7; }
 .report-menu-button:nth-child(4n + 3) .report-menu-icon { background: #fbf0e7; }
 .report-menu-button:nth-child(4n) .report-menu-icon { background: #edf2f6; }
-#report-summary { --rs-accent: #22d3ee; --rs-light: #a5f3fc; --rs-rgb: 34,211,238; position: fixed; z-index: 20; inset: 2.5vh 2vw; display: block; width: auto; height: auto; margin: 0; padding: 0; color: #f6f4ff; font-family: "Roboto Mono", Consolas, monospace; }
-#report-summary::before { position: fixed; z-index: -1; inset: -2.5vh -2vw; background: rgb(5 4 20 / 88%); content: ""; }
+#report-summary { --rs-accent: #22d3ee; --rs-light: #a5f3fc; --rs-rgb: 34,211,238; position: relative; display: block; width: 100%; height: clamp(480px, calc(100vh - 150px), 920px); margin: 0; padding: 0; color: #f6f4ff; font-family: "Roboto Mono", Consolas, monospace; }
+#report-summary::before { content: none; }
 #report-summary[data-report-tab="TOP_RANK"] { --rs-accent: #a78bfa; --rs-light: #ddd6fe; --rs-rgb: 167,139,250; }
 #report-summary[data-report-tab="MONTH_COMPARE"], #report-summary[data-report-tab="CRITICAL_STOCK"] { --rs-accent: #2dd4bf; --rs-light: #99f6e4; --rs-rgb: 45,212,191; }
 #report-summary[data-report-tab="CRITICAL_STOCK"] { --rs-accent: #ff5c8a; --rs-light: #ffb3c9; --rs-rgb: 255,92,138; }
@@ -453,9 +452,9 @@ h2 { margin-bottom: 5px; font-size: 20px; font-weight: 700; letter-spacing: -.45
 .page-footer #save-status { text-align: right; }
 .request-item-row td { padding: 3px; border: 0; }
 .remove-item-button { width: 30px; height: 29px; border: 0; border-radius: 4px; background: #fbefec; color: #a45e50; cursor: pointer; font-size: 14px; }
-.request-dialog { width: min(1460px, calc(100% - 24px)); max-width: 1460px; height: min(780px, calc(100vh - 24px)); max-height: calc(100vh - 24px); padding: 10px; overflow: auto; border: 0; background: white; color: #171719; box-shadow: 0 20px 70px rgb(30 45 37 / 22%); }
+body.user-mode section.request-form-page { display: flex; height: min(780px, calc(100vh - 150px)); min-height: 520px; flex-direction: column; }
+.request-dialog { width: 100%; height: 100%; padding: 10px; overflow: auto; border: 1px solid var(--line); border-radius: 14px; background: white; color: #171719; box-shadow: 0 10px 28px rgb(30 45 37 / 9%); }
 .request-dialog, .request-dialog * { font-family: "Roboto Mono", monospace; }
-.request-dialog::backdrop { background: rgb(25 37 31 / 58%); }
 .request-dialog form { display: flex; min-height: 100%; flex-direction: column; }
 .request-sheet-header { position: relative; display: grid; justify-items: center; padding: 2px 38px 8px; }
 .request-sheet-header > img { width: 150px; max-height: 39px; object-fit: contain; }
@@ -593,7 +592,7 @@ td { padding: 10px 12px; border-top: 1px solid #f0f1ef; color: #536057; font-siz
   .topbar { padding-right: 28px; padding-left: 28px; }
 }
 @media (max-width: 760px) {
-  #report-summary { inset: 1vh 1vw; }
+  body.user-mode section.request-form-page { height: min(780px, calc(100vh - 220px)); min-height: 520px; }
   .report-summary-workspace { grid-template-columns: 150px minmax(0, 1fr); }
   .report-summary-main { padding: 9px; }
   .report-summary-hero-top { align-items: flex-start; flex-wrap: wrap; }
@@ -638,8 +637,7 @@ td { padding: 10px 12px; border-top: 1px solid #f0f1ef; color: #536057; font-siz
   .form-grid, .form-preview-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 560px) {
-  #report-summary { inset: 0; }
-  .report-summary-window { border: 0; }
+  #report-summary { height: clamp(480px, calc(100dvh - 145px), 920px); }
   .report-summary-header { min-height: 54px; padding: 7px; }
   .report-summary-brand-icon { width: 28px; height: 28px; font-size: 18px; }
   .report-summary-brand h1 { font-size: 11px; }

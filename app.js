@@ -22,7 +22,7 @@ const ITEM_FIELDS = ["SKU Code", "Product Description", "UOM", "Cost", "SRP", "E
 const CATALOG_FIELDS = ["SKU CODE", "PRODUCT DESCRIPTION", "UOM", "COST", "SRP", "EXPIRATION DATE", "QTY ONHAND", "TOTAL QTY ONHAND"];
 const userFormGrid = document.querySelector("#user-form-grid");
 const saveStatus = document.querySelector("#save-status");
-const requestDialog = document.querySelector("#request-dialog");
+const requestFormPage = document.querySelector("#request-form-page");
 const requestFormBody = document.querySelector("#request-form-body");
 const catalogDialog = document.querySelector("#catalog-dialog");
 const catalogProducts = document.querySelector("#catalog-products");
@@ -272,9 +272,18 @@ function openRequestForm(form) {
     void loadSequencePreview(form.id, outgoingDepartment.value);
   });
   document.querySelector(".request-form-notice").textContent = `Signed in as ${currentUserProfile.username || "user"}.`;
-  requestDialog.dataset.formType = form.id;
-  requestDialog.showModal();
+  requestFormPage.dataset.formType = form.id;
+  activatePortalPage("request-form-page");
   loadRequestLookups(form.id);
+}
+
+function isRequestFormOpen() {
+  return !requestFormPage.hidden;
+}
+
+function closeRequestForm() {
+  requestFormPage.hidden = true;
+  if (currentSession) activatePortalPage("user-forms");
 }
 
 function setRequestNotice(message) {
@@ -774,8 +783,8 @@ async function saveInventoryAdjustment(event) {
 async function loadSequencePreview(formType, outgoingDepartment) {
   const number = requestFormBody.querySelector(".request-number");
   const outgoing = requestFormBody.querySelector("#outgoing-department");
-  const requestId = Number(requestDialog.dataset.sequenceRequest || 0) + 1;
-  requestDialog.dataset.sequenceRequest = String(requestId);
+  const requestId = Number(requestFormPage.dataset.sequenceRequest || 0) + 1;
+  requestFormPage.dataset.sequenceRequest = String(requestId);
   if (!outgoingDepartment) {
     number.textContent = "Select outgoing department";
     return;
@@ -783,18 +792,18 @@ async function loadSequencePreview(formType, outgoingDepartment) {
   number.textContent = "Loading…";
   try {
     const result = await requestSheetData("sequence_preview", { form_type: formType });
-    if (!requestDialog.open
-      || requestDialog.dataset.formType !== formType
-      || requestDialog.dataset.sequenceRequest !== String(requestId)
+    if (!isRequestFormOpen()
+      || requestFormPage.dataset.formType !== formType
+      || requestFormPage.dataset.sequenceRequest !== String(requestId)
       || outgoing.value !== outgoingDepartment) return;
     const prefix = FORM_TYPES.find((form) => form.id === formType)?.prefix;
     if (!prefix) throw new Error("The selected form has no request number prefix.");
     number.textContent = `${prefix}-${String(result.sequence_number).padStart(7, "0")}`;
   } catch (error) {
     console.error("Unable to preview the next request sequence.", error);
-    if (requestDialog.open
-      && requestDialog.dataset.formType === formType
-      && requestDialog.dataset.sequenceRequest === String(requestId)
+    if (isRequestFormOpen()
+      && requestFormPage.dataset.formType === formType
+      && requestFormPage.dataset.sequenceRequest === String(requestId)
       && outgoing.value === outgoingDepartment) {
       number.textContent = "Unavailable";
       setRequestNotice(`Could not preview the next sequence number: ${error.message || "Request failed."}`);
@@ -866,13 +875,13 @@ async function loadRequestLookups(formType) {
   setRequestNotice(`Signed in as ${currentUserProfile.username || "your account"}. Loading outgoing departments…`);
   try {
     const result = await loadLookupData();
-    if (!requestDialog.open || requestDialog.dataset.formType !== formType) return;
+    if (!isRequestFormOpen() || requestFormPage.dataset.formType !== formType) return;
     populateSelect(outgoing, result.outgoing_departments || [], "department");
     if (supplier) populateSelect(supplier, result.suppliers || [], "supplier");
     setRequestNotice(`Signed in as ${currentUserProfile.username || "your account"}.`);
   } catch (error) {
     console.error("Unable to load form lists from Google Sheets.", error);
-    if (!requestDialog.open || requestDialog.dataset.formType !== formType) return;
+    if (!isRequestFormOpen() || requestFormPage.dataset.formType !== formType) return;
     outgoing.replaceChildren(new Option("Could not load outgoing departments", ""));
     incoming.replaceChildren(new Option(currentUserProfile.department || "Department not assigned", currentUserProfile.department || ""));
     incoming.disabled = !currentUserProfile.department;
@@ -1001,7 +1010,6 @@ function updateSessionUi(session, navigate = true) {
   }
   const signedIn = Boolean(session);
   document.body.classList.toggle("signed-out", !signedIn);
-  document.body.classList.toggle("report-summary-open", signedIn && activePageId === "report-summary");
   const metadata = session?.user?.user_metadata || {};
   if (signedIn && !currentUserProfile.username) {
     currentUserProfile = {
@@ -1037,7 +1045,7 @@ function updateSessionUi(session, navigate = true) {
     : "GUEST";
   document.querySelector("#session-status").textContent = signedIn ? "Signed in" : supabaseClient ? "Ready to sign in" : "Setup needed";
   if (!signedIn && catalogDialog.open) catalogDialog.close();
-  if (!signedIn && requestDialog.open) requestDialog.close();
+  if (!signedIn && isRequestFormOpen()) closeRequestForm();
   if (!signedIn || currentUserProfile.mustChangePassword) {
     isMasterAdmin = false;
     isAdmin = false;
@@ -1045,7 +1053,7 @@ function updateSessionUi(session, navigate = true) {
     document.body.classList.remove("admin-mode");
     document.body.classList.remove("master-admin-mode");
     document.querySelector("#supabase-connection").hidden = true;
-    if (requestDialog.open) requestDialog.close();
+    if (isRequestFormOpen()) closeRequestForm();
     if (catalogDialog.open) catalogDialog.close();
     if (signedIn && !passwordChangeDialog.open) passwordChangeDialog.showModal();
     if (!signedIn && passwordChangeDialog.open) passwordChangeDialog.close();
@@ -1058,7 +1066,7 @@ function updateSessionUi(session, navigate = true) {
     const requestedPage = navigate && previousUserId !== nextUserId
       ? "user-forms"
       : location.hash.slice(1) || activePageId || "user-forms";
-    const validPages = new Set(["user-forms", "my-requests", "approvals", "pending-release", "pending-received", "notifications", "reports-history", "report-summary", "user-logs-history", "inventory", "inventory-form", ...Object.keys(HISTORY_FORM_TYPES)]);
+      const validPages = new Set(["user-forms", "my-requests", "approvals", "pending-release", "pending-received", "notifications", "reports-history", "report-summary", "user-logs-history", "inventory", "inventory-form", ...Object.keys(HISTORY_FORM_TYPES)]);
     activatePortalPage(validPages.has(requestedPage) ? requestedPage : "user-forms", false);
     void refreshWorkflowCounts();
   }
@@ -1670,7 +1678,7 @@ function activatePortalPage(pageId, refresh = true) {
     section.hidden = section !== selectedPage;
   });
   document.querySelectorAll(".nav-link[data-page]").forEach((link) => {
-    link.classList.toggle("active", link.dataset.page === pageId);
+    link.classList.toggle("active", link.dataset.page === (pageId === "report-summary" ? "reports-history" : pageId === "request-form-page" ? "user-forms" : pageId));
   });
   const pageNames = {
     "user-forms": "My forms",
@@ -1681,6 +1689,7 @@ function activatePortalPage(pageId, refresh = true) {
     notifications: "Notifications",
     "reports-history": "Reports & History",
     "report-summary": "Report Summary",
+    "request-form-page": "Request Form",
     "user-logs-history": "User Logs History",
     inventory: "Inventory",
     "inventory-form": "Inventory Form",
@@ -1692,7 +1701,6 @@ function activatePortalPage(pageId, refresh = true) {
   document.querySelector("#breadcrumb-page").textContent = pageNames[pageId];
   if (location.hash !== `#${pageId}`) history.replaceState(null, "", `#${pageId}`);
   activePageId = pageId;
-  document.body.classList.toggle("report-summary-open", pageId === "report-summary");
   if (pageId === "report-summary" && !reportSummaryRefreshTimer) {
     reportSummaryRefreshTimer = window.setInterval(() => {
       if (document.visibilityState === "visible" && activePageId === "report-summary") void loadReportSummary();
@@ -3389,11 +3397,11 @@ async function submitRequest(event) {
     setRequestNotice("Select a catalog product for each item before submitting.");
     return;
   }
-  const formType = String(requestDialog.dataset.formType || "").trim();
+  const formType = String(requestFormPage.dataset.formType || "").trim();
   const outgoingDepartment = document.querySelector("#outgoing-department");
   const incomingDepartment = document.querySelector("#incoming-department");
   if (outgoingDepartment.disabled || !outgoingDepartment.value) {
-    setRequestNotice("Select an outgoing department before submitting. If the list could not load, check the Products tab's column G values and reload the form.");
+    setRequestNotice("Select an outgoing department before submitting. If no departments are listed, check the Products tab's column G or the configured outgoing-departments tab's column A.");
     outgoingDepartment.focus();
     return;
   }
@@ -3526,7 +3534,7 @@ document.querySelector("#select-all-products").addEventListener("change", (event
 document.querySelector("#add-selected-products").addEventListener("click", addSelectedProductsToRequest);
 document.querySelector("#close-catalog-dialog").addEventListener("click", () => catalogDialog.close());
 document.querySelector("#cancel-catalog").addEventListener("click", () => catalogDialog.close());
-document.querySelector("#close-request-dialog").addEventListener("click", () => requestDialog.close());
+document.querySelector("#close-request-dialog").addEventListener("click", closeRequestForm);
 document.querySelector("#request-form").addEventListener("submit", submitRequest);
 document.querySelector("#auth-form").addEventListener("submit", signIn);
 document.querySelector("#toggle-login-password").addEventListener("click", (event) => {
