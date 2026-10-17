@@ -876,7 +876,7 @@ async function loadRequestLookups(formType) {
   try {
     const result = await loadLookupData();
     if (!isRequestFormOpen() || requestFormPage.dataset.formType !== formType) return;
-    populateSelect(outgoing, result.outgoing_departments || [], "department");
+    populateSelect(outgoing, result.account_departments || [], "department");
     if (supplier) populateSelect(supplier, result.suppliers || [], "supplier");
     setRequestNotice(`Signed in as ${currentUserProfile.username || "your account"}.`);
   } catch (error) {

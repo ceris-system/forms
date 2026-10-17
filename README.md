@@ -20,7 +20,7 @@ Dates displayed in request forms, inventory, approvals, and history use the `MON
 4. Share the common Google workbook with that service-account email as an **Editor**.
 5. Keep the shared lookup lists in these tabs:
    - Product catalog tab, read from row 2 onward and shown in this order: SKU Code from column A, Product Description from B, UOM from C, Cost from H, SRP from I, Expiration Date from D, Onhand from E, and Total Onhand from F. Column G contains the associated outgoing department; **Select products** only shows rows whose G value matches the selected outgoing department. Rows without both a SKU Code and Product Description are skipped.
-   - Outgoing department names are derived from unique non-empty values in column G of the configured Products tab, from row 2 onward. If that column has no department values, the portal falls back to column A of the configured outgoing-departments tab. Product selection still matches the chosen department against Products column G.
+   - The outgoing-department dropdown is loaded from unique non-empty values in `AREA!A1:A`. Product selection still matches the chosen department against Products column G.
    - User account department choices come from non-empty values in `AREA!A1:A`.
    - Each staff member's department (set by the Master Admin) is automatically used as their Incoming Department.
    - Supplier tab, with supplier names in column B.

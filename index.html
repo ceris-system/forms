@@ -317,7 +317,7 @@
                 <label class="field-label" for="suppliers-tab">Suppliers tab name</label>
                 <input id="suppliers-tab" type="text" maxlength="100" value="dd" required>
               </div>
-              <p class="field-hint">Products are read by their header row and suppliers from column B. Outgoing departments come from product column G, or from column A of the configured outgoing-departments tab if product departments are empty. Account departments are loaded from AREA!A1:A.</p>
+              <p class="field-hint">Products are read by their header row and suppliers from column B. The outgoing-department dropdown reads AREA!A1:A. Product selection matches the selected department to Products column G.</p>
               <button class="button button-primary save-button" type="button" id="save-workbook">Save spreadsheet settings</button>
               <p class="field-hint" id="admin-status" role="status" aria-live="polite"></p>
             </div>
