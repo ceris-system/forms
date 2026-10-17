@@ -16,6 +16,7 @@
 body:not(.user-mode) .user-only { display: none; }
 body.user-mode:not(.admin-mode) .admin-only { display: none !important; }
 body:not(.master-admin-mode) .master-admin-only-option { display: none; }
+body:not(.master-admin-mode) .report-menu-button.master-admin-only { display: none; }
 body.user-mode section.user-only { display: block; }
 body.user-mode .nav-link.user-only { display: flex; }
 body.signed-out .app-shell { display: none; }
@@ -111,6 +112,9 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .report-menu-button:nth-child(4n + 2) .report-menu-icon { background: #f1eff7; }
 .report-menu-button:nth-child(4n + 3) .report-menu-icon { background: #fbf0e7; }
 .report-menu-button:nth-child(4n) .report-menu-icon { background: #edf2f6; }
+.activity-log-controls { display: flex; align-items: flex-end; gap: 10px; }
+.activity-log-controls label { display: grid; gap: 5px; color: #67736b; font-size: 10px; font-weight: 600; }
+.activity-log-controls select { min-width: 170px; height: 37px; padding: 0 9px; border: 1px solid #e1e7e2; border-radius: 6px; background: white; color: var(--ink); font-size: 11px; }
 .stat-card { position: relative; display: flex; min-height: 111px; align-items: flex-start; gap: 13px; overflow: hidden; padding: 17px 18px; border: 1px solid var(--line); border-radius: 10px; background: white; }
 .stat-icon { display: grid; width: 35px; height: 35px; flex: 0 0 auto; place-items: center; border-radius: 9px; font-size: 18px; }
 .lavender { background: #f0eef7; color: #777098; }
@@ -506,6 +510,7 @@ td { padding: 10px 12px; border-top: 1px solid #f0f1ef; color: #536057; font-siz
   .report-menu-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
   .report-menu-button { min-height: 94px; padding: 13px; font-size: 11px; }
   .portal-page:not(#user-forms) > .section-heading { min-height: 124px; padding: 20px 19px; }
+  .activity-log-controls { margin-top: 14px; flex-wrap: wrap; }
   .sidebar { position: static; width: 100%; height: auto; padding: 10px 16px; border-right: 0; border-bottom: 1px solid var(--line); }
   .brand { min-height: 45px; justify-content: flex-start; margin: 0 0 7px; }
   .brand img { width: 190px; }
@@ -548,6 +553,8 @@ td { padding: 10px 12px; border-top: 1px solid #f0f1ef; color: #536057; font-siz
   #user-forms > .section-heading { min-height: 164px; padding: 21px 18px; }
   #user-forms > .section-heading h1 { font-size: 27px; }
   .portal-page:not(#user-forms) > .section-heading { min-height: 0; padding: 18px 16px; }
+  .activity-log-controls { align-items: stretch; }
+  .activity-log-controls label, .activity-log-controls select { width: 100%; }
   .notification-card { display: grid; gap: 11px; padding: 14px; }
   .inventory-toolbar { align-items: stretch; padding: 11px; }
   .inventory-department-admin, .inventory-search-label { width: 100%; }

@@ -145,8 +145,29 @@
               <button class="report-menu-button" type="button" data-report-target="po-history"><span class="report-menu-icon" aria-hidden="true">🛒</span><span>P.O History</span></button>
               <button class="report-menu-button" type="button" data-report-target="inventory-form"><span class="report-menu-icon" aria-hidden="true">📝</span><span>Inventory Form</span></button>
               <button class="report-menu-button" type="button"><span class="report-menu-icon" aria-hidden="true">📊</span><span>Report Summary</span></button>
-              <button class="report-menu-button" type="button"><span class="report-menu-icon" aria-hidden="true">👥</span><span>User Logs History</span></button>
+              <button class="report-menu-button master-admin-only" type="button" data-report-target="user-logs-history"><span class="report-menu-icon" aria-hidden="true">👥</span><span>User Logs History</span></button>
             </div>
+          </section>
+
+          <section class="section-block user-only portal-page master-admin-only" id="user-logs-history" data-page-section hidden>
+            <div class="section-heading activity-log-heading">
+              <div><p class="eyebrow">AUDIT TRAIL · MASTER ADMIN</p><h1>User Logs History</h1><p class="section-description">Review successful sign-ins, pages viewed, completed portal actions, and sign-outs with full timestamps.</p></div>
+              <div class="activity-log-controls">
+                <label for="activity-user-filter">Filter by user
+                  <select id="activity-user-filter"><option value="">All users</option></select>
+                </label>
+                <button class="button button-secondary" id="refresh-activity-logs" type="button">Refresh logs</button>
+              </div>
+            </div>
+            <button class="button button-secondary" type="button" data-back-to-reports>← Reports &amp; History</button>
+            <p class="field-hint" id="activity-log-status" role="status" aria-live="polite"></p>
+            <div class="user-accounts-scroll activity-log-scroll">
+              <table class="user-accounts-table activity-log-table">
+                <thead><tr><th>User</th><th>Department</th><th>Activity</th><th>Details</th><th>Result</th><th>Timestamp</th><th>Session</th></tr></thead>
+                <tbody id="activity-log-list"></tbody>
+              </table>
+            </div>
+            <button class="button button-secondary" id="load-more-activity-logs" type="button" hidden>Load more activity</button>
           </section>
 
           <section class="section-block user-only portal-page history-page" id="request-history" data-page-section hidden data-history-form="release-request" data-history-title="Request and Released History">
@@ -307,23 +328,6 @@
                 <tbody id="user-accounts-list"></tbody>
               </table>
             </div>
-            <div class="section-heading assignment-heading activity-log-heading">
-              <div><p class="eyebrow">AUDIT TRAIL · MASTER ADMIN</p><h2>User activity logs</h2><p class="section-description">Review successful sign-ins, pages viewed, completed portal actions, and sign-outs with full timestamps.</p></div>
-              <div class="activity-log-controls">
-                <label for="activity-user-filter">Filter by user
-                  <select id="activity-user-filter"><option value="">All users</option></select>
-                </label>
-                <button class="button button-secondary" id="refresh-activity-logs" type="button">Refresh logs</button>
-              </div>
-            </div>
-            <p class="field-hint" id="activity-log-status" role="status" aria-live="polite"></p>
-            <div class="user-accounts-scroll activity-log-scroll">
-              <table class="user-accounts-table activity-log-table">
-                <thead><tr><th scope="col">User</th><th scope="col">Department</th><th scope="col">Activity</th><th scope="col">Details</th><th scope="col">Result</th><th scope="col">Timestamp</th><th scope="col">Session</th></tr></thead>
-                <tbody id="activity-log-list"></tbody>
-              </table>
-            </div>
-            <button class="button button-secondary" id="load-more-activity-logs" type="button" hidden>Load more activity</button>
           </details>
 
           <dialog class="account-edit-dialog" id="account-edit-dialog" aria-labelledby="account-edit-title">

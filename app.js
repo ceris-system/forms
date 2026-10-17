@@ -1029,7 +1029,7 @@ function updateSessionUi(session, navigate = true) {
     const requestedPage = navigate && previousUserId !== nextUserId
       ? "user-forms"
       : location.hash.slice(1) || activePageId || "user-forms";
-    const validPages = new Set(["user-forms", "my-requests", "approvals", "pending-release", "pending-received", "notifications", "reports-history", "inventory", "inventory-form", ...Object.keys(HISTORY_FORM_TYPES)]);
+    const validPages = new Set(["user-forms", "my-requests", "approvals", "pending-release", "pending-received", "notifications", "reports-history", "user-logs-history", "inventory", "inventory-form", ...Object.keys(HISTORY_FORM_TYPES)]);
     activatePortalPage(validPages.has(requestedPage) ? requestedPage : "user-forms", false);
     void refreshWorkflowCounts();
   }
@@ -1632,6 +1632,7 @@ function setActiveNavigation() {
 
 function activatePortalPage(pageId, refresh = true) {
   if (pageId === "approvals" && !isAdmin) pageId = "user-forms";
+  if (pageId === "user-logs-history" && !isMasterAdmin) pageId = "user-forms";
   const selectedPage = document.querySelector(`[data-page-section]#${CSS.escape(pageId)}`);
   if (!selectedPage || !currentSession) return;
   const pageChanged = activePageId !== pageId;
@@ -1649,6 +1650,7 @@ function activatePortalPage(pageId, refresh = true) {
     "pending-received": "Pending to received",
     notifications: "Notifications",
     "reports-history": "Reports & History",
+    "user-logs-history": "User Logs History",
     inventory: "Inventory",
     "inventory-form": "Inventory Form",
     "request-history": "Request and Released History",
@@ -1667,6 +1669,7 @@ function activatePortalPage(pageId, refresh = true) {
     "pending-release": loadPendingRelease,
     "pending-received": loadPendingReceived,
     notifications: loadNotifications,
+    "user-logs-history": loadActivityLogs,
     inventory: () => loadInventoryPage("inventory"),
     "inventory-form": () => loadInventoryPage("inventory-form"),
     ...Object.fromEntries(Object.keys(HISTORY_FORM_TYPES).map(pageId => [pageId, () => loadRequestHistory(pageId)])),

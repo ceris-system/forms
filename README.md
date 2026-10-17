@@ -76,7 +76,7 @@ The portal is installable as a Progressive Web App (PWA) on supported devices. O
 
 Signed-in sessions are stored for the current browser tab, automatically sign out after 10 minutes without activity, and are cleared when the tab or installed app is closed.
 
-The Master Admin's **User activity logs** are stored in Supabase, independently of the Google workbook. They record successful sign-ins, pages viewed, successful portal actions, and sign-outs, with the user's department, session, and full local timestamp. Use **Filter by user**, **Refresh logs**, and **Load more activity** to review them. Activity is recorded after the migration is applied; it is not retroactive.
+The Master Admin's **User Logs History** page is available from **Reports & History** and is stored in Supabase, independently of the Google workbook. It records successful sign-ins, pages viewed, successful portal actions, and sign-outs, with the user's department, session, and full local timestamp. Use **Filter by user**, **Refresh logs**, and **Load more activity** to review them. Activity is recorded after the migration is applied; it is not retroactive.
 
 ## Master Admin setup in the portal
 
