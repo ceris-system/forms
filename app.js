@@ -390,6 +390,14 @@ function ensureActivitySession(userId) {
   return activitySessionId;
 }
 
+function activityLogErrorMessage(error) {
+  const message = error?.message || "Request failed.";
+  if (/unknown administration action/i.test(message)) {
+    return "The deployed portal-admin function is missing activity-log support. A project admin must deploy the current function with `supabase functions deploy portal-admin`.";
+  }
+  return message;
+}
+
 async function recordUserActivity(activity, details = "") {
   if (!supabaseClient || !currentSession?.user.id) return false;
   const sessionId = ensureActivitySession(currentSession.user.id);
@@ -403,8 +411,9 @@ async function recordUserActivity(activity, details = "") {
   } catch (error) {
     console.error(`Could not record user activity "${activity}".`, error);
     const status = document.querySelector("#activity-log-status");
-    if (status) status.textContent = `Activity logging error: ${error.message || "Request failed."}`;
-    else saveStatus.textContent = `Activity logging error: ${error.message || "Request failed."}`;
+    const message = activityLogErrorMessage(error);
+    if (status) status.textContent = `Activity logging error: ${message}`;
+    else saveStatus.textContent = `Activity logging error: ${message}`;
     return false;
   }
 }
@@ -1355,7 +1364,7 @@ async function loadActivityLogs(append = false) {
   } catch (error) {
     if (loadId !== activityLogLoadId) return;
     console.error("Unable to load user activity logs.", error);
-    status.textContent = `Could not load user activity logs: ${error.message || "Request failed."}`;
+    status.textContent = `Could not load user activity logs: ${activityLogErrorMessage(error)}`;
   } finally {
     if (loadId === activityLogLoadId) {
       button.disabled = false;
