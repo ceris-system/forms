@@ -65,6 +65,13 @@ let reportSummaryData = { requests: [], stock_rows: [], products_tab: "" };
 let reportSummaryActiveTab = "DAILY_SALES";
 let reportSummaryLoadId = 0;
 let reportSummaryRefreshTimer = null;
+let reportSummarySearch = "";
+let reportSummaryTopRankMode = "MONTH";
+let reportSummaryTopRankPeriod = "";
+let reportSummaryHistoryMonth = "LIVE";
+let reportSummaryHistorySearch = "";
+let reportSummaryTransientStatus = "";
+let reportSummarySnapshotError = "";
 let pendingInstallPrompt = null;
 const workflowLoadIds = new Map();
 const IDLE_SIGN_OUT_DELAY = 10 * 60 * 1000;
@@ -970,6 +977,8 @@ function updateSessionUi(session, navigate = true) {
     isMasterAdmin = false;
     isAdmin = false;
     lookupCache = null;
+    reportSummaryData = { requests: [], stock_rows: [], products_tab: "" };
+    reportSummaryTransientStatus = "";
     setNotificationCount(0);
     document.body.classList.remove("admin-mode");
     document.body.classList.remove("master-admin-mode");
@@ -992,6 +1001,7 @@ function updateSessionUi(session, navigate = true) {
   }
   const signedIn = Boolean(session);
   document.body.classList.toggle("signed-out", !signedIn);
+  document.body.classList.toggle("report-summary-open", signedIn && activePageId === "report-summary");
   const metadata = session?.user?.user_metadata || {};
   if (signedIn && !currentUserProfile.username) {
     currentUserProfile = {
@@ -1682,6 +1692,7 @@ function activatePortalPage(pageId, refresh = true) {
   document.querySelector("#breadcrumb-page").textContent = pageNames[pageId];
   if (location.hash !== `#${pageId}`) history.replaceState(null, "", `#${pageId}`);
   activePageId = pageId;
+  document.body.classList.toggle("report-summary-open", pageId === "report-summary");
   if (pageId === "report-summary" && !reportSummaryRefreshTimer) {
     reportSummaryRefreshTimer = window.setInterval(() => {
       if (document.visibilityState === "visible" && activePageId === "report-summary") void loadReportSummary();
@@ -1865,16 +1876,16 @@ function renderNotifications(container, notifications, append = false) {
 }
 
 const REPORT_SUMMARY_TABS = [
-  { id: "DAILY_SALES", label: "Daily Sales vs Last Week", group: "Sales" },
-  { id: "TOP_RANK", label: "Top Rank", group: "Sales" },
-  { id: "MONTH_COMPARE", label: "Month vs Last Month", group: "Sales" },
-  { id: "CRITICAL_STOCK", label: "Critical Stock", group: "Stock Health" },
-  { id: "OUT_OF_STOCK", label: "Out of Stock", group: "Stock Health" },
-  { id: "STOCK_AVAILABILITY", label: "Stock Availability", group: "Stock Health" },
-  { id: "NEAR_EXPIRATION", label: "Near Expiration", group: "Expiration" },
-  { id: "EXPIRATION_MONITORING", label: "Expired Items", group: "Expiration" },
-  { id: "AGING", label: "Aging per Description", group: "Expiration" },
-  { id: "HISTORICAL_DATA", label: "Historical Data", group: "History" },
+  { id: "DAILY_SALES", label: "DAILY SALES VS LAST WEEK", group: "SALES", icon: "▣", color: "#22d3ee", light: "#a5f3fc", rgb: "34,211,238" },
+  { id: "TOP_RANK", label: "TOP RANK", group: "SALES", icon: "♛", color: "#a78bfa", light: "#ddd6fe", rgb: "167,139,250" },
+  { id: "MONTH_COMPARE", label: "MONTH VS LAST MONTH", group: "SALES", icon: "▦", color: "#2dd4bf", light: "#99f6e4", rgb: "45,212,191" },
+  { id: "CRITICAL_STOCK", label: "CRITICAL STOCK", group: "STOCK HEALTH", icon: "▲", color: "#ff5c8a", light: "#ffb3c9", rgb: "255,92,138" },
+  { id: "OUT_OF_STOCK", label: "OUT OF STOCK", group: "STOCK HEALTH", icon: "⊘", color: "#ff8a3d", light: "#ffc59a", rgb: "255,138,61" },
+  { id: "STOCK_AVAILABILITY", label: "STOCK AVAILABILITY", group: "STOCK HEALTH", icon: "▦", color: "#60a5fa", light: "#bfdbfe", rgb: "96,165,250" },
+  { id: "NEAR_EXPIRATION", label: "NEAR EXPIRATION", group: "EXPIRATION", icon: "⌛", color: "#fbbf24", light: "#fde68a", rgb: "251,191,36" },
+  { id: "EXPIRATION_MONITORING", label: "EXPIRED ITEMS", group: "EXPIRATION", icon: "▣", color: "#ef4444", light: "#fca5a5", rgb: "239,68,68" },
+  { id: "AGING", label: "AGING PER DESCRIPTION", group: "EXPIRATION", icon: "▤", color: "#e879f9", light: "#f5d0fe", rgb: "232,121,249" },
+  { id: "HISTORICAL_DATA", label: "HISTORICAL DATA", group: "HISTORY", icon: "↶", color: "#38bdf8", light: "#bae6fd", rgb: "56,189,248" },
 ];
 
 function reportSummaryNumber(value) {
@@ -1885,6 +1896,10 @@ function reportSummaryNumber(value) {
 function reportSummaryDate(value) {
   const text = String(value ?? "").trim();
   if (!text) return null;
+  if (/^\d{5}(\.\d+)?$/.test(text)) {
+    const date = new Date(Date.UTC(1899, 11, 30) + Math.round(Number(text)) * 86_400_000);
+    return new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  }
   let match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
   if (match) {
     const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
@@ -1915,29 +1930,18 @@ function reportSummaryCurrency(value) {
 }
 
 function reportSummaryRequests() {
-  const department = document.querySelector("#report-summary-department-filter").value.toLocaleLowerCase();
-  const search = document.querySelector("#report-summary-search").value.trim().toLocaleLowerCase();
-  return reportSummaryData.requests.filter(request => {
-    const departmentMatches = !department
-      || String(request.outgoing_department || "").trim().toLocaleLowerCase() === department
-      || String(request.incoming_department || "").trim().toLocaleLowerCase() === department;
-    const searchMatches = !search || [
-      request.request_number, request.form_type, request.submitted_by, request.outgoing_department, request.incoming_department,
-    ].some(value => String(value || "").toLocaleLowerCase().includes(search))
-      || (request.items || []).some(item => [item.sku_code, item.product_description]
-        .some(value => String(value || "").toLocaleLowerCase().includes(search)));
-    return departmentMatches && searchMatches;
-  });
+  return reportSummaryData.requests;
 }
 
 function reportSummaryTransactions() {
   const transactions = [];
-  for (const request of reportSummaryRequests()) {
+  for (const request of reportSummaryData.requests) {
     if (!["released", "received"].includes(String(request.status || "").trim().toLocaleLowerCase())) continue;
     const date = reportSummaryDate(request.released_date);
     if (!date) continue;
     for (const item of request.items || []) {
-      const qty = reportSummaryNumber(item.approved_qty || item.transfer_qty);
+      const approved = String(item.approved_qty ?? "").trim();
+      const qty = reportSummaryNumber(approved ? item.approved_qty : item.transfer_qty);
       if (!qty) continue;
       const srp = reportSummaryNumber(item.srp);
       transactions.push({
@@ -1959,13 +1963,7 @@ function reportSummaryTransactions() {
 }
 
 function reportSummaryStockRows() {
-  const department = document.querySelector("#report-summary-department-filter").value.toLocaleLowerCase();
-  const search = document.querySelector("#report-summary-search").value.trim().toLocaleLowerCase();
-  return reportSummaryData.stock_rows.filter(row =>
-    (!department || String(row.department || "").trim().toLocaleLowerCase() === department)
-    && (!search || [row.sku_code, row.description, row.department, row.status]
-      .some(value => String(value || "").toLocaleLowerCase().includes(search)))
-  );
+  return reportSummaryData.stock_rows;
 }
 
 function reportSummaryElement(tag, className, text) {
@@ -1989,8 +1987,8 @@ function reportSummaryAddTable(content, title, note, headers, rows, emptyText) {
 }
 
 function reportSummaryTable(headers, rows, emptyText = "No matching records.") {
-  const wrapper = reportSummaryElement("div", "user-accounts-scroll report-summary-scroll");
-  const table = reportSummaryElement("table", "user-accounts-table report-summary-table");
+  const wrapper = reportSummaryElement("div", "report-summary-scroll");
+  const table = reportSummaryElement("table", "report-summary-table");
   const thead = reportSummaryElement("thead");
   const headerRow = reportSummaryElement("tr");
   for (const header of headers) headerRow.append(reportSummaryElement("th", "", header));
@@ -1999,7 +1997,16 @@ function reportSummaryTable(headers, rows, emptyText = "No matching records.") {
   const values = rows.length ? rows : [[emptyText]];
   for (const rowValues of values) {
     const row = reportSummaryElement("tr", rows.length ? "" : "report-summary-empty");
-    for (const value of rowValues) row.append(reportSummaryElement("td", "", value || "—"));
+    for (const value of rowValues) {
+      const cell = reportSummaryElement("td");
+      if (value && typeof value === "object") {
+        cell.append(reportSummaryElement("span", value.className, value.text));
+        if (value.color) cell.firstElementChild.style.setProperty(value.colorProperty || "--pill-color", value.color);
+      } else {
+        cell.textContent = value === 0 ? "0" : String(value || "—");
+      }
+      row.append(cell);
+    }
     if (!rows.length) row.firstElementChild.colSpan = headers.length;
     tbody.append(row);
   }
@@ -2010,8 +2017,9 @@ function reportSummaryTable(headers, rows, emptyText = "No matching records.") {
 
 function reportSummaryCards(entries) {
   const cards = reportSummaryElement("div", "report-summary-cards");
-  for (const [label, value, detail] of entries) {
+  for (const [label, value, detail, accent] of entries) {
     const card = reportSummaryElement("article", "report-summary-card");
+    if (accent) card.style.setProperty("--card-accent", accent);
     card.append(reportSummaryElement("strong", "", value), reportSummaryElement("span", "", label));
     if (detail) card.append(reportSummaryElement("small", "", detail));
     cards.append(card);
@@ -2021,14 +2029,9 @@ function reportSummaryCards(entries) {
 
 function reportSummaryDaysRemaining(row) {
   const expiryText = String(row.expiry || "").trim();
-  if (expiryText.toLocaleUpperCase() === "EXPIRED") return -1;
+  if (expiryText.toLocaleUpperCase() === "EXPIRED") return { expired: true, days: null };
   if (expiryText && Number.isFinite(Number(expiryText))) return Number(expiryText);
-  const expirationDate = reportSummaryDate(row.expiration_date);
-  if (!expirationDate) return null;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  expirationDate.setHours(0, 0, 0, 0);
-  return Math.floor((expirationDate - today) / 86_400_000);
+  return null;
 }
 
 function reportSummaryBarChart(days) {
@@ -2242,6 +2245,589 @@ function reportSummaryRenderHistory(content, transactions) {
   if (filtered.length > visible.length) content.append(reportSummaryElement("p", "report-summary-note", `Showing the latest ${visible.length} of ${filtered.length} matching line items.`));
 }
 
+const REPORT_SUMMARY_GROUP_COLORS = { SALES: "#22d3ee", "STOCK HEALTH": "#f472b6", EXPIRATION: "#fbbf24", HISTORY: "#38bdf8" };
+
+function reportSummarySnapshotsKey() {
+  return `mw-report-summary-snapshots-v1:${currentSession?.user.id || "signed-out"}`;
+}
+
+function reportSummarySelectedTab() {
+  return REPORT_SUMMARY_TABS.find(tab => tab.id === reportSummaryActiveTab) || REPORT_SUMMARY_TABS[0];
+}
+
+function reportSummaryHero(content, cards, body = []) {
+  const tab = reportSummarySelectedTab();
+  const hero = reportSummaryElement("section", "report-summary-hero");
+  const top = reportSummaryElement("div", "report-summary-hero-top");
+  const title = reportSummaryElement("div", "report-summary-hero-title-block");
+  title.append(reportSummaryElement("span", "report-summary-hero-icon", tab.icon));
+  const labels = reportSummaryElement("div");
+  labels.append(
+    reportSummaryElement("span", "report-summary-kicker", tab.group),
+    reportSummaryElement("h2", "report-summary-title", tab.label),
+  );
+  title.append(labels);
+  top.append(title);
+  if (cards.length) top.append(reportSummaryCards(cards));
+  hero.append(top);
+  if (body.length) {
+    const heroBody = reportSummaryElement("div", "report-summary-hero-body");
+    heroBody.append(...body.filter(Boolean));
+    hero.append(heroBody);
+  }
+  content.append(hero);
+  return hero;
+}
+
+function reportSummaryNote(text) {
+  return reportSummaryElement("p", "report-summary-note", text);
+}
+
+function reportSummarySectionHeading(text, icon = "▰") {
+  return reportSummaryElement("h3", "report-summary-section-heading", `${icon}  ${text}`);
+}
+
+function reportSummaryAddSection(content, title, headers, rows, emptyText, note = "") {
+  const panel = reportSummaryElement("section", "report-summary-panel");
+  panel.append(reportSummarySectionHeading(title));
+  if (note) panel.append(reportSummaryNote(note));
+  panel.append(reportSummaryTable(headers, rows, emptyText));
+  content.append(panel);
+  return panel;
+}
+
+function reportSummaryCreateControls() {
+  return reportSummaryElement("div", "report-summary-controls");
+}
+
+function reportSummaryAddSelect(controls, label, options, selected, onChange, ariaLabel) {
+  const labelNode = reportSummaryElement("span", "report-summary-control-label", label);
+  const select = reportSummaryElement("select");
+  select.setAttribute("aria-label", ariaLabel || label);
+  for (const [value, text] of options) select.add(new Option(text, value));
+  select.value = selected;
+  select.addEventListener("change", () => onChange(select.value));
+  controls.append(labelNode, select);
+  return select;
+}
+
+function reportSummaryAddSearch(controls, value, placeholder, onInput) {
+  const input = reportSummaryElement("input");
+  input.type = "search";
+  input.value = value;
+  input.placeholder = placeholder;
+  input.setAttribute("aria-label", placeholder);
+  input.addEventListener("input", () => {
+    const start = input.selectionStart;
+    const end = input.selectionEnd;
+    onInput(input.value);
+    const nextInput = document.querySelector(".report-summary-controls input[type='search']");
+    if (nextInput) {
+      nextInput.focus();
+      if (start !== null && end !== null) nextInput.setSelectionRange(start, end);
+    }
+  });
+  controls.append(input);
+  return input;
+}
+
+function reportSummaryCell(text, className, color) {
+  return { text: String(text), className, color };
+}
+
+function reportSummaryFormatPercent(current, previous) {
+  if (!previous) return current ? "NEW" : "—";
+  const change = (current - previous) / Math.abs(previous) * 100;
+  return `${change > 0 ? "+" : ""}${change.toFixed(1)}%`;
+}
+
+function reportSummaryChangeCell(current, previous) {
+  const color = current > previous ? "#4ade80" : current < previous ? "#ff8fab" : "#c3bfe8";
+  const arrow = current > previous ? "▲" : current < previous ? "▼" : "•";
+  return { ...reportSummaryCell(`${arrow} ${reportSummaryFormatPercent(current, previous)}`, "report-summary-change", color), colorProperty: "--change-color" };
+}
+
+function reportSummaryTransactionsInRange(transactions, start, end) {
+  return transactions.filter(row => row.date >= start && row.date <= end);
+}
+
+function reportSummaryAggregate(transactions, keyFor) {
+  const groups = new Map();
+  for (const row of transactions) {
+    const key = keyFor(row);
+    if (!key) continue;
+    const item = groups.get(key) || { key, qty: 0, amount: 0 };
+    item.qty += row.qty;
+    item.amount += row.amount;
+    groups.set(key, item);
+  }
+  return [...groups.values()].sort((left, right) => right.amount - left.amount || right.qty - left.qty);
+}
+
+function reportSummaryAggregateProducts(transactions) {
+  return reportSummaryAggregate(transactions, row => `${row.sku}\u0000${row.description}`)
+    .map(item => {
+      const [sku, description] = item.key.split("\u0000");
+      return { ...item, sku, description };
+    });
+}
+
+function reportSummaryRankRows(items, product = false) {
+  return items.slice(0, 10).map((item, index) => [
+    reportSummaryCell(index + 1, `report-summary-rank report-summary-rank-${index + 1}`),
+    ...(product ? [item.sku || "—", item.description || "—"] : [item.key]),
+    item.qty,
+    reportSummaryCurrency(item.amount),
+  ]);
+}
+
+function reportSummaryRenderDailyReference(content, transactions) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const sameDayLastWeek = new Date(today);
+  sameDayLastWeek.setDate(sameDayLastWeek.getDate() - 7);
+  const todayRows = transactions.filter(row => reportSummaryDateKey(row.date) === reportSummaryDateKey(today));
+  const lastWeekRows = transactions.filter(row => reportSummaryDateKey(row.date) === reportSummaryDateKey(sameDayLastWeek));
+  const monthRows = transactions.filter(row => row.date.getFullYear() === today.getFullYear() && row.date.getMonth() === today.getMonth() && row.date <= today);
+  const totals = rows => rows.reduce((sum, row) => ({ qty: sum.qty + row.qty, amount: sum.amount + row.amount }), { qty: 0, amount: 0 });
+  const todayTotal = totals(todayRows);
+  const lastWeekTotal = totals(lastWeekRows);
+  const monthTotal = totals(monthRows);
+  const delta = lastWeekTotal.amount ? reportSummaryFormatPercent(todayTotal.amount, lastWeekTotal.amount) : todayTotal.amount ? "NEW" : "0%";
+  const days = [];
+  for (let offset = 6; offset >= 0; offset--) {
+    const date = new Date(today);
+    date.setDate(today.getDate() - offset);
+    const dayRows = transactions.filter(row => reportSummaryDateKey(row.date) === reportSummaryDateKey(date));
+    days.push({ date, ...totals(dayRows) });
+  }
+  const maxAmount = Math.max(1, ...days.map(day => Math.abs(day.amount)));
+  const trends = reportSummaryElement("div", "report-summary-bar-list");
+  for (const day of days) {
+    const row = reportSummaryElement("div", "report-summary-bar-row");
+    row.append(reportSummaryElement("span", "report-summary-bar-label", reportSummaryDateLabel(day.date, { weekday: "short", month: "short", day: "numeric" })));
+    const track = reportSummaryElement("div", "report-summary-bar-track");
+    const fill = reportSummaryElement("div", "report-summary-bar-fill");
+    fill.style.width = `${day.amount ? Math.max(2, Math.abs(day.amount) / maxAmount * 100) : 0}%`;
+    track.append(fill);
+    row.append(track);
+    const amount = reportSummaryElement("span", "report-summary-bar-value", `${reportSummaryCurrency(day.amount)} `);
+    amount.append(reportSummaryElement("span", "", `(${day.qty}u)`));
+    row.append(amount);
+    trends.append(row);
+  }
+  const skuToday = reportSummaryAggregateProducts(todayRows);
+  const skuRows = skuToday.slice(0, 50).map(item => [
+    item.sku || "—", item.description || "—", item.qty,
+    reportSummaryCurrency(todayRows.find(row => row.sku === item.sku)?.srp || 0),
+    reportSummaryCurrency(item.amount),
+  ]);
+  const sourceNote = `Live estimate from released request history · release date and approved quantity × SRP. This portal has no point-of-sale “sales” sheet.`;
+  reportSummaryHero(content, [
+    [`TODAY (${reportSummaryDateLabel(today, { weekday: "long", month: "short", day: "numeric" })})`, reportSummaryCurrency(todayTotal.amount), `${todayTotal.qty} units released`, "var(--rs-accent)"],
+    ["SAME DAY LAST WEEK", reportSummaryCurrency(lastWeekTotal.amount), `${lastWeekTotal.qty} units released`, "#a78bfa"],
+    ["CHANGE VS LAST WEEK", delta, "by peso value", "#f472b6"],
+    ["MONTH-TO-DATE", reportSummaryCurrency(monthTotal.amount), `${monthTotal.qty} units released`, "#4ade80"],
+  ], [
+    reportSummaryNote(sourceNote),
+    reportSummarySectionHeading("LAST 7 DAYS", "⌁"),
+    trends,
+    reportSummarySectionHeading("SALES PER SKU · TODAY", "◆"),
+    reportSummaryTable(["SKU CODE", "ITEM DESCRIPTION", "QTY RELEASED", "SRP", "TOTAL AMOUNT"], skuRows, "No releases logged today yet."),
+  ]);
+}
+
+function reportSummaryRenderTopRankReference(content, transactions) {
+  const dates = [...new Map(transactions.map(row => [reportSummaryDateKey(row.date), new Date(row.date.getFullYear(), row.date.getMonth(), row.date.getDate())])).values()]
+    .sort((left, right) => right - left);
+  const months = [...new Set(dates.map(date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`))].sort().reverse();
+  const today = new Date();
+  const currentKey = reportSummaryTopRankMode === "DAY"
+    ? reportSummaryTopRankPeriod || reportSummaryDateKey(today)
+    : reportSummaryTopRankPeriod || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
+  const periodOptions = reportSummaryTopRankMode === "DAY"
+    ? [...new Set([reportSummaryDateKey(today), ...dates.map(reportSummaryDateKey)])].sort().reverse()
+    : [...new Set([`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`, ...months])].sort().reverse();
+  const chosen = periodOptions.includes(currentKey) ? currentKey : periodOptions[0];
+  reportSummaryTopRankPeriod = chosen;
+  const [year, month, day] = chosen.split("-").map(Number);
+  const start = reportSummaryTopRankMode === "DAY" ? new Date(year, month - 1, day) : new Date(year, month - 1, 1);
+  const end = reportSummaryTopRankMode === "DAY" ? new Date(year, month - 1, day, 23, 59, 59, 999) : new Date(year, month, 0, 23, 59, 59, 999);
+  const selectedRows = reportSummaryTransactionsInRange(transactions, start, end);
+  const label = reportSummaryTopRankMode === "DAY"
+    ? reportSummaryDateLabel(start, { weekday: "long", month: "long", day: "numeric", year: "numeric" })
+    : reportSummaryDateLabel(start, { month: "long", year: "numeric" });
+  const total = selectedRows.reduce((sum, row) => ({ qty: sum.qty + row.qty, amount: sum.amount + row.amount }), { qty: 0, amount: 0 });
+  const controls = reportSummaryCreateControls();
+  reportSummaryAddSelect(controls, "▾ VIEW", [["DAY", "PER DATE"], ["MONTH", "PER MONTH"]], reportSummaryTopRankMode, value => {
+    reportSummaryTopRankMode = value;
+    reportSummaryTopRankPeriod = "";
+    renderReportSummary();
+  }, "Top rank period type");
+  reportSummaryAddSelect(controls, "", periodOptions.map(value => [value, reportSummaryTopRankMode === "DAY"
+    ? reportSummaryDateLabel(reportSummaryDate(value), { weekday: "short", month: "short", day: "numeric", year: "numeric" })
+    : reportSummaryDateLabel(new Date(Number(value.slice(0, 4)), Number(value.slice(5, 7)) - 1, 1), { month: "long", year: "numeric" })]),
+  chosen, value => { reportSummaryTopRankPeriod = value; renderReportSummary(); }, "Select date or month");
+  const deptRows = reportSummaryAggregate(selectedRows, row => row.department || "NO DEPARTMENT");
+  const productRows = reportSummaryAggregateProducts(selectedRows);
+  reportSummaryHero(content, [
+    [reportSummaryTopRankMode === "DAY" ? "SALE FOR THE DAY" : "TOTAL SALE FOR THE MONTH", reportSummaryCurrency(total.amount), label, "var(--rs-accent)"],
+    ["UNITS RELEASED", total.qty.toLocaleString("en-US"), reportSummaryTopRankMode === "DAY" ? "that day" : "that month", "#4ade80"],
+  ], [
+    reportSummaryNote(`Top departments and products for ${label}; switch the period picker to view a different day or month.`),
+    controls,
+    reportSummaryElement("div", "report-summary-grid"),
+  ]);
+  const grid = content.querySelector(".report-summary-grid");
+  reportSummaryAddSection(grid, "BY DEPARTMENT", ["RANK", "DEPARTMENT", "TOTAL RELEASED", "TOTAL AMOUNT"], reportSummaryRankRows(deptRows), "No rank data found for this period.");
+  reportSummaryAddSection(grid, "BY PRODUCT", ["RANK", "SKU CODE", "ITEM DESCRIPTION", "TOTAL RELEASED", "TOTAL AMOUNT"], reportSummaryRankRows(productRows, true), "No rank data found for this period.");
+}
+
+function reportSummaryRenderMonthCompareReference(content, transactions) {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const thisStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const lastStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const lastComparableEnd = new Date(today.getFullYear(), today.getMonth() - 1, Math.min(today.getDate(), new Date(today.getFullYear(), today.getMonth(), 0).getDate()), 23, 59, 59, 999);
+  const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59, 999);
+  const sum = rows => rows.reduce((total, row) => ({ qty: total.qty + row.qty, amount: total.amount + row.amount }), { qty: 0, amount: 0 });
+  const currentRows = reportSummaryTransactionsInRange(transactions, thisStart, today);
+  const previousRows = reportSummaryTransactionsInRange(transactions, lastStart, lastComparableEnd);
+  const fullPreviousRows = reportSummaryTransactionsInRange(transactions, lastStart, lastMonthEnd);
+  const current = sum(currentRows);
+  const previous = sum(previousRows);
+  const fullPrevious = sum(fullPreviousRows);
+  const hasPrevious = fullPreviousRows.length > 0;
+  const deptMap = new Map();
+  for (const row of [...currentRows, ...previousRows]) {
+    const key = row.department || "NO DEPARTMENT";
+    const item = deptMap.get(key) || { current: 0, previous: 0 };
+    if (currentRows.includes(row)) item.current += row.amount;
+    else item.previous += row.amount;
+    deptMap.set(key, item);
+  }
+  const deptRows = [...deptMap.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([name, values]) => [name, reportSummaryCurrency(values.current), hasPrevious ? reportSummaryCurrency(values.previous) : "—", reportSummaryChangeCell(values.current, values.previous)]);
+  const productMap = new Map();
+  for (const row of [...currentRows, ...previousRows]) {
+    const key = `${row.sku}\u0000${row.description}`;
+    const item = productMap.get(key) || { sku: row.sku, description: row.description, current: 0, previous: 0 };
+    if (currentRows.includes(row)) item.current += row.amount;
+    else item.previous += row.amount;
+    productMap.set(key, item);
+  }
+  const productRows = [...productMap.values()].sort((a, b) => b.current - a.current)
+    .map(item => [item.sku || "—", item.description || "—", reportSummaryCurrency(item.current), hasPrevious ? reportSummaryCurrency(item.previous) : "—", reportSummaryChangeCell(item.current, item.previous)]);
+  const noLast = hasPrevious ? "" : "No last-month data found yet, so this month is shown on its own. The comparison will fill in when last month has released requests.";
+  reportSummaryHero(content, [
+    ["THIS MONTH (MTD)", reportSummaryCurrency(current.amount), `${current.qty} units`, "var(--rs-accent)"],
+    ["LAST MONTH (SAME DAYS)", hasPrevious ? reportSummaryCurrency(previous.amount) : "—", hasPrevious ? `${previous.qty} units` : "no data for last month", "#a78bfa"],
+    ["CHANGE (MTD VS MTD)", hasPrevious ? reportSummaryFormatPercent(current.amount, previous.amount) : "N/A", hasPrevious ? "same number of days" : "nothing to compare yet", "#2dd4bf"],
+    ["LAST MONTH (FULL)", hasPrevious ? reportSummaryCurrency(fullPrevious.amount) : "—", hasPrevious ? `${fullPrevious.qty} units` : "no data for last month", "#f472b6"],
+  ], [
+    reportSummaryNote(`MTD compares this month with the same number of days last month. ${noLast} Values are estimates from released requests (approved quantity × SRP).`),
+    reportSummaryElement("div", "report-summary-grid"),
+  ]);
+  const grid = content.querySelector(".report-summary-grid");
+  reportSummaryAddSection(grid, "BY DEPARTMENT", ["DEPARTMENT", "THIS MONTH", "LAST MONTH", "CHANGE"], deptRows, "No release records yet.");
+  reportSummaryAddSection(grid, "BY PRODUCT", ["SKU CODE", "ITEM DESCRIPTION", "THIS MONTH", "LAST MONTH", "CHANGE"], productRows, "No release records yet.");
+}
+
+function reportSummaryFilterStockRows(rows, query = reportSummarySearch) {
+  const search = query.trim().toLocaleLowerCase();
+  if (!search) return rows;
+  return rows.filter(row => [row.department, row.sku_code, row.description].some(value => String(value || "").toLocaleLowerCase().includes(search)));
+}
+
+function reportSummaryAddStockSearch(body) {
+  const controls = reportSummaryCreateControls();
+  reportSummaryAddSearch(controls, reportSummarySearch, "Search department, SKU or description", value => {
+    reportSummarySearch = value;
+    renderReportSummary();
+  });
+  body.push(controls);
+}
+
+function reportSummaryStockDisplayRows(rows) {
+  return rows.map(row => [
+    row.department || "—", row.sku_code || "—", row.description || "—",
+    row.on_hand === "" ? "—" : row.on_hand,
+    formatDisplayDate(row.last_received) || row.last_received || "—",
+  ]);
+}
+
+function reportSummaryRenderStockReference(content, mode) {
+  const status = row => String(row.status || "").trim().toLocaleUpperCase();
+  const all = reportSummaryData.stock_rows;
+  const source = `Source: the "${reportSummaryData.products_tab}" tab's STATUS column (M).`;
+  if (mode === "CRITICAL_STOCK") {
+    const critical = reportSummaryFilterStockRows(all.filter(row => status(row) === "CRITICAL IN STOCK"));
+    const low = reportSummaryFilterStockRows(all.filter(row => status(row) === "LOW STOCK"));
+    const body = [reportSummaryNote(`${source} CRITICAL STOCK = "CRITICAL IN STOCK"; LOW STOCK = "LOW STOCK".`)];
+    reportSummaryAddStockSearch(body);
+    body.push(reportSummaryElement("div", "report-summary-grid"));
+    reportSummaryHero(content, [
+      ["CRITICAL STOCK ITEMS", critical.length, "across all departments", "var(--rs-accent)"],
+      ["LOW STOCK ITEMS", low.length, "across all departments", "#fbbf24"],
+    ], body);
+    const grid = content.querySelector(".report-summary-grid");
+    reportSummaryAddSection(grid, "CRITICAL STOCK", ["DEPARTMENT", "SKU CODE", "ITEM DESCRIPTION", "TOTAL QTY ONHAND", "LAST DATE RECEIVED"], reportSummaryStockDisplayRows(critical), "No items currently critical in stock.");
+    reportSummaryAddSection(grid, "LOW STOCK", ["DEPARTMENT", "SKU CODE", "ITEM DESCRIPTION", "TOTAL QTY ONHAND", "LAST DATE RECEIVED"], reportSummaryStockDisplayRows(low), "No items currently low in stock.");
+    return;
+  }
+  const selectedStatus = mode === "OUT_OF_STOCK" ? "OUT OF STOCK" : "IN STOCK";
+  const rows = reportSummaryFilterStockRows(all.filter(row => status(row) === selectedStatus));
+  const emptyText = mode === "OUT_OF_STOCK" ? "No items currently out of stock." : "No items currently in stock.";
+  const body = [reportSummaryNote(source)];
+  reportSummaryAddStockSearch(body);
+  reportSummaryHero(content, [[`${selectedStatus} ITEMS`, rows.length, "across all departments", "var(--rs-accent)"]], body);
+  reportSummaryAddSection(content, selectedStatus, ["DEPARTMENT", "SKU CODE", "ITEM DESCRIPTION", "TOTAL QTY ONHAND", "LAST DATE RECEIVED"], reportSummaryStockDisplayRows(rows), emptyText);
+}
+
+function reportSummaryParseExpiry(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  if (text.toLocaleUpperCase() === "EXPIRED") return { expired: true, days: null };
+  const days = Number(text);
+  return Number.isFinite(days) ? { expired: days < 0, days } : null;
+}
+
+function reportSummaryRenderExpiryReference(content, mode) {
+  const parsedRows = reportSummaryData.stock_rows.map(row => ({ row, parsed: reportSummaryParseExpiry(row.expiry) })).filter(entry => entry.parsed);
+  const isExpired = mode === "EXPIRATION_MONITORING";
+  const matches = reportSummaryFilterStockRows(parsedRows.filter(({ parsed }) => isExpired
+    ? parsed.expired
+    : !parsed.expired && parsed.days !== null && parsed.days <= 90)
+  .sort((a, b) => isExpired
+    ? (a.parsed.days ?? -Infinity) - (b.parsed.days ?? -Infinity)
+    : a.parsed.days - b.parsed.days));
+  const body = [reportSummaryNote(isExpired
+    ? `Source: the "${reportSummaryData.products_tab}" tab's expiry column (N) is "EXPIRED" or negative. Expiration date is from column D.`
+    : `Source: the "${reportSummaryData.products_tab}" tab's expiry column (N), numeric days 0–90. Expiration date is from column D.`)];
+  reportSummaryAddStockSearch(body);
+  const detail = isExpired ? "already past expiration, across all departments" : "expiring within 90 days, across all departments";
+  reportSummaryHero(content, [[isExpired ? "EXPIRED ITEMS" : "NEAR-EXPIRATION ITEMS", matches.length, detail, "var(--rs-accent)"]], body);
+  const rows = matches.slice(0, 500).map(({ row, parsed }) => [
+    row.department || "—", row.sku_code || "—", row.description || "—",
+    formatDisplayDate(row.expiration_date) || row.expiration_date || "—",
+    reportSummaryCell(parsed.days === null ? "EXPIRED" : `${isExpired ? Math.abs(parsed.days) : parsed.days} days`, "report-summary-pill", isExpired ? "#ef4444" : parsed.days <= 30 ? "#ef4444" : parsed.days <= 60 ? "#fbbf24" : "#bfdbfe"),
+    row.on_hand === "" ? "—" : row.on_hand,
+  ]);
+  reportSummaryAddSection(content, isExpired ? "EXPIRED ITEMS" : "NEAR EXPIRATION", ["DEPARTMENT", "SKU CODE", "ITEM DESCRIPTION", "EXPIRATION DATE", isExpired ? "DAYS EXPIRED" : "DAYS LEFT", "QTY ONHAND"], rows,
+    isExpired ? "No expired items on file." : "Nothing expiring in the next 90 days.");
+}
+
+function reportSummaryDaysSince(value) {
+  const received = reportSummaryDate(value);
+  if (!received) return null;
+  const today = new Date();
+  const midnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  return Math.floor((midnight - received) / 86_400_000);
+}
+
+function reportSummaryRenderAgingReference(content) {
+  const grouped = new Map();
+  for (const row of reportSummaryData.stock_rows) {
+    const qty = reportSummaryNumber(row.on_hand);
+    if (qty <= 0) continue;
+    const sku = row.sku_code || "(no SKU)";
+    const description = row.description || "(no description)";
+    const department = row.department || "(no department)";
+    const key = `${sku}\u0000${description}\u0000${department}`;
+    const item = grouped.get(key) || { sku, description, department, noDate: 0, d30: 0, d60: 0, d90: 0, over90: 0, total: 0, expiration_date: row.expiration_date || "", expiryDays: Infinity };
+    item.total += qty;
+    const age = reportSummaryDaysSince(row.last_received);
+    if (age === null) item.noDate += qty;
+    else if (age <= 30) item.d30 += qty;
+    else if (age <= 60) item.d60 += qty;
+    else if (age <= 90) item.d90 += qty;
+    else item.over90 += qty;
+    const expiry = reportSummaryParseExpiry(row.expiry);
+    const sortDays = expiry?.expired ? -Infinity : expiry?.days ?? Infinity;
+    if (sortDays < item.expiryDays) {
+      item.expiryDays = sortDays;
+      item.expiration_date = row.expiration_date || "";
+    }
+    grouped.set(key, item);
+  }
+  const rows = reportSummaryFilterStockRows([...grouped.values()])
+    .sort((a, b) => b.total - a.total)
+    .map(item => [
+      item.department, item.sku, item.description, formatDisplayDate(item.expiration_date) || item.expiration_date || "—",
+      reportSummaryCell(item.noDate || "", "report-summary-pill", "#9d98c8"),
+      reportSummaryCell(item.d30 || "", "report-summary-pill", "#22d3ee"),
+      reportSummaryCell(item.d60 || "", "report-summary-pill", "#fbbf24"),
+      reportSummaryCell(item.d90 || "", "report-summary-pill", "#ff8a3d"),
+      reportSummaryCell(item.over90 || "", "report-summary-pill", "#ef4444"),
+      item.total,
+    ]);
+  const controls = reportSummaryCreateControls();
+  reportSummaryAddSearch(controls, reportSummarySearch, "Search department, SKU or description", value => {
+    reportSummarySearch = value;
+    renderReportSummary();
+  });
+  reportSummaryHero(content, [], [
+    controls,
+    reportSummaryNote(`Source: LAST RECEIVED date (column J) gives true days in stock, not remaining shelf life. Expiration date (column D) shows the soonest date for each SKU and department. Rows without a received date fall under NO DATE.`),
+  ]);
+  reportSummaryAddSection(content, "AGING PER DESCRIPTION", ["DEPARTMENT", "SKU CODE", "ITEM DESCRIPTION", "EXPIRATION DATE", "NO DATE", "0–30D", "31–60D", "61–90D", "90D+", "TOTAL QTY"], rows, "No stock on hand.");
+}
+
+function reportSummaryReadSnapshots() {
+  try {
+    const snapshots = JSON.parse(localStorage.getItem(reportSummarySnapshotsKey()) || "[]");
+    return Array.isArray(snapshots) ? snapshots.filter(snapshot => snapshot && /^\d{4}-\d{2}$/.test(snapshot.month) && Array.isArray(snapshot.rows)) : [];
+  } catch (error) {
+    console.error("Unable to read saved summary report snapshots.", error);
+    reportSummarySnapshotError = error.message || "Browser storage is unavailable.";
+    return [];
+  }
+}
+
+function reportSummaryDownload(name, content, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = name;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function reportSummaryCsv(rows) {
+  const headers = ["Date", "SKU Code", "Item Description", "Department", "Qty Released", "SRP", "Total Amount", "Request"];
+  return [headers, ...rows.map(row => [reportSummaryDateKey(row.date), row.sku, row.description, row.department, row.qty, row.srp, row.amount, row.requestNumber])]
+    .map(row => row.map(value => `"${String(value ?? "").replaceAll('"', '""')}"`).join(","))
+    .join("\r\n");
+}
+
+function reportSummarySaveSnapshot(transactions) {
+  const snapshots = reportSummaryReadSnapshots();
+  if (reportSummarySnapshotError) throw new Error(`Existing snapshots could not be read: ${reportSummarySnapshotError}`);
+  const months = [...new Set(transactions.map(row => `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, "0")}`))];
+  if (!months.length) throw new Error("There is no released request history to save yet.");
+  for (const month of months) {
+    const rows = transactions.filter(row => `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, "0")}` === month)
+      .map(row => ({ ...row, date: reportSummaryDateKey(row.date) }));
+    const snapshot = { month, saved_at: new Date().toISOString(), rows };
+    const oldIndex = snapshots.findIndex(item => item.month === month);
+    if (oldIndex >= 0) snapshots[oldIndex] = snapshot;
+    else snapshots.push(snapshot);
+  }
+  localStorage.setItem(reportSummarySnapshotsKey(), JSON.stringify(snapshots));
+  reportSummarySnapshotError = "";
+  return months.length;
+}
+
+function reportSummaryRenderHistoryReference(content, transactions) {
+  const snapshots = reportSummaryReadSnapshots().sort((a, b) => b.month.localeCompare(a.month));
+  const monthKeys = [...new Set(transactions.map(row => `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, "0")}`))].sort().reverse();
+  const snapshotByMonth = new Map(snapshots.map(snapshot => [snapshot.month, snapshot]));
+  const options = [["LIVE", "CURRENT SHEET (live)"], ...[...new Set([...monthKeys, ...snapshots.map(item => item.month)])].sort().reverse()
+    .map(month => [month, `${reportSummaryDateLabel(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, 1), { month: "short", year: "numeric" })}${snapshotByMonth.has(month) ? " · saved snapshot" : " · live"}`])];
+  if (!options.some(option => option[0] === reportSummaryHistoryMonth)) reportSummaryHistoryMonth = "LIVE";
+  let rows = transactions;
+  if (reportSummaryHistoryMonth !== "LIVE") {
+    const snapshot = snapshotByMonth.get(reportSummaryHistoryMonth);
+    rows = snapshot
+      ? snapshot.rows.map(row => ({ ...row, date: reportSummaryDate(row.date) })).filter(row => row.date)
+      : transactions.filter(row => `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, "0")}` === reportSummaryHistoryMonth);
+  }
+  const query = reportSummaryHistorySearch.trim().toLocaleLowerCase();
+  const visible = rows.filter(row => !query || [row.sku, row.description, row.department, row.requestNumber].some(value => String(value || "").toLocaleLowerCase().includes(query)))
+    .sort((a, b) => b.date - a.date || b.requestNumber.localeCompare(a.requestNumber));
+  const distinctDays = new Set(visible.map(row => reportSummaryDateKey(row.date))).size;
+  const totals = visible.reduce((sum, row) => ({ qty: sum.qty + row.qty, amount: sum.amount + row.amount }), { qty: 0, amount: 0 });
+  const controls = reportSummaryCreateControls();
+  reportSummaryAddSelect(controls, "↶ VIEW", options, reportSummaryHistoryMonth, value => {
+    reportSummaryHistoryMonth = value;
+    renderReportSummary();
+  }, "Historical data view");
+  reportSummaryAddSearch(controls, reportSummaryHistorySearch, "Search SKU, item or department", value => {
+    reportSummaryHistorySearch = value;
+    renderReportSummary();
+  });
+  const downloadButton = reportSummaryElement("button", "report-summary-control-button", "⇩  DOWNLOAD");
+  downloadButton.type = "button";
+  downloadButton.addEventListener("click", () => reportSummaryDownload("summary-history.csv", reportSummaryCsv(visible), "text/csv;charset=utf-8"));
+  const downloadAllButton = reportSummaryElement("button", "report-summary-control-button ghost", "▣  DOWNLOAD ALL MONTHS");
+  downloadAllButton.type = "button";
+  downloadAllButton.addEventListener("click", () => {
+    const rowsByMonth = new Map();
+    for (const row of transactions) {
+      const month = `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, "0")}`;
+      rowsByMonth.set(month, rowsByMonth.has(month) ? [...rowsByMonth.get(month), row] : [row]);
+    }
+    for (const snapshot of snapshots) {
+      rowsByMonth.set(snapshot.month, snapshot.rows.map(row => ({ ...row, date: reportSummaryDate(row.date) })).filter(row => row.date));
+    }
+    const allRows = [...rowsByMonth.values()].flat();
+    reportSummaryDownload("summary-history-all-months.csv", reportSummaryCsv(allRows), "text/csv;charset=utf-8");
+  });
+  const snapshotButton = reportSummaryElement("button", "report-summary-control-button ghost", "▣  SAVE SNAPSHOT NOW");
+  snapshotButton.type = "button";
+  snapshotButton.addEventListener("click", () => {
+    try {
+      const count = reportSummarySaveSnapshot(transactions);
+      reportSummaryTransientStatus = `Snapshot saved in this browser for ${count} month${count === 1 ? "" : "s"}.`;
+      renderReportSummary();
+    } catch (error) {
+      console.error("Unable to save the summary report snapshot.", error);
+      reportSummaryTransientStatus = `Could not save snapshot: ${error.message}`;
+      renderReportSummary();
+    }
+  });
+  controls.append(downloadButton, downloadAllButton, snapshotButton);
+  const snapshotMeta = snapshotByMonth.get(reportSummaryHistoryMonth);
+  const dateCovered = reportSummaryHistoryMonth === "LIVE" ? "dates on the sheet now"
+    : snapshotMeta?.saved_at ? `saved ${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(snapshotMeta.saved_at))}` : "current sheet rows for month";
+  const firstCardEntries = [
+    ["RECORDS", visible.length.toLocaleString("en-US"), reportSummaryHistoryMonth === "LIVE" ? "CURRENT SHEET" : reportSummaryHistoryMonth, "var(--rs-accent)"],
+    ["DAYS COVERED", distinctDays, dateCovered, "#a78bfa"],
+    ["UNITS RELEASED", totals.qty.toLocaleString("en-US"), "", "#4ade80"],
+    ["TOTAL AMOUNT", reportSummaryCurrency(totals.amount), "", "#f472b6"],
+  ];
+  reportSummaryHero(content, firstCardEntries, [
+    reportSummaryNote(reportSummarySnapshotError
+      ? `Could not read saved snapshots: ${reportSummarySnapshotError}`
+      : "History comes from available Released / Received request records. Snapshots are stored in this browser only; they cannot restore entries removed from the workbook."),
+    controls,
+    reportSummaryElement("span", "report-summary-history-count", `${visible.length.toLocaleString("en-US")} records.`),
+  ]);
+  const rowsForTable = visible.slice(0, 1000).map(row => [
+    reportSummaryDateLabel(row.date, { month: "short", day: "numeric", year: "numeric" }),
+    row.sku || "—", row.description || "—", row.department || "—", row.qty,
+    reportSummaryCurrency(row.srp), reportSummaryCurrency(row.amount),
+  ]);
+  reportSummaryAddSection(content, "HISTORICAL DATA", ["DATE", "SKU CODE", "ITEM DESCRIPTION", "DEPARTMENT", "QTY RELEASED", "SRP", "TOTAL AMOUNT"], rowsForTable, "No release records found for this view.");
+}
+
+function reportSummaryRenderReference() {
+  const tab = reportSummarySelectedTab();
+  const content = document.querySelector("#report-summary-content");
+  const section = document.querySelector("#report-summary");
+  section.dataset.reportTab = tab.id;
+  content.replaceChildren();
+  const transactions = reportSummaryTransactions();
+  if (tab.id === "DAILY_SALES") reportSummaryRenderDailyReference(content, transactions);
+  else if (tab.id === "TOP_RANK") reportSummaryRenderTopRankReference(content, transactions);
+  else if (tab.id === "MONTH_COMPARE") reportSummaryRenderMonthCompareReference(content, transactions);
+  else if (["CRITICAL_STOCK", "OUT_OF_STOCK", "STOCK_AVAILABILITY"].includes(tab.id)) reportSummaryRenderStockReference(content, tab.id);
+  else if (["NEAR_EXPIRATION", "EXPIRATION_MONITORING"].includes(tab.id)) reportSummaryRenderExpiryReference(content, tab.id);
+  else if (tab.id === "AGING") reportSummaryRenderAgingReference(content);
+  else if (tab.id === "HISTORICAL_DATA") reportSummaryRenderHistoryReference(content, transactions);
+  const clock = document.querySelector("#report-summary-clock");
+  if (clock) {
+    clock.textContent = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }).format(new Date()).toUpperCase();
+    clock.dateTime = new Date().toISOString();
+  }
+  document.querySelector("#report-summary-status").textContent = reportSummaryTransientStatus || (reportSummaryData.products_tab
+    ? `LIVE · ${reportSummaryData.products_tab.toUpperCase()} + REQUEST HISTORY`
+    : "LIVE · WAITING FOR WORKBOOK DATA");
+}
+
 function renderReportSummaryTabs() {
   const container = document.querySelector("#report-summary-tabs");
   container.replaceChildren();
@@ -2249,15 +2835,20 @@ function renderReportSummaryTabs() {
   for (const tab of REPORT_SUMMARY_TABS) {
     if (group !== tab.group) {
       group = tab.group;
-      container.append(reportSummaryElement("h3", "report-summary-group", group));
+      const heading = reportSummaryElement("h3", "report-summary-group", `${{ SALES: "⌁", "STOCK HEALTH": "♥", EXPIRATION: "⌛", HISTORY: "▤" }[group]}  ${group}`);
+      heading.style.setProperty("--group-accent", REPORT_SUMMARY_GROUP_COLORS[group]);
+      container.append(heading);
     }
     const button = reportSummaryElement("button", "report-summary-tab", tab.label);
     button.type = "button";
     button.dataset.summaryTab = tab.id;
+    button.style.setProperty("--tab-accent", tab.color);
+    button.style.setProperty("--tab-rgb", tab.rgb);
     button.setAttribute("aria-pressed", String(tab.id === reportSummaryActiveTab));
+    button.append(reportSummaryElement("span", "report-summary-tab-icon", tab.icon));
     button.addEventListener("click", () => {
       reportSummaryActiveTab = tab.id;
-      document.querySelector("#report-summary-search").value = "";
+      reportSummarySearch = "";
       renderReportSummary();
     });
     container.append(button);
@@ -2266,45 +2857,7 @@ function renderReportSummaryTabs() {
 
 function renderReportSummary() {
   renderReportSummaryTabs();
-  const content = document.querySelector("#report-summary-content");
-  content.replaceChildren();
-  document.querySelector("#report-summary-month-label").hidden = reportSummaryActiveTab !== "HISTORICAL_DATA";
-  const selectedDepartment = document.querySelector("#report-summary-department-filter").value.toLocaleLowerCase();
-  const requests = reportSummaryRequests();
-  const transactions = reportSummaryTransactions();
-  const stockRows = reportSummaryStockRows();
-  const filterText = selectedDepartment ? ` · ${document.querySelector("#report-summary-department-filter").selectedOptions[0].textContent}` : "";
-  const caption = REPORT_SUMMARY_TABS.find(tab => tab.id === reportSummaryActiveTab)?.label || "Summary Report";
-  document.querySelector("#report-summary-status").textContent =
-    `${caption} · ${requests.length} requests · ${transactions.length} released item lines · ${stockRows.length} products${filterText}.`;
-
-  if (reportSummaryActiveTab === "DAILY_SALES") reportSummaryRenderDailySales(content, transactions);
-  else if (reportSummaryActiveTab === "TOP_RANK") reportSummaryRenderTopRank(content, transactions);
-  else if (reportSummaryActiveTab === "MONTH_COMPARE") reportSummaryRenderMonthCompare(content, transactions);
-  else if (reportSummaryActiveTab === "CRITICAL_STOCK" || reportSummaryActiveTab === "OUT_OF_STOCK" || reportSummaryActiveTab === "STOCK_AVAILABILITY") {
-    reportSummaryRenderStock(content, stockRows, reportSummaryActiveTab);
-  } else if (reportSummaryActiveTab === "NEAR_EXPIRATION" || reportSummaryActiveTab === "EXPIRATION_MONITORING") {
-    reportSummaryRenderExpiry(content, stockRows, reportSummaryActiveTab);
-  } else if (reportSummaryActiveTab === "AGING") reportSummaryRenderAging(content, stockRows);
-  else if (reportSummaryActiveTab === "HISTORICAL_DATA") reportSummaryRenderHistory(content, transactions);
-}
-
-function updateReportSummaryDepartmentOptions() {
-  const select = document.querySelector("#report-summary-department-filter");
-  const selected = select.value;
-  const departments = new Set();
-  for (const row of reportSummaryData.stock_rows) if (row.department) departments.add(String(row.department).trim());
-  for (const request of reportSummaryData.requests) {
-    for (const value of [request.outgoing_department, request.incoming_department]) {
-      const department = String(value || "").trim();
-      if (department) departments.add(department);
-    }
-  }
-  select.replaceChildren(new Option("All departments", ""));
-  for (const department of [...departments].sort((left, right) => left.localeCompare(right))) {
-    select.add(new Option(department, department));
-  }
-  select.value = [...departments].find(value => value.toLocaleLowerCase() === selected.toLocaleLowerCase()) || "";
+  reportSummaryRenderReference();
 }
 
 async function loadReportSummary() {
@@ -2312,6 +2865,8 @@ async function loadReportSummary() {
   const userId = currentSession?.user.id;
   const status = document.querySelector("#report-summary-status");
   const button = document.querySelector("#refresh-report-summary");
+  reportSummaryTransientStatus = "";
+  renderReportSummary();
   button.disabled = true;
   status.textContent = "Loading summary report data…";
   try {
@@ -2322,12 +2877,12 @@ async function loadReportSummary() {
       stock_rows: Array.isArray(result.stock_rows) ? result.stock_rows : [],
       products_tab: String(result.products_tab || "data"),
     };
-    updateReportSummaryDepartmentOptions();
     renderReportSummary();
     status.textContent = `Updated ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date())} · ${reportSummaryData.products_tab} tab and request history.`;
   } catch (error) {
     if (loadId !== reportSummaryLoadId || currentSession?.user.id !== userId) return;
     console.error("Unable to load the summary report.", error);
+    renderReportSummary();
     status.textContent = `Could not load summary report: ${error.message || "Request failed."}`;
   } finally {
     if (loadId === reportSummaryLoadId) button.disabled = false;
@@ -2989,9 +3544,6 @@ document.querySelector("#refresh-pending-release").addEventListener("click", loa
 document.querySelector("#refresh-pending-received").addEventListener("click", loadPendingReceived);
 document.querySelector("#refresh-notifications").addEventListener("click", loadNotifications);
 document.querySelector("#refresh-report-summary").addEventListener("click", () => void loadReportSummary());
-document.querySelector("#report-summary-department-filter").addEventListener("change", renderReportSummary);
-document.querySelector("#report-summary-search").addEventListener("input", renderReportSummary);
-document.querySelector("#report-summary-month-filter").addEventListener("change", renderReportSummary);
 document.querySelector("#print-report-summary").addEventListener("click", () => {
   document.body.classList.add("print-report-summary");
   window.print();

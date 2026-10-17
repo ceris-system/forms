@@ -150,29 +150,25 @@
           </section>
 
           <section class="section-block user-only portal-page admin-only" id="report-summary" data-page-section hidden>
-            <div class="section-heading">
-              <div><p class="eyebrow">📊 REPORTS SYSTEM · ADMIN</p><h1>Summary Report</h1><p class="section-description">Live sales, stock health, expiry, aging, and historical summaries for all departments.</p></div>
-              <div class="inventory-page-actions">
-                <button class="button button-secondary" type="button" data-back-to-reports>← Reports &amp; History</button>
-                <button class="button button-secondary" id="refresh-report-summary" type="button">🔄 Refresh</button>
-                <button class="button button-secondary" id="print-report-summary" type="button">🖨 Print</button>
+            <div class="report-summary-window">
+              <header class="report-summary-header">
+                <div class="report-summary-brand">
+                  <span class="report-summary-brand-icon" aria-hidden="true">◔</span>
+                  <div><h1>SUMMARY <span>REPORT</span></h1><time id="report-summary-clock"></time></div>
+                </div>
+                <div class="report-summary-header-actions">
+                  <button class="report-summary-action" id="refresh-report-summary" type="button">↻ &nbsp;REFRESH</button>
+                  <button class="report-summary-action" id="print-report-summary" type="button">▣ &nbsp;PRINT</button>
+                  <button class="report-summary-close" type="button" data-back-to-reports aria-label="Close summary report">×</button>
+                </div>
+              </header>
+              <div class="report-summary-workspace">
+                <nav class="report-summary-tabs" id="report-summary-tabs" aria-label="Summary report sections"></nav>
+                <main class="report-summary-main">
+                  <p class="report-summary-status" id="report-summary-status" role="status" aria-live="polite"></p>
+                  <div class="report-summary-content" id="report-summary-content" aria-live="polite"></div>
+                </main>
               </div>
-            </div>
-            <div class="report-summary-toolbar">
-              <label for="report-summary-department-filter">Department
-                <select id="report-summary-department-filter"><option value="">All departments</option></select>
-              </label>
-              <label for="report-summary-search">Search current report
-                <input class="catalog-search" id="report-summary-search" type="search" placeholder="Search products or requests">
-              </label>
-              <label for="report-summary-month-filter" id="report-summary-month-label" hidden>Month
-                <select id="report-summary-month-filter"><option value="">All months</option></select>
-              </label>
-            </div>
-            <p class="field-hint" id="report-summary-status" role="status" aria-live="polite"></p>
-            <div class="report-summary-layout">
-              <nav class="report-summary-tabs" id="report-summary-tabs" aria-label="Summary report sections"></nav>
-              <div class="report-summary-content" id="report-summary-content" aria-live="polite"></div>
             </div>
           </section>
 
