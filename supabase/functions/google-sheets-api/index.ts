@@ -526,27 +526,31 @@ async function compactRequestTab(
   if (!sheet?.properties?.sheetId) throw new Error(`Could not find the "${tabName}" request tab.`);
   const sheetId = Number(sheet.properties.sheetId);
   const rowCount = Math.max(usedRows, 2);
-  const requests: Record<string, unknown>[] = [];
   if (compactRows && Number(sheet.properties.gridProperties?.rowCount) !== rowCount) {
-    requests.push({
-      updateSheetProperties: {
-        properties: { sheetId, gridProperties: { rowCount } },
-        fields: "gridProperties.rowCount",
-      },
+    await googleRequest(`spreadsheets/${spreadsheetId}:batchUpdate`, {
+      method: "POST",
+      body: JSON.stringify({
+        requests: [{
+          updateSheetProperties: {
+            properties: { sheetId, gridProperties: { rowCount } },
+            fields: "gridProperties.rowCount",
+          },
+        }],
+      }),
     });
   }
   if (compactRows) {
-    requests.push({
-      setDataValidation: {
-        range: { sheetId, startRowIndex: 1, startColumnIndex: 18, endColumnIndex: 19 },
-      },
+    await googleRequest(`spreadsheets/${spreadsheetId}:batchUpdate`, {
+      method: "POST",
+      body: JSON.stringify({
+        requests: [{
+          setDataValidation: {
+            range: { sheetId, startRowIndex: 1, startColumnIndex: 18, endColumnIndex: 19 },
+          },
+        }],
+      }),
     });
   }
-  if (!requests.length) return;
-  await googleRequest(`spreadsheets/${spreadsheetId}:batchUpdate`, {
-    method: "POST",
-    body: JSON.stringify({ requests }),
-  });
 }
 
 function requiredText(value: unknown, label: string): string {
