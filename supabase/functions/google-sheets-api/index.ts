@@ -535,11 +535,14 @@ async function compactRequestTab(
       },
     });
   }
-  requests.push({
-    setDataValidation: {
-      range: { sheetId, startRowIndex: 1, startColumnIndex: 18, endColumnIndex: 19 },
-    },
-  });
+  if (compactRows) {
+    requests.push({
+      setDataValidation: {
+        range: { sheetId, startRowIndex: 1, startColumnIndex: 18, endColumnIndex: 19 },
+      },
+    });
+  }
+  if (!requests.length) return;
   await googleRequest(`spreadsheets/${spreadsheetId}:batchUpdate`, {
     method: "POST",
     body: JSON.stringify({ requests }),

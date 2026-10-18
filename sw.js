@@ -1,4 +1,4 @@
-const CACHE_NAME = "mw-request-portal-v7";
+const CACHE_NAME = "mw-request-portal-v8";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -11,6 +11,11 @@ const APP_SHELL = [
   "./assets/app-icon-512.png",
   "./SIG.png",
 ];
+const APP_SHELL_ASSETS = new Set(
+  APP_SHELL
+    .filter(path => path !== "./" && path !== "./index.html")
+    .map(path => new URL(path, self.registration.scope).pathname),
+);
 
 self.addEventListener("install", event => {
   event.waitUntil(
@@ -32,7 +37,22 @@ self.addEventListener("activate", event => {
 
 self.addEventListener("fetch", event => {
   const request = event.request;
-  if (request.method !== "GET" || new URL(request.url).origin !== self.location.origin) return;
+  const url = new URL(request.url);
+  if (request.method !== "GET" || url.origin !== self.location.origin) return;
+
+  if (APP_SHELL_ASSETS.has(url.pathname)) {
+    const cachedResponse = caches.match(request);
+    const updateResponse = fetch(request).then(async response => {
+      if (response.ok) {
+        const cache = await caches.open(CACHE_NAME);
+        await cache.put(request, response.clone());
+      }
+      return response;
+    });
+    event.waitUntil(updateResponse.then(() => undefined, () => undefined));
+    event.respondWith(cachedResponse.then(cached => cached || updateResponse));
+    return;
+  }
 
   event.respondWith((async () => {
     try {

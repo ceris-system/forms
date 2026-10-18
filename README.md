@@ -72,7 +72,7 @@ const DEPLOYMENT_SETTINGS = {
 
 Publish `index.html`, `app.js`, `styles.css`, `manifest.webmanifest`, `sw.js`, `SIG.png`, `assets/`, and `supabase/` together to a static HTTPS host such as GitHub Pages. Keep the service worker and manifest at the portal root and publish all generated `assets/app-icon-*.png` icons. The publishable/anon key is designed for browser use with RLS enabled. **Never use a `service_role` key, `sb_secret_` key, or Google private key in the website.**
 
-The portal is installable as a Progressive Web App (PWA) on supported devices. Open the published HTTPS portal and use **Install app** in the login screen or workspace header. In Safari on iPhone or iPad, use **Share → Add to Home Screen**. On desktop browsers that do not show the install prompt, use the browser menu's **Install page** option. The app shell can load from cache when offline, but sign-in, Google Sheets, and other live portal data require an internet connection.
+The portal is installable as a Progressive Web App (PWA) on supported devices. Open the published HTTPS portal and use **Install app** in the login screen or workspace header. In Safari on iPhone or iPad, use **Share → Add to Home Screen**. On desktop browsers that do not show the install prompt, use the browser menu's **Install page** option. Cached app-shell assets are served immediately and refreshed in the background; page navigation and live portal data remain network-first. The app shell can load from cache when offline, but sign-in, Google Sheets, and other live portal data require an internet connection.
 
 Signed-in sessions are stored for the current browser tab, automatically sign out after 10 minutes without activity, and are cleared when the tab or installed app is closed.
 

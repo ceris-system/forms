@@ -52,6 +52,7 @@ let activitySessionId = "";
 let activitySessionUserId = "";
 let endedActivitySessionId = "";
 let notificationCountLoadId = 0;
+let notificationLoadId = 0;
 let notificationOffset = 0;
 let notificationRequestToReveal = null;
 let notificationRefreshTimer = null;
@@ -74,11 +75,14 @@ let reportSummaryTransientStatus = "";
 let reportSummarySnapshotError = "";
 let pendingInstallPrompt = null;
 const workflowLoadIds = new Map();
+let workflowCountLoadId = 0;
 const IDLE_SIGN_OUT_DELAY = 10 * 60 * 1000;
 let idleSignOutTimer = null;
 let inventoryRows = [];
 let inventoryCategories = [];
 let inventoryDepartment = "";
+let inventoryRowsDepartment = "";
+let inventoryRowsUserId = "";
 let selectedInventoryRow = null;
 const inventoryLoadIds = new Map();
 const historyRows = new Map();
@@ -387,7 +391,7 @@ async function requestSheetData(action, payload) {
   if (error) throw new Error(await edgeFunctionErrorMessage(error));
   if (data?.error) throw new Error(data.error);
   const activity = describeSuccessfulSheetAction(action, payload, data);
-  if (activity) await recordUserActivity(activity.action, activity.details);
+  if (activity) void recordUserActivity(activity.action, activity.details);
   return data;
 }
 
@@ -558,9 +562,13 @@ async function loadInventoryPage(pageId, refresh = false) {
   const requestedDepartment = isAdmin
     ? departmentSelect.value || inventoryDepartment
     : currentUserProfile.department;
-  inventoryRows = [];
-  if (isInventoryForm) renderInventoryFormRows();
-  else renderInventoryRows();
+  const canKeepRows = refresh && Boolean(userId) && userId === inventoryRowsUserId &&
+    requestedDepartment.toLocaleLowerCase() === inventoryRowsDepartment.toLocaleLowerCase();
+  if (!canKeepRows) {
+    inventoryRows = [];
+    if (isInventoryForm) renderInventoryFormRows();
+    else renderInventoryRows();
+  }
   if (isAdmin && !requestedDepartment) {
     inventoryDepartment = "";
     setInventoryDepartmentOptions([]);
@@ -573,6 +581,8 @@ async function loadInventoryPage(pageId, refresh = false) {
     if (inventoryLoadIds.get(pageId) !== loadId || activePageId !== pageId || currentSession?.user.id !== userId) return false;
     inventoryCategories = result.categories || [];
     inventoryDepartment = result.department || "";
+    inventoryRowsDepartment = inventoryDepartment;
+    inventoryRowsUserId = userId || "";
     setInventoryDepartmentOptions(result.departments || []);
     inventoryRows = result.rows || [];
     if (!inventoryDepartment) {
@@ -1363,6 +1373,7 @@ function updateActivityUserOptions(logUsers) {
 
 async function loadActivityLogs(append = false) {
   const loadId = ++activityLogLoadId;
+  const sessionUserId = currentSession?.user.id;
   const status = document.querySelector("#activity-log-status");
   const button = document.querySelector("#refresh-activity-logs");
   const loadMoreButton = document.querySelector("#load-more-activity-logs");
@@ -1382,7 +1393,8 @@ async function loadActivityLogs(append = false) {
       user_id: selectedUserId,
       offset: activityLogOffset,
     });
-    if (loadId !== activityLogLoadId || selectedUserId !== document.querySelector("#activity-user-filter").value) return;
+    if (loadId !== activityLogLoadId || currentSession?.user.id !== sessionUserId ||
+      selectedUserId !== document.querySelector("#activity-user-filter").value) return;
     updateActivityUserOptions(result.users || []);
     activityLogs = append ? [...activityLogs, ...(result.logs || [])] : result.logs || [];
     activityLogOffset += (result.logs || []).length;
@@ -1390,7 +1402,7 @@ async function loadActivityLogs(append = false) {
     renderActivityLogs();
     status.textContent = `${activityLogs.length} activity log${activityLogs.length === 1 ? "" : "s"} loaded${selectedUserId ? ` for ${document.querySelector("#activity-user-filter").selectedOptions[0]?.textContent || "selected user"}` : ""}.`;
   } catch (error) {
-    if (loadId !== activityLogLoadId) return;
+    if (loadId !== activityLogLoadId || currentSession?.user.id !== sessionUserId) return;
     console.error("Unable to load user activity logs.", error);
     status.textContent = `Could not load user activity logs: ${activityLogErrorMessage(error)}`;
   } finally {
@@ -1760,6 +1772,8 @@ function setWorkflowCount(selector, count) {
 }
 
 async function refreshWorkflowCounts() {
+  const loadId = ++workflowCountLoadId;
+  const userId = currentSession?.user.id;
   if (!currentSession || currentUserProfile.mustChangePassword) {
     setWorkflowCount("#approval-nav-count", 0);
     setWorkflowCount("#release-nav-count", 0);
@@ -1768,10 +1782,12 @@ async function refreshWorkflowCounts() {
   }
   try {
     const result = await requestSheetData("workflow_counts");
+    if (currentSession?.user.id !== userId || loadId !== workflowCountLoadId) return;
     setWorkflowCount("#approval-nav-count", result.approval_count);
     setWorkflowCount("#release-nav-count", result.release_count);
     setWorkflowCount("#receive-nav-count", result.receive_count);
   } catch (error) {
+    if (currentSession?.user.id !== userId || loadId !== workflowCountLoadId) return;
     console.error("Unable to refresh workflow queue counts.", error);
   }
 }
@@ -1779,6 +1795,7 @@ async function refreshWorkflowCounts() {
 async function refreshNotificationCount() {
   const userId = currentSession?.user.id;
   if (!userId) {
+    notificationCountLoadId += 1;
     setNotificationCount(0);
     return;
   }
@@ -1799,6 +1816,7 @@ async function loadNotifications(append = false) {
   const status = document.querySelector("#notification-list-status");
   const list = document.querySelector("#notification-list");
   const loadMoreButton = document.querySelector("#load-more-notifications");
+  const loadId = ++notificationLoadId;
   const userId = currentSession?.user.id;
   if (!userId) return;
   if (!append) notificationOffset = 0;
@@ -1806,21 +1824,21 @@ async function loadNotifications(append = false) {
   loadMoreButton.disabled = true;
   try {
     const result = await callPortalAdmin({ action: "notifications_list", offset: notificationOffset });
-    if (currentSession?.user.id !== userId || activePageId !== "notifications") return;
+    if (currentSession?.user.id !== userId || activePageId !== "notifications" || loadId !== notificationLoadId) return;
     const notifications = Array.isArray(result.notifications) ? result.notifications : [];
     renderNotifications(list, notifications, append);
     notificationOffset += notifications.length;
     loadMoreButton.hidden = !result.has_more;
-    loadMoreButton.disabled = false;
     setNotificationCount(result.unread_count);
     status.textContent = notificationOffset
       ? `Showing ${notificationOffset} form update${notificationOffset === 1 ? "" : "s"}.`
       : "Your inbox is clear. New form updates will appear here.";
   } catch (error) {
-    if (currentSession?.user.id !== userId) return;
+    if (currentSession?.user.id !== userId || loadId !== notificationLoadId) return;
     console.error("Unable to load form notifications.", error);
     status.textContent = `Could not load notifications: ${error.message || "Request failed."}`;
-    loadMoreButton.disabled = false;
+  } finally {
+    if (loadId === notificationLoadId) loadMoreButton.disabled = false;
   }
 }
 
@@ -2960,11 +2978,20 @@ async function loadWorkflowQueue(action, listId, statusId, emptyMessage) {
   const list = document.querySelector(`#${listId}`);
   const status = document.querySelector(`#${statusId}`);
   const loadId = (workflowLoadIds.get(action) || 0) + 1;
+  const userId = currentSession?.user.id;
+  const pageByAction = {
+    approval_queue: "approvals",
+    my_requests: "my-requests",
+    pending_release: "pending-release",
+    pending_received: "pending-received",
+  };
+  const pageId = pageByAction[action];
   workflowLoadIds.set(action, loadId);
   status.textContent = list.childElementCount ? "Refreshing requests…" : "Loading requests…";
   try {
     const result = await requestSheetData(action);
-    if (workflowLoadIds.get(action) !== loadId) return;
+    if (workflowLoadIds.get(action) !== loadId || currentSession?.user.id !== userId ||
+      activePageId !== pageId) return;
     const requests = Array.isArray(result.requests) ? result.requests : [];
     if (action === "approval_queue") setWorkflowCount("#approval-nav-count", requests.length);
     if (action === "pending_release") setWorkflowCount("#release-nav-count", requests.length);
@@ -2992,7 +3019,8 @@ async function loadWorkflowQueue(action, listId, statusId, emptyMessage) {
       notificationRequestToReveal = null;
     }
   } catch (error) {
-    if (workflowLoadIds.get(action) !== loadId) return;
+    if (workflowLoadIds.get(action) !== loadId || currentSession?.user.id !== userId ||
+      activePageId !== pageId) return;
     console.error(`Unable to load ${emptyMessage.toLocaleLowerCase()}.`, error);
     status.textContent = `Could not load requests: ${error.message || "Request failed."}`;
   }
