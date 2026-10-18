@@ -317,7 +317,7 @@ async function updateInventoryAdjustment(
   if (!Number.isSafeInteger(sheetRow) || sheetRow < 8) {
     throw new InventoryRequestError("The selected inventory row is invalid.", 400);
   }
-  const remarks = typeof body.remarks === "string" ? body.remarks.trim() : "";
+  const remarks = typeof body.remarks === "string" ? body.remarks.trim().toLocaleUpperCase() : "";
   if (remarks.length > 500) throw new InventoryRequestError("Adjustment remarks must be 500 characters or fewer.", 400);
   let batchValues: (string | number)[] | null = null;
   if (body.batches !== undefined) {
@@ -390,7 +390,7 @@ async function updateInventoryAdjustment(
     }
     data.push({
       range: a1Range(department, `R${sheetRow}:T${sheetRow}`),
-      values: [[category, adjustmentQty, remarks]],
+      values: [[category.toLocaleUpperCase(), adjustmentQty, remarks]],
     });
     adjustmentUpdated = true;
   }
@@ -525,7 +525,7 @@ async function compactRequestTab(
   }
   if (!sheet?.properties?.sheetId) throw new Error(`Could not find the "${tabName}" request tab.`);
   const sheetId = Number(sheet.properties.sheetId);
-  const rowCount = Math.max(usedRows, 1);
+  const rowCount = Math.max(usedRows, 2);
   const requests: Record<string, unknown>[] = [];
   if (compactRows && Number(sheet.properties.gridProperties?.rowCount) !== rowCount) {
     requests.push({
@@ -1078,13 +1078,13 @@ async function applyWorkflowAction(
       updated[18] = updatedStatus;
       if (action === "approve") {
         updated[19] = approvedQuantities[index];
-        updated[20] = user.username;
+        updated[20] = user.username.toLocaleUpperCase();
         updated[23] = today;
       } else if (action === "release") {
-        updated[21] = user.username;
+        updated[21] = user.username.toLocaleUpperCase();
         updated[24] = today;
       } else {
-        updated[22] = user.username;
+        updated[22] = user.username.toLocaleUpperCase();
         updated[25] = today;
       }
       return {

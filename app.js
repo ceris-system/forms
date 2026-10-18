@@ -3622,13 +3622,14 @@ document.querySelector("#print-inventory-form").addEventListener("click", () => 
   window.print();
 });
 window.addEventListener("afterprint", () => document.body.classList.remove("print-inventory"));
-requestFormBody.addEventListener("input", (event) => {
-  if (event.target instanceof HTMLInputElement && event.target.type === "text") {
-    const start = event.target.selectionStart;
-    const end = event.target.selectionEnd;
-    event.target.value = event.target.value.toLocaleUpperCase();
-    if (start !== null && end !== null) event.target.setSelectionRange(start, end);
-  }
+document.addEventListener("input", event => {
+  const input = event.target;
+  if (!(input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) ||
+    (input instanceof HTMLInputElement && !["text", "search"].includes(input.type))) return;
+  const start = input.selectionStart;
+  const end = input.selectionEnd;
+  input.value = input.value.toLocaleUpperCase();
+  if (start !== null && end !== null) input.setSelectionRange(start, end);
 });
 document.querySelector("#add-user-form").addEventListener("submit", addUser);
 document.querySelector("#new-user-role").addEventListener("change", updateUserFormAccess);
