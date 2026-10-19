@@ -2461,20 +2461,19 @@ function reportSummaryRenderTopRankReference(content) {
   const { daily, monthly } = reportSummaryNormalizeTopRank(reportSummaryData.top_rank);
   reportSummaryHero(content, [], [
     reportSummaryNote("Daily rankings use today's Sales sheet totals. Monthly rankings include month-to-date sales."),
-    reportSummaryElement("div", "report-summary-grid"),
+    reportSummaryElement("div", "report-summary-grid report-summary-rank-grid"),
   ]);
   const grid = content.querySelector(".report-summary-grid");
-  for (const [periodLabel, period, emptySuffix] of [
-    ["DAILY TOP RANK", daily, "today"],
-    ["MONTHLY TOP RANK · MONTH TO DATE", monthly, "this month"],
+  for (const [title, rows, product, emptyText] of [
+    ["DAILY · BY DEPARTMENT", daily.departments, false, "No department sales recorded today."],
+    ["DAILY · BY PRODUCT", daily.products, true, "No product sales recorded today."],
+    ["MONTHLY · BY DEPARTMENT", monthly.departments, false, "No department sales recorded this month."],
+    ["MONTHLY · BY PRODUCT", monthly.products, true, "No product sales recorded this month."],
   ]) {
-    const periodPanel = reportSummaryElement("section", "report-summary-rank-period");
-    periodPanel.append(reportSummarySectionHeading(periodLabel, "♛"));
-    const tables = reportSummaryElement("div", "report-summary-rank-tables");
-    reportSummaryAddSection(tables, "BY DEPARTMENT", ["RANK", "DEPARTMENT", "TOTAL RELEASED", "TOTAL AMOUNT"], reportSummaryRankRows(period.departments), `No department sales recorded ${emptySuffix}.`);
-    reportSummaryAddSection(tables, "BY PRODUCT", ["RANK", "SKU CODE", "ITEM DESCRIPTION", "TOTAL RELEASED", "TOTAL AMOUNT"], reportSummaryRankRows(period.products, true), `No product sales recorded ${emptySuffix}.`);
-    periodPanel.append(tables);
-    grid.append(periodPanel);
+    const headers = product
+      ? ["RANK", "SKU CODE", "ITEM DESCRIPTION", "TOTAL RELEASED", "TOTAL AMOUNT"]
+      : ["RANK", "DEPARTMENT", "TOTAL RELEASED", "TOTAL AMOUNT"];
+    reportSummaryAddSection(grid, title, headers, reportSummaryRankRows(rows, product), emptyText);
   }
 }
 

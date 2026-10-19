@@ -176,8 +176,7 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .report-summary-control-button.ghost { background: rgb(var(--rs-rgb) / 14%); color: #f6f4ff; }
 .report-summary-control-button:disabled { cursor: not-allowed; opacity: .45; }
 .report-summary-grid { display: grid; min-width: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; align-items: start; }
-.report-summary-rank-period { min-width: 0; padding: 0 10px 10px; border: 1px solid #dfe7ee; border-radius: 8px; background: #fff; }
-.report-summary-rank-tables { display: grid; min-width: 0; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.report-summary-grid.report-summary-rank-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .report-summary-panel { min-width: 0; }
 .report-summary-scroll { width: 100%; max-height: none; overflow: visible; border: 1px solid #dfe7ee; border-radius: 8px; }
 .report-summary-table { width: 100%; min-width: 0; table-layout: fixed; border-collapse: separate; border-spacing: 0; color: #334155; font-family: var(--font); }
@@ -664,6 +663,7 @@ td { padding: 10px 12px; border-top: 1px solid #f0f1ef; color: #536057; font-siz
   .report-summary-hero-top { align-items: flex-start; flex-wrap: wrap; }
   .report-summary-hero .report-summary-cards { flex-basis: 100%; margin: 4px 0 0; }
   .report-summary-grid { grid-template-columns: 1fr; }
+  .report-summary-grid.report-summary-rank-grid { grid-template-columns: 1fr; }
   .report-summary-status { font-size: 7px; }
   .report-menu-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; }
   .report-menu-button { min-height: 94px; padding: 13px; font-size: 11px; }
@@ -702,6 +702,9 @@ td { padding: 10px 12px; border-top: 1px solid #f0f1ef; color: #536057; font-siz
   .stat-label { font-size: 8px; }
   .stat-note { font-size: 9px; }
   .form-grid, .form-preview-grid { grid-template-columns: 1fr; }
+}
+@media (min-width: 761px) and (max-width: 1100px) {
+  .report-summary-grid.report-summary-rank-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 560px) {
   .report-summary-window { min-height: 0; }
