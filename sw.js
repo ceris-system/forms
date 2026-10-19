@@ -1,4 +1,4 @@
-const CACHE_NAME = "mw-request-portal-v15";
+const CACHE_NAME = "mw-request-portal-v16";
 const APP_SHELL = [
   "./",
   "./index.html",

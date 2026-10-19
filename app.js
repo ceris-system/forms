@@ -62,7 +62,7 @@ let activityLogs = [];
 let activityLogOffset = 0;
 let activityLogsHaveMore = false;
 let activityLogLoadId = 0;
-let reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] }, top_rank: { departments: [], products: [] } };
+let reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] }, top_rank: { daily: { departments: [], products: [] }, monthly: { departments: [], products: [] } } };
 let reportSummaryActiveTab = "DAILY_SALES";
 let reportSummaryOverviewLoaded = false;
 let reportSummaryTopRankLoaded = false;
@@ -1023,7 +1023,7 @@ function updateSessionUi(session, navigate = true) {
     isMasterAdmin = false;
     isAdmin = false;
     lookupCache = null;
-    reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] }, top_rank: { departments: [], products: [] } };
+    reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] }, top_rank: { daily: { departments: [], products: [] }, monthly: { departments: [], products: [] } } };
     reportSummaryOverviewLoaded = false;
     reportSummaryTopRankLoaded = false;
     reportSummaryTransientStatus = "";
@@ -2381,8 +2381,21 @@ function reportSummaryTransactionsInRange(transactions, start, end) {
 function reportSummaryRankRows(rows, product = false) {
   return rows.map((row, index) => [
     reportSummaryCell(index + 1, `report-summary-rank report-summary-rank-${index + 1}`),
-    ...(product ? [row[0] || "—", row[1] || "—", row[2] || "—", row[3] || "—"] : [row[0] || "—", row[1] || "—", row[2] || "—"]),
+    ...(product
+      ? [row[0] || "—", row[1] || "—", row[2] || "—", reportSummaryCurrency(reportSummaryNumber(row[3]))]
+      : [row[0] || "—", row[1] || "—", reportSummaryCurrency(reportSummaryNumber(row[2]))]),
   ]);
+}
+
+function reportSummaryNormalizeTopRank(topRank) {
+  const normalizePeriod = period => ({
+    departments: Array.isArray(period?.departments) ? period.departments : [],
+    products: Array.isArray(period?.products) ? period.products : [],
+  });
+  return {
+    daily: normalizePeriod(topRank?.daily),
+    monthly: normalizePeriod(topRank?.monthly),
+  };
 }
 
 function reportSummaryRenderDailyReference(content, salesDaily) {
@@ -2445,14 +2458,24 @@ function reportSummaryRenderDailyReference(content, salesDaily) {
 }
 
 function reportSummaryRenderTopRankReference(content) {
-  const { departments, products } = reportSummaryData.top_rank;
+  const { daily, monthly } = reportSummaryNormalizeTopRank(reportSummaryData.top_rank);
   reportSummaryHero(content, [], [
-    reportSummaryNote("Ranked sales data is read directly from the Sales sheet."),
+    reportSummaryNote("Daily rankings use today's Sales sheet totals. Monthly rankings include month-to-date sales."),
     reportSummaryElement("div", "report-summary-grid"),
   ]);
   const grid = content.querySelector(".report-summary-grid");
-  reportSummaryAddSection(grid, "BY DEPARTMENT", ["RANK", "DEPARTMENT", "TOTAL RELEASED", "TOTAL AMOUNT"], reportSummaryRankRows(departments), "No department ranking data found in Sales!BU3:BW.");
-  reportSummaryAddSection(grid, "BY PRODUCT", ["RANK", "SKU CODE", "ITEM DESCRIPTION", "TOTAL RELEASED", "TOTAL AMOUNT"], reportSummaryRankRows(products, true), "No product ranking data found in Sales!BY3:CB.");
+  for (const [periodLabel, period, emptySuffix] of [
+    ["DAILY TOP RANK", daily, "today"],
+    ["MONTHLY TOP RANK · MONTH TO DATE", monthly, "this month"],
+  ]) {
+    const periodPanel = reportSummaryElement("section", "report-summary-rank-period");
+    periodPanel.append(reportSummarySectionHeading(periodLabel, "♛"));
+    const tables = reportSummaryElement("div", "report-summary-rank-tables");
+    reportSummaryAddSection(tables, "BY DEPARTMENT", ["RANK", "DEPARTMENT", "TOTAL RELEASED", "TOTAL AMOUNT"], reportSummaryRankRows(period.departments), `No department sales recorded ${emptySuffix}.`);
+    reportSummaryAddSection(tables, "BY PRODUCT", ["RANK", "SKU CODE", "ITEM DESCRIPTION", "TOTAL RELEASED", "TOTAL AMOUNT"], reportSummaryRankRows(period.products, true), `No product sales recorded ${emptySuffix}.`);
+    periodPanel.append(tables);
+    grid.append(periodPanel);
+  }
 }
 
 function reportSummaryRenderMonthCompareReference(content, transactions) {
@@ -2865,12 +2888,7 @@ async function loadReportSummary(force = false) {
         ? result.sales_daily
         : { daily: [], today_products: [] };
     } else if (topRankOnly) {
-      reportSummaryData.top_rank = result.top_rank && typeof result.top_rank === "object"
-        ? {
-          departments: Array.isArray(result.top_rank.departments) ? result.top_rank.departments : [],
-          products: Array.isArray(result.top_rank.products) ? result.top_rank.products : [],
-        }
-        : { departments: [], products: [] };
+      reportSummaryData.top_rank = reportSummaryNormalizeTopRank(result.top_rank);
       reportSummaryTopRankLoaded = true;
     } else {
       reportSummaryData = {
@@ -2880,12 +2898,7 @@ async function loadReportSummary(force = false) {
         sales_daily: result.sales_daily && typeof result.sales_daily === "object"
           ? result.sales_daily
           : { daily: [], today_products: [] },
-        top_rank: result.top_rank && typeof result.top_rank === "object"
-          ? {
-            departments: Array.isArray(result.top_rank.departments) ? result.top_rank.departments : [],
-            products: Array.isArray(result.top_rank.products) ? result.top_rank.products : [],
-          }
-          : { departments: [], products: [] },
+        top_rank: reportSummaryNormalizeTopRank(result.top_rank),
       };
       reportSummaryOverviewLoaded = true;
       reportSummaryTopRankLoaded = true;
@@ -2895,7 +2908,7 @@ async function loadReportSummary(force = false) {
     status.textContent = dailySalesOnly
       ? `Updated ${updatedAt} · Sales.`
       : topRankOnly
-        ? `Updated ${updatedAt} · Sales top rank.`
+        ? `Updated ${updatedAt} · Daily and monthly Sales top rank.`
         : `Updated ${updatedAt} · Sales, ${reportSummaryData.products_tab}, and request history.`;
   } catch (error) {
     if (loadId !== reportSummaryLoadId || currentSession?.user.id !== userId) return;

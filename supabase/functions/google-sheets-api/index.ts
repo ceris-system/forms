@@ -1348,23 +1348,80 @@ async function loadDailySales(
 
 async function loadTopRank(
   spreadsheetId: string,
-): Promise<{ departments: string[][]; products: string[][] }> {
-  const [departmentRows, productRows] = await readValuesBatch(spreadsheetId, [
-    a1Range("Sales", "BU3:BW"),
-    a1Range("Sales", "BY3:CB"),
-  ]);
-  const normalizeRows = (rows: unknown[][], columnCount: number, quantityColumn: number): string[][] => rows
-    .map(row => Array.from({ length: columnCount }, (_, index) => String(row[index] ?? "").trim()))
-    .filter(row => {
-      const quantity = row[quantityColumn].replace(/,/g, "");
-      const parsedQuantity = Number(quantity);
-      return quantity !== "" && Number.isFinite(parsedQuantity) && parsedQuantity !== 0;
-    });
+): Promise<{
+  daily: { departments: string[][]; products: string[][] };
+  monthly: { departments: string[][]; products: string[][] };
+}> {
+  const [headerRows] = await readValuesBatch(spreadsheetId, [a1Range("Sales", "1:2")]);
+  const dateHeaders = headerRows?.[0] || [];
+  const metricHeaders = headerRows?.[1] || [];
+  const todayParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type: string) => todayParts.find(item => item.type === type)?.value || "";
+  const todayKey = `${part("year")}-${part("month")}-${part("day")}`;
+  const monthStartKey = `${part("year")}-${part("month")}-01`;
+  const dateColumns: { date: string; qtyColumn: number; salesColumn: number }[] = [];
+  for (let salesColumn = 0; salesColumn < metricHeaders.length; salesColumn++) {
+    if (String(metricHeaders[salesColumn] ?? "").trim().toLocaleUpperCase() !== "SALES") continue;
+    const qtyColumn = salesColumn - 1;
+    if (qtyColumn < 0 || String(metricHeaders[qtyColumn] ?? "").trim().toLocaleUpperCase() !== "QTY RELEASED") continue;
+    const date = salesSheetDateKey(dateHeaders[salesColumn]) || salesSheetDateKey(dateHeaders[qtyColumn]);
+    if (!date || date < monthStartKey || date > todayKey) continue;
+    dateColumns.push({ date, qtyColumn, salesColumn });
+  }
 
-  return {
-    departments: normalizeRows(departmentRows, 3, 1),
-    products: normalizeRows(productRows, 4, 2),
+  const ranges = [
+    a1Range("Sales", "A3:F"),
+    ...dateColumns.flatMap(({ qtyColumn, salesColumn }) => [
+      a1Range("Sales", `${salesSheetColumn(qtyColumn)}3:${salesSheetColumn(qtyColumn)}`),
+      a1Range("Sales", `${salesSheetColumn(salesColumn)}3:${salesSheetColumn(salesColumn)}`),
+    ]),
+  ];
+  const values = await readValuesBatch(spreadsheetId, ranges);
+  const productRows = values[0] || [];
+  const buildRankings = (period: "daily" | "monthly") => {
+    const productTotals = new Map<string, { sku: string; description: string; qty: number; amount: number }>();
+    const departmentTotals = new Map<string, { qty: number; amount: number }>();
+    productRows.forEach((row, rowIndex) => {
+      const sku = String(row[0] ?? "").trim();
+      const description = String(row[1] ?? "").trim();
+      const department = String(row[2] ?? "").trim();
+      let qty = 0;
+      let amount = 0;
+      for (const [index, columns] of dateColumns.entries()) {
+        if (period === "daily" && columns.date !== todayKey) continue;
+        qty += salesSheetNumber(values[index * 2 + 1]?.[rowIndex]?.[0]);
+        amount += salesSheetNumber(values[index * 2 + 2]?.[rowIndex]?.[0]);
+      }
+      if (!sku || qty === 0) return;
+      const key = `${sku}\u0000${description}`;
+      const product = productTotals.get(key) || { sku, description, qty: 0, amount: 0 };
+      product.qty += qty;
+      product.amount += amount;
+      productTotals.set(key, product);
+      if (department) {
+        const total = departmentTotals.get(department) || { qty: 0, amount: 0 };
+        total.qty += qty;
+        total.amount += amount;
+        departmentTotals.set(department, total);
+      }
+    });
+    const ranked = <T extends { qty: number; amount: number }>(rows: [string, T][]) => rows
+      .map(([name, row]) => ({ name, ...row }))
+      .sort((left, right) => right.amount - left.amount || right.qty - left.qty);
+    return {
+      departments: ranked([...departmentTotals.entries()])
+        .map(({ name, qty, amount }) => [name, String(qty), String(Math.round(amount * 100) / 100)]),
+      products: ranked([...productTotals.entries()])
+        .map(({ sku, description, qty, amount }) => [sku, description, String(qty), String(Math.round(amount * 100) / 100)]),
+    };
   };
+
+  return { daily: buildRankings("daily"), monthly: buildRankings("monthly") };
 }
 
 Deno.serve(async (request: Request) => {
