@@ -62,7 +62,7 @@ let activityLogs = [];
 let activityLogOffset = 0;
 let activityLogsHaveMore = false;
 let activityLogLoadId = 0;
-let reportSummaryData = { requests: [], stock_rows: [], products_tab: "" };
+let reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] } };
 let reportSummaryActiveTab = "DAILY_SALES";
 let reportSummaryLoadId = 0;
 let reportSummaryRefreshTimer = null;
@@ -1023,7 +1023,7 @@ function updateSessionUi(session, navigate = true) {
     isMasterAdmin = false;
     isAdmin = false;
     lookupCache = null;
-    reportSummaryData = { requests: [], stock_rows: [], products_tab: "" };
+    reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] } };
     reportSummaryTransientStatus = "";
     setNotificationCount(0);
     document.body.classList.remove("admin-mode");
@@ -1743,7 +1743,7 @@ function activatePortalPage(pageId, refresh = true) {
   if (pageId === "report-summary" && !reportSummaryRefreshTimer) {
     reportSummaryRefreshTimer = window.setInterval(() => {
       if (document.visibilityState === "visible" && activePageId === "report-summary") void loadReportSummary();
-    }, 60_000);
+    }, 5 * 60_000);
   } else if (pageId !== "report-summary" && reportSummaryRefreshTimer) {
     window.clearInterval(reportSummaryRefreshTimer);
     reportSummaryRefreshTimer = null;
@@ -2103,41 +2103,6 @@ function reportSummaryBarChart(days) {
   return chart;
 }
 
-function reportSummaryRenderDailySales(content, transactions) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const days = [];
-  for (let offset = 13; offset >= 0; offset--) {
-    const date = new Date(today);
-    date.setDate(date.getDate() - offset);
-    const key = reportSummaryDateKey(date);
-    const dayTransactions = transactions.filter(transaction => reportSummaryDateKey(transaction.date) === key);
-    days.push({
-      date,
-      qty: dayTransactions.reduce((total, row) => total + row.qty, 0),
-      amount: dayTransactions.reduce((total, row) => total + row.amount, 0),
-    });
-  }
-  const recent = days.slice(-7);
-  const prior = days.slice(0, 7);
-  const totals = rows => rows.reduce((result, row) => ({ qty: result.qty + row.qty, amount: result.amount + row.amount }), { qty: 0, amount: 0 });
-  const recentTotals = totals(recent);
-  const priorTotals = totals(prior);
-  const delta = priorTotals.amount ? `${((recentTotals.amount - priorTotals.amount) / priorTotals.amount * 100).toFixed(1)}% vs prior 7 days` : "No prior-week value to compare";
-  content.append(reportSummaryCards([
-    ["Released value · last 7 days", reportSummaryCurrency(recentTotals.amount), delta],
-    ["Released units · last 7 days", recentTotals.qty, "Approved quantity proxy"],
-    ["Previous 7-day value", reportSummaryCurrency(priorTotals.amount), "Comparison period"],
-  ]));
-  content.append(reportSummaryBarChart(days));
-  content.append(reportSummaryTable(
-    ["Date", "Released units", "Estimated value"],
-    days.slice().reverse().map(day => [reportSummaryDateLabel(day.date, { month: "long", day: "numeric", year: "numeric" }), day.qty, reportSummaryCurrency(day.amount)]),
-    "No released requests in this period.",
-  ));
-  content.append(reportSummaryElement("p", "report-summary-source-note", "Sales are estimated from requests marked Released or Received: approved quantity × SRP, grouped by release date. This portal does not record point-of-sale transactions or a separately released quantity."));
-}
-
 function reportSummaryRenderTopRank(content, transactions) {
   const departments = new Map();
   const products = new Map();
@@ -2434,25 +2399,29 @@ function reportSummaryRankRows(items, product = false) {
   ]);
 }
 
-function reportSummaryRenderDailyReference(content, transactions) {
+function reportSummaryRenderDailyReference(content, salesDaily) {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const sameDayLastWeek = new Date(today);
   sameDayLastWeek.setDate(sameDayLastWeek.getDate() - 7);
-  const todayRows = transactions.filter(row => reportSummaryDateKey(row.date) === reportSummaryDateKey(today));
-  const lastWeekRows = transactions.filter(row => reportSummaryDateKey(row.date) === reportSummaryDateKey(sameDayLastWeek));
-  const monthRows = transactions.filter(row => row.date.getFullYear() === today.getFullYear() && row.date.getMonth() === today.getMonth() && row.date <= today);
-  const totals = rows => rows.reduce((sum, row) => ({ qty: sum.qty + row.qty, amount: sum.amount + row.amount }), { qty: 0, amount: 0 });
-  const todayTotal = totals(todayRows);
-  const lastWeekTotal = totals(lastWeekRows);
-  const monthTotal = totals(monthRows);
+  const dailyRows = (salesDaily?.daily || []).map(row => ({
+    date: reportSummaryDate(row.date),
+    qty: reportSummaryNumber(row.qty),
+    amount: reportSummaryNumber(row.amount),
+  })).filter(row => row.date);
+  const dayTotals = new Map(dailyRows.map(row => [reportSummaryDateKey(row.date), row]));
+  const totalFor = date => dayTotals.get(reportSummaryDateKey(date)) || { qty: 0, amount: 0 };
+  const todayTotal = totalFor(today);
+  const lastWeekTotal = totalFor(sameDayLastWeek);
+  const monthTotal = dailyRows
+    .filter(row => row.date.getFullYear() === today.getFullYear() && row.date.getMonth() === today.getMonth() && row.date <= today)
+    .reduce((sum, row) => ({ qty: sum.qty + row.qty, amount: sum.amount + row.amount }), { qty: 0, amount: 0 });
   const delta = lastWeekTotal.amount ? reportSummaryFormatPercent(todayTotal.amount, lastWeekTotal.amount) : todayTotal.amount ? "NEW" : "0%";
   const days = [];
-  for (let offset = 6; offset >= 0; offset--) {
+  for (let offset = 13; offset >= 0; offset--) {
     const date = new Date(today);
     date.setDate(today.getDate() - offset);
-    const dayRows = transactions.filter(row => reportSummaryDateKey(row.date) === reportSummaryDateKey(date));
-    days.push({ date, ...totals(dayRows) });
+    days.push({ date, ...totalFor(date) });
   }
   const maxAmount = Math.max(1, ...days.map(day => Math.abs(day.amount)));
   const trends = reportSummaryElement("div", "report-summary-bar-list");
@@ -2469,13 +2438,12 @@ function reportSummaryRenderDailyReference(content, transactions) {
     row.append(amount);
     trends.append(row);
   }
-  const skuToday = reportSummaryAggregateProducts(todayRows);
-  const skuRows = skuToday.slice(0, 50).map(item => [
-    item.sku || "—", item.description || "—", item.qty,
-    reportSummaryCurrency(todayRows.find(row => row.sku === item.sku)?.srp || 0),
-    reportSummaryCurrency(item.amount),
+  const skuRows = (salesDaily?.today_products || []).map(item => [
+    item.sku_code || "—", item.description || "—", item.qty,
+    reportSummaryCurrency(reportSummaryNumber(item.srp)),
+    reportSummaryCurrency(reportSummaryNumber(item.amount)),
   ]);
-  const sourceNote = `Live estimate from released request history · release date and approved quantity × SRP. This portal has no point-of-sale “sales” sheet.`;
+  const sourceNote = "Actual sales are read from the Sales tab: daily QTY RELEASED and SALES columns. Values are not estimated from request history.";
   reportSummaryHero(content, [
     [`TODAY (${reportSummaryDateLabel(today, { weekday: "long", month: "short", day: "numeric" })})`, reportSummaryCurrency(todayTotal.amount), `${todayTotal.qty} units released`, "var(--rs-accent)"],
     ["SAME DAY LAST WEEK", reportSummaryCurrency(lastWeekTotal.amount), `${lastWeekTotal.qty} units released`, "#a78bfa"],
@@ -2483,10 +2451,10 @@ function reportSummaryRenderDailyReference(content, transactions) {
     ["MONTH-TO-DATE", reportSummaryCurrency(monthTotal.amount), `${monthTotal.qty} units released`, "#4ade80"],
   ], [
     reportSummaryNote(sourceNote),
-    reportSummarySectionHeading("LAST 7 DAYS", "⌁"),
+    reportSummarySectionHeading("LAST 14 DAYS", "⌁"),
     trends,
     reportSummarySectionHeading("SALES PER SKU · TODAY", "◆"),
-    reportSummaryTable(["SKU CODE", "ITEM DESCRIPTION", "QTY RELEASED", "SRP", "TOTAL AMOUNT"], skuRows, "No releases logged today yet."),
+    reportSummaryTable(["SKU CODE", "ITEM DESCRIPTION", "QTY RELEASED", "SRP", "TOTAL SALES"], skuRows, "No sales logged today yet."),
   ]);
 }
 
@@ -2864,7 +2832,7 @@ function reportSummaryRenderReference() {
   section.dataset.reportTab = tab.id;
   content.replaceChildren();
   const transactions = reportSummaryTransactions();
-  if (tab.id === "DAILY_SALES") reportSummaryRenderDailyReference(content, transactions);
+  if (tab.id === "DAILY_SALES") reportSummaryRenderDailyReference(content, reportSummaryData.sales_daily);
   else if (tab.id === "TOP_RANK") reportSummaryRenderTopRankReference(content, transactions);
   else if (tab.id === "MONTH_COMPARE") reportSummaryRenderMonthCompareReference(content, transactions);
   else if (["CRITICAL_STOCK", "OUT_OF_STOCK", "STOCK_AVAILABILITY"].includes(tab.id)) reportSummaryRenderStockReference(content, tab.id);
@@ -2877,7 +2845,7 @@ function reportSummaryRenderReference() {
     clock.dateTime = new Date().toISOString();
   }
   document.querySelector("#report-summary-status").textContent = reportSummaryTransientStatus || (reportSummaryData.products_tab
-    ? `LIVE · ${reportSummaryData.products_tab.toUpperCase()} + REQUEST HISTORY`
+    ? `LIVE · SALES + ${reportSummaryData.products_tab.toUpperCase()} + REQUEST HISTORY`
     : "LIVE · WAITING FOR WORKBOOK DATA");
 }
 
@@ -2929,9 +2897,12 @@ async function loadReportSummary() {
       requests: Array.isArray(result.requests) ? result.requests : [],
       stock_rows: Array.isArray(result.stock_rows) ? result.stock_rows : [],
       products_tab: String(result.products_tab || "data"),
+      sales_daily: result.sales_daily && typeof result.sales_daily === "object"
+        ? result.sales_daily
+        : { daily: [], today_products: [] },
     };
     renderReportSummary();
-    status.textContent = `Updated ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date())} · ${reportSummaryData.products_tab} tab and request history.`;
+    status.textContent = `Updated ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date())} · Sales, ${reportSummaryData.products_tab}, and request history.`;
   } catch (error) {
     if (loadId !== reportSummaryLoadId || currentSession?.user.id !== userId) return;
     console.error("Unable to load the summary report.", error);

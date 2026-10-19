@@ -1241,6 +1241,111 @@ async function saveSubmissionDirect(
   return { requestNumber };
 }
 
+function salesSheetDateKey(value: unknown): string | null {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return null;
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+}
+
+function salesSheetNumber(value: unknown): number {
+  const text = String(value ?? "").replace(/[^0-9.-]/g, "");
+  const number = Number(text);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function salesSheetColumn(index: number): string {
+  let column = index + 1;
+  let label = "";
+  while (column > 0) {
+    const remainder = (column - 1) % 26;
+    label = String.fromCharCode(65 + remainder) + label;
+    column = Math.floor((column - 1) / 26);
+  }
+  return label;
+}
+
+async function loadDailySales(
+  spreadsheetId: string,
+): Promise<{ daily: { date: string; qty: number; amount: number }[]; today_products: Record<string, unknown>[] }> {
+  const headerRows = await readValues(spreadsheetId, "Sales", "1:2");
+  const dateHeaders = headerRows[0] || [];
+  const metricHeaders = headerRows[1] || [];
+  const todayParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type: string) => todayParts.find(item => item.type === type)?.value || "";
+  const todayKey = `${part("year")}-${part("month")}-${part("day")}`;
+  const [year, month, day] = todayKey.split("-").map(Number);
+  const todayUtc = Date.UTC(year, month - 1, day);
+  const monthStartUtc = Date.UTC(year, month - 1, 1);
+  const comparisonStartUtc = todayUtc - 7 * 86_400_000;
+  const rangeStartUtc = Math.min(monthStartUtc, comparisonStartUtc);
+  const rangeStartKey = new Date(rangeStartUtc).toISOString().slice(0, 10);
+  const dateColumns: { date: string; qtyColumn: number; salesColumn: number }[] = [];
+  for (let salesColumn = 0; salesColumn < metricHeaders.length; salesColumn++) {
+    if (String(metricHeaders[salesColumn] ?? "").trim().toLocaleUpperCase() !== "SALES") continue;
+    const qtyColumn = salesColumn - 1;
+    if (qtyColumn < 0 || String(metricHeaders[qtyColumn] ?? "").trim().toLocaleUpperCase() !== "QTY RELEASED") continue;
+    const date = salesSheetDateKey(dateHeaders[salesColumn]) || salesSheetDateKey(dateHeaders[qtyColumn]);
+    if (!date || date < rangeStartKey || date > todayKey) continue;
+    dateColumns.push({ date, qtyColumn, salesColumn });
+  }
+  const ranges = [
+    a1Range("Sales", "A3:F"),
+    ...dateColumns.flatMap(({ qtyColumn, salesColumn }) => [
+      a1Range("Sales", `${salesSheetColumn(qtyColumn)}3:${salesSheetColumn(qtyColumn)}`),
+      a1Range("Sales", `${salesSheetColumn(salesColumn)}3:${salesSheetColumn(salesColumn)}`),
+    ]),
+  ];
+  const values = ranges.length > 1 ? await readValuesBatch(spreadsheetId, ranges) : [[]];
+  const products = values[0] || [];
+  const dailyByDate = new Map<string, { date: string; qty: number; amount: number }>();
+  let todayProductValues: unknown[][] = [];
+  for (const [index, columns] of dateColumns.entries()) {
+    const qtyValues = values[index * 2 + 1] || [];
+    const salesValues = values[index * 2 + 2] || [];
+    let qty = 0;
+    let amount = 0;
+    for (const row of qtyValues) qty += salesSheetNumber(row[0]);
+    for (const row of salesValues) amount += salesSheetNumber(row[0]);
+    if (!dailyByDate.has(columns.date)) {
+      dailyByDate.set(columns.date, { date: columns.date, qty, amount: Math.round(amount * 100) / 100 });
+    }
+    if (columns.date === todayKey && !todayProductValues.length) todayProductValues = [qtyValues, salesValues];
+  }
+  const todayQtyValues = todayProductValues[0] || [];
+  const todaySalesValues = todayProductValues[1] || [];
+  const productsBySku = new Map<string, Record<string, unknown>>();
+  products.forEach((row, index) => {
+    const sku = String(row[0] ?? "").trim();
+    const description = String(row[1] ?? "").trim();
+    const qty = salesSheetNumber(todayQtyValues[index]?.[0]);
+    const amount = salesSheetNumber(todaySalesValues[index]?.[0]);
+    if (!sku || (!qty && !amount)) return;
+    const key = `${sku}\u0000${description}`;
+    const product = productsBySku.get(key) || {
+      sku_code: sku,
+      description,
+      srp: salesSheetNumber(row[4]),
+      qty: 0,
+      amount: 0,
+    };
+    product.qty = Number(product.qty) + qty;
+    product.amount = Number(product.amount) + amount;
+    productsBySku.set(key, product);
+  });
+  const today_products = [...productsBySku.values()]
+    .map(product => ({ ...product, amount: Math.round(Number(product.amount) * 100) / 100 }))
+    .sort((left, right) => Number(right.amount) - Number(left.amount) || Number(right.qty) - Number(left.qty))
+    .slice(0, 50);
+  return { daily: [...dailyByDate.values()], today_products };
+}
+
 Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method !== "POST") return respond({ error: "Method not allowed." }, 405);
@@ -1372,9 +1477,10 @@ Deno.serve(async (request: Request) => {
       }
       if (body.action === "report_summary") {
         if (!user.isAdmin) return respond({ error: "Admin access is required to view the summary report." }, 403);
-        const [requests, productRows] = await Promise.all([
+        const [requests, productRows, salesData] = await Promise.all([
           loadWorkflowRequests(settings.spreadsheet_id, "all", "", "", true, Object.keys(requestTabs)),
           readValues(settings.spreadsheet_id, settings.products_tab || "data", "A2:N"),
+          loadDailySales(settings.spreadsheet_id),
         ]);
         const stockRows = productRows
           .filter(row => String(row[0] ?? "").trim() || String(row[1] ?? "").trim())
@@ -1389,7 +1495,12 @@ Deno.serve(async (request: Request) => {
             status: String(row[12] ?? "").trim(),
             expiry: String(row[13] ?? "").trim(),
           }));
-        return respond({ requests, stock_rows: stockRows, products_tab: settings.products_tab || "data" });
+        return respond({
+          requests,
+          stock_rows: stockRows,
+          products_tab: settings.products_tab || "data",
+          sales_daily: salesData,
+        });
       }
       if (body.action === "workflow_counts") {
         const requests = await loadWorkflowRequests(
