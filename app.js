@@ -233,16 +233,19 @@ function openRequestForm(form) {
     return;
   }
   document.querySelector("#form-dialog-title").textContent = form.name;
+  const isUserPullOut = form.id === "pull-out" && !isAdmin;
   requestFormBody.innerHTML = `
     <div class="request-sheet-top">
       <div class="request-department-field">
         <label for="outgoing-department">OUTGOING DEPARTMENT:<small>(REQUESTED FROM)</small></label>
-        <select id="outgoing-department" required disabled><option value="">Loading departments…</option></select>
+        ${isUserPullOut
+          ? `<input id="outgoing-department" type="text" value="" readonly disabled required>`
+          : `<select id="outgoing-department" required disabled><option value="">Loading departments…</option></select>`}
       </div>
-      <div class="request-department-field">
+      ${form.id !== "pull-out" ? `<div class="request-department-field">
         <label for="incoming-department">INCOMING DEPARTMENT:<small>(REQUESTING)</small></label>
         <select id="incoming-department" required disabled><option value="">Loading departments…</option></select>
-      </div>
+      </div>` : ""}
       ${form.id === "purchase-order" ? `
       <div class="request-department-field request-supplier-field">
         <label for="request-supplier">SUPPLIER:</label>
@@ -259,7 +262,9 @@ function openRequestForm(form) {
       <button class="button button-primary submit-request-button" type="submit"><span aria-hidden="true">📤</span> Submit</button>
     </div>
     <p class="request-inline-notice" role="status" aria-live="polite"></p>
-    <div class="approval-status"><strong>STATUS</strong><span>Pending ➡️ Approved ➡️ Released ➡️ Received. Master Admin approves; matching departments release and receive.</span></div>
+    <div class="approval-status"><strong>STATUS</strong><span>${form.id === "pull-out"
+      ? "Pending ➡️ Approved ➡️ Released. Pull Out requests end after release."
+      : "Pending ➡️ Approved ➡️ Released ➡️ Received. Master Admin approves; matching departments release and receive."}</span></div>
     <div class="request-sheet-items">
       <p class="request-info-label">REQUEST INFORMATION</p>
       <div class="request-table-scroll">
@@ -272,9 +277,11 @@ function openRequestForm(form) {
   requestFormBody.querySelector(".request-items-list").append(makeRequestItemRow(1));
   const outgoingDepartment = requestFormBody.querySelector("#outgoing-department");
   const addProductButton = requestFormBody.querySelector("[data-add-item]");
-  outgoingDepartment.addEventListener("change", () => {
-    addProductButton.disabled = !outgoingDepartment.value;
-  });
+  if (outgoingDepartment.tagName === "SELECT") {
+    outgoingDepartment.addEventListener("change", () => {
+      addProductButton.disabled = !outgoingDepartment.value;
+    });
+  }
   document.querySelector(".request-form-notice").textContent = `Signed in as ${currentUserProfile.username || "user"}.`;
   requestFormPage.dataset.formType = form.id;
   activatePortalPage("request-form-page");
@@ -887,8 +894,19 @@ async function loadRequestLookups(formType) {
   const outgoing = document.querySelector("#outgoing-department");
   const incoming = document.querySelector("#incoming-department");
   const supplier = document.querySelector("#request-supplier");
-  incoming.replaceChildren(new Option(currentUserProfile.department || "Department not assigned", currentUserProfile.department || ""));
-  incoming.disabled = !currentUserProfile.department;
+  if (incoming) {
+    incoming.replaceChildren(new Option(currentUserProfile.department || "Department not assigned", currentUserProfile.department || ""));
+    incoming.disabled = !currentUserProfile.department;
+  }
+  if (formType === "pull-out" && !isAdmin) {
+    outgoing.value = currentUserProfile.department;
+    outgoing.disabled = !currentUserProfile.department;
+    requestFormBody.querySelector("[data-add-item]").disabled = !currentUserProfile.department;
+    if (!currentUserProfile.department) {
+      setRequestNotice("Your account has no department assigned. Ask the Master Admin to update your account.");
+    }
+    return;
+  }
   setRequestNotice(`Signed in as ${currentUserProfile.username || "your account"}. Loading outgoing departments…`);
   try {
     const result = await loadLookupData();
@@ -900,8 +918,10 @@ async function loadRequestLookups(formType) {
     console.error("Unable to load form lists from Google Sheets.", error);
     if (!isRequestFormOpen() || requestFormPage.dataset.formType !== formType) return;
     outgoing.replaceChildren(new Option("Could not load outgoing departments", ""));
-    incoming.replaceChildren(new Option(currentUserProfile.department || "Department not assigned", currentUserProfile.department || ""));
-    incoming.disabled = !currentUserProfile.department;
+    if (incoming) {
+      incoming.replaceChildren(new Option(currentUserProfile.department || "Department not assigned", currentUserProfile.department || ""));
+      incoming.disabled = !currentUserProfile.department;
+    }
     if (supplier) supplier.replaceChildren(new Option("Could not load suppliers", ""));
     setRequestNotice(`Could not load form lists: ${error.message}`);
   }
@@ -3447,7 +3467,7 @@ async function submitRequest(event) {
     outgoingDepartment.focus();
     return;
   }
-  if (incomingDepartment.disabled || !incomingDepartment.value) {
+  if (incomingDepartment && (incomingDepartment.disabled || !incomingDepartment.value)) {
     setRequestNotice("Your Incoming Department is not assigned. Ask the Master Admin to set your department, then sign out and back in.");
     incomingDepartment.focus();
     return;
@@ -3464,7 +3484,7 @@ async function submitRequest(event) {
       form_type: formType,
       request_date: getLocalDate(),
       outgoing_department: outgoingDepartment.value.trim(),
-      incoming_department: incomingDepartment.value.trim(),
+      incoming_department: incomingDepartment?.value.trim() || "",
       supplier: supplier || null,
       items,
     });

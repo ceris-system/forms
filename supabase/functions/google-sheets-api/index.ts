@@ -961,9 +961,10 @@ async function createFormNotifications(
       ...(admins.data || []).map(admin => String(admin.user_id)),
     ])];
   } else {
-    const targetDepartment = details.event === "approved" || details.event === "received"
-      ? details.outgoingDepartment
-      : details.incomingDepartment;
+      const targetDepartment = details.event === "approved" || details.event === "received"
+        || (details.event === "released" && details.formType === "pull-out")
+        ? details.outgoingDepartment
+        : details.incomingDepartment;
     const [requesterResult, departmentResult] = await Promise.all([
       adminClient.from("login_usernames").select("user_id").eq("username", details.submittedBy.trim().toLocaleLowerCase()).maybeSingle(),
       adminClient.from("login_usernames").select("user_id, department, role, allowed_form_types"),
@@ -994,7 +995,9 @@ async function createFormNotifications(
     event: details.event,
     title: formName,
     message: `${details.requestNumber}: ${messages[details.event]}`,
-    destination_page: destinationPages[details.event],
+    destination_page: details.event === "released" && details.formType === "pull-out"
+      ? "my-requests"
+      : destinationPages[details.event],
   })));
   if (error) throw error;
 }
@@ -1156,6 +1159,7 @@ async function saveSubmissionDirect(
   submittedBy: string,
   spreadsheetId: string,
   value: unknown,
+  user: Awaited<ReturnType<typeof getPortalUserContext>>,
 ): Promise<{ requestNumber: string; notificationWarning?: string }> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("The submitted request details are missing.");
   const submission = value as Record<string, unknown>;
@@ -1165,8 +1169,13 @@ async function saveSubmissionDirect(
     throw new Error("Unknown request form type.");
   }
   const outputTab = requestTabs[formType];
-  const outgoing = uppercaseText(submission.outgoing_department, "Outgoing department");
-  const incoming = uppercaseText(submission.incoming_department, "Incoming department");
+  const outgoing = uppercaseText(
+    formType === "pull-out" && !user.isAdmin ? user.department : submission.outgoing_department,
+    "Outgoing department",
+  );
+  const incoming = formType === "pull-out"
+    ? ""
+    : uppercaseText(submission.incoming_department, "Incoming department");
   const supplier = typeof submission.supplier === "string" ? submission.supplier.trim().toLocaleUpperCase() : "";
   if (formType === "purchase-order" && !supplier) throw new Error("A supplier is required for purchase orders.");
   const requestDate = requiredText(submission.request_date, "Request date");
@@ -1420,6 +1429,7 @@ Deno.serve(async (request: Request) => {
         user.username,
         settings.spreadsheet_id,
         body.submission,
+        user,
       );
       return respond({
         ok: true,
