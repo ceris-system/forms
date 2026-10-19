@@ -1417,6 +1417,7 @@ Deno.serve(async (request: Request) => {
       || body.action === "pending_release"
       || body.action === "pending_received"
       || body.action === "reports_history"
+      || body.action === "report_summary_daily_sales"
       || body.action === "report_summary"
       || body.action === "workflow_counts"
       || body.action === "workflow_action") {
@@ -1474,6 +1475,10 @@ Deno.serve(async (request: Request) => {
             user.isAdmin ? Object.keys(requestTabs) : user.allowedFormTypes,
           ),
         });
+      }
+      if (body.action === "report_summary_daily_sales") {
+        if (!user.isAdmin) return respond({ error: "Admin access is required to view the summary report." }, 403);
+        return respond({ sales_daily: await loadDailySales(settings.spreadsheet_id) });
       }
       if (body.action === "report_summary") {
         if (!user.isAdmin) return respond({ error: "Admin access is required to view the summary report." }, 403);

@@ -64,6 +64,7 @@ let activityLogsHaveMore = false;
 let activityLogLoadId = 0;
 let reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] } };
 let reportSummaryActiveTab = "DAILY_SALES";
+let reportSummaryOverviewLoaded = false;
 let reportSummaryLoadId = 0;
 let reportSummaryRefreshTimer = null;
 let reportSummarySearch = "";
@@ -1024,6 +1025,7 @@ function updateSessionUi(session, navigate = true) {
     isAdmin = false;
     lookupCache = null;
     reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] } };
+    reportSummaryOverviewLoaded = false;
     reportSummaryTransientStatus = "";
     setNotificationCount(0);
     document.body.classList.remove("admin-mode");
@@ -1742,7 +1744,7 @@ function activatePortalPage(pageId, refresh = true) {
   activePageId = pageId;
   if (pageId === "report-summary" && !reportSummaryRefreshTimer) {
     reportSummaryRefreshTimer = window.setInterval(() => {
-      if (document.visibilityState === "visible" && activePageId === "report-summary") void loadReportSummary();
+      if (document.visibilityState === "visible" && activePageId === "report-summary") void loadReportSummary(true);
     }, 5 * 60_000);
   } else if (pageId !== "report-summary" && reportSummaryRefreshTimer) {
     window.clearInterval(reportSummaryRefreshTimer);
@@ -2039,9 +2041,9 @@ function reportSummaryAddTable(content, title, note, headers, rows, emptyText) {
   content.append(panel);
 }
 
-function reportSummaryTable(headers, rows, emptyText = "No matching records.") {
+function reportSummaryTable(headers, rows, emptyText = "No matching records.", className = "") {
   const wrapper = reportSummaryElement("div", "report-summary-scroll");
-  const table = reportSummaryElement("table", "report-summary-table");
+  const table = reportSummaryElement("table", ["report-summary-table", className].filter(Boolean).join(" "));
   const thead = reportSummaryElement("thead");
   const headerRow = reportSummaryElement("tr");
   for (const header of headers) headerRow.append(reportSummaryElement("th", "", header));
@@ -2454,7 +2456,7 @@ function reportSummaryRenderDailyReference(content, salesDaily) {
     reportSummarySectionHeading("LAST 14 DAYS", "⌁"),
     trends,
     reportSummarySectionHeading("SALES PER SKU · TODAY", "◆"),
-    reportSummaryTable(["SKU CODE", "ITEM DESCRIPTION", "QTY RELEASED", "SRP", "TOTAL SALES"], skuRows, "No sales logged today yet."),
+    reportSummaryTable(["SKU CODE", "ITEM DESCRIPTION", "QTY RELEASED", "SRP", "TOTAL SALES"], skuRows, "No sales logged today yet.", "report-summary-table-centered"),
   ]);
 }
 
@@ -2871,6 +2873,7 @@ function renderReportSummaryTabs() {
       reportSummaryActiveTab = tab.id;
       reportSummarySearch = "";
       renderReportSummary();
+      if (tab.id !== "DAILY_SALES" && !reportSummaryOverviewLoaded) void loadReportSummary();
     });
     container.append(button);
   }
@@ -2881,7 +2884,12 @@ function renderReportSummary() {
   reportSummaryRenderReference();
 }
 
-async function loadReportSummary() {
+async function loadReportSummary(force = false) {
+  const dailySalesOnly = reportSummaryActiveTab === "DAILY_SALES";
+  if (!dailySalesOnly && reportSummaryOverviewLoaded && !force) {
+    renderReportSummary();
+    return;
+  }
   const loadId = ++reportSummaryLoadId;
   const userId = currentSession?.user.id;
   const status = document.querySelector("#report-summary-status");
@@ -2891,18 +2899,28 @@ async function loadReportSummary() {
   button.disabled = true;
   status.textContent = "Loading summary report data…";
   try {
-    const result = await requestSheetData("report_summary");
+    const result = await requestSheetData(dailySalesOnly ? "report_summary_daily_sales" : "report_summary");
     if (loadId !== reportSummaryLoadId || activePageId !== "report-summary" || currentSession?.user.id !== userId) return;
-    reportSummaryData = {
-      requests: Array.isArray(result.requests) ? result.requests : [],
-      stock_rows: Array.isArray(result.stock_rows) ? result.stock_rows : [],
-      products_tab: String(result.products_tab || "data"),
-      sales_daily: result.sales_daily && typeof result.sales_daily === "object"
+    if (dailySalesOnly) {
+      reportSummaryData.sales_daily = result.sales_daily && typeof result.sales_daily === "object"
         ? result.sales_daily
-        : { daily: [], today_products: [] },
-    };
+        : { daily: [], today_products: [] };
+    } else {
+      reportSummaryData = {
+        requests: Array.isArray(result.requests) ? result.requests : [],
+        stock_rows: Array.isArray(result.stock_rows) ? result.stock_rows : [],
+        products_tab: String(result.products_tab || "data"),
+        sales_daily: result.sales_daily && typeof result.sales_daily === "object"
+          ? result.sales_daily
+          : { daily: [], today_products: [] },
+      };
+      reportSummaryOverviewLoaded = true;
+    }
     renderReportSummary();
-    status.textContent = `Updated ${new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date())} · Sales, ${reportSummaryData.products_tab}, and request history.`;
+    const updatedAt = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date());
+    status.textContent = dailySalesOnly
+      ? `Updated ${updatedAt} · Sales.`
+      : `Updated ${updatedAt} · Sales, ${reportSummaryData.products_tab}, and request history.`;
   } catch (error) {
     if (loadId !== reportSummaryLoadId || currentSession?.user.id !== userId) return;
     console.error("Unable to load the summary report.", error);
@@ -3586,7 +3604,7 @@ document.querySelector("#refresh-my-requests").addEventListener("click", loadMyR
 document.querySelector("#refresh-pending-release").addEventListener("click", loadPendingRelease);
 document.querySelector("#refresh-pending-received").addEventListener("click", loadPendingReceived);
 document.querySelector("#refresh-notifications").addEventListener("click", loadNotifications);
-document.querySelector("#refresh-report-summary").addEventListener("click", () => void loadReportSummary());
+document.querySelector("#refresh-report-summary").addEventListener("click", () => void loadReportSummary(true));
 document.querySelector("#print-report-summary").addEventListener("click", () => {
   document.body.classList.add("print-report-summary");
   window.print();

@@ -68,7 +68,7 @@ button, input { font: inherit; }
 .admin-caption small { color: #b5c9bb; font-size: 10px; }
 .owner-badge { margin-left: auto; padding: 4px 6px; border-radius: 4px; background: rgb(255 255 255 / 12%); color: #d7e5da; font-size: 8px; font-weight: 700; letter-spacing: .6px; }
 .main-content { min-height: 100vh; margin-left: 238px; }
-.topbar { position: sticky; top: 0; z-index: 1; display: flex; height: 66px; align-items: center; justify-content: space-between; padding: 0 36px; border-bottom: 1px solid rgb(216 227 218 / 75%); background: rgb(255 255 255 / 90%); box-shadow: 0 7px 25px rgb(28 49 37 / 6%); backdrop-filter: blur(16px); }
+.topbar { position: sticky; top: 0; z-index: 1; display: flex; height: 66px; align-items: center; justify-content: space-between; padding: 0 36px; border-bottom: 1px solid rgb(216 227 218 / 75%); background: #fff; box-shadow: 0 7px 25px rgb(28 49 37 / 6%); }
 .topbar-identity { display: flex; align-items: center; gap: 12px; }
 .topbar-monogram { display: grid; width: 33px; height: 33px; place-items: center; border: 1px solid #dce9dd; border-radius: 9px; background: linear-gradient(145deg, #fff, #e8f2e9); color: #285d40; font-family: Georgia, serif; font-size: 11px; font-weight: 800; letter-spacing: -.6px; box-shadow: 0 3px 10px rgb(34 75 48 / 8%); }
 .breadcrumbs { display: grid; gap: 3px; color: #89928c; font-size: 12px; }
@@ -181,6 +181,7 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .report-summary-table { min-width: 550px; border-collapse: collapse; color: #f6f4ff; font-family: "Roboto Mono", Consolas, monospace; }
 .report-summary-table th { position: sticky; z-index: 1; top: 0; padding: 8px 7px; background: linear-gradient(90deg, var(--rs-accent), var(--rs-light)); color: #100a2c; font-size: 7px; letter-spacing: .4px; text-align: left; }
 .report-summary-table td { padding: 7px; border-top: 1px solid rgb(255 255 255 / 5%); color: #f0edff; font-size: 7px; }
+.report-summary-table-centered th, .report-summary-table-centered td { text-align: center; }
 .report-summary-table tbody tr:nth-child(even) { background: rgb(255 255 255 / 5%); }
 .report-summary-empty td { padding: 18px; color: #9d98c8; text-align: center; }
 .report-summary-bar-list { display: grid; gap: 5px; }
