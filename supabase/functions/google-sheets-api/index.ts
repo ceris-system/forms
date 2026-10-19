@@ -1353,13 +1353,17 @@ async function loadTopRank(
     a1Range("Sales", "BU3:BW"),
     a1Range("Sales", "BY3:CB"),
   ]);
-  const normalizeRows = (rows: unknown[][], columnCount: number): string[][] => rows
+  const normalizeRows = (rows: unknown[][], columnCount: number, quantityColumn: number): string[][] => rows
     .map(row => Array.from({ length: columnCount }, (_, index) => String(row[index] ?? "").trim()))
-    .filter(row => row.some(value => value !== ""));
+    .filter(row => {
+      const quantity = row[quantityColumn].replace(/,/g, "");
+      const parsedQuantity = Number(quantity);
+      return quantity !== "" && Number.isFinite(parsedQuantity) && parsedQuantity !== 0;
+    });
 
   return {
-    departments: normalizeRows(departmentRows, 3),
-    products: normalizeRows(productRows, 4),
+    departments: normalizeRows(departmentRows, 3, 1),
+    products: normalizeRows(productRows, 4, 2),
   };
 }
 
@@ -1435,6 +1439,7 @@ Deno.serve(async (request: Request) => {
       || body.action === "pending_received"
       || body.action === "reports_history"
       || body.action === "report_summary_daily_sales"
+      || body.action === "report_summary_top_rank"
       || body.action === "report_summary"
       || body.action === "workflow_counts"
       || body.action === "workflow_action") {
