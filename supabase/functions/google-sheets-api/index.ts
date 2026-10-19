@@ -736,21 +736,16 @@ async function withRequestSequenceLock<T>(
 }
 
 async function previewRequestSequence(
-  adminClient: ReturnType<typeof createClient>,
   spreadsheetId: string,
   formType: string,
 ): Promise<number> {
   const prefix = requestPrefixes[formType];
   const tabName = requestTabs[formType];
   if (!prefix || !tabName) throw new Error("Unknown request form type.");
-  return withRequestSequenceLock(adminClient, formType, async () => {
-    const metadata = await getSheetMetadata(spreadsheetId);
-    const actualTab = await ensureOutputTab(spreadsheetId, tabName, metadata);
-    const rows = await ensureRequestHeaders(spreadsheetId, actualTab, metadata);
-    const maximum = getMaximumSequence(rows, prefix);
-    await setCounterFromSheet(adminClient, formType, maximum);
-    return maximum + 1;
-  });
+  const metadata = await getSheetMetadata(spreadsheetId);
+  const actualTab = await ensureOutputTab(spreadsheetId, tabName, metadata);
+  const rows = await ensureRequestHeaders(spreadsheetId, actualTab, metadata, 0, false);
+  return getMaximumSequence(rows, prefix) + 1;
 }
 
 async function loadWorkflowRequests(
@@ -1264,7 +1259,7 @@ Deno.serve(async (request: Request) => {
       if (!user.isAdmin && !user.allowedFormTypes.includes(formType)) {
         return respond({ error: "Your account is not assigned access to this form." }, 403);
       }
-      const sequenceNumber = await previewRequestSequence(adminClient, settings.spreadsheet_id, formType);
+      const sequenceNumber = await previewRequestSequence(settings.spreadsheet_id, formType);
       if (!Number.isSafeInteger(sequenceNumber) || sequenceNumber < 1) {
         throw new Error("The next request sequence number is invalid.");
       }

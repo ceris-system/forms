@@ -866,6 +866,9 @@ async function refreshUserProfile(session) {
     }
     renderUserForms();
     updateSessionUi(session, false);
+    void loadLookupData().catch(error => {
+      console.error("Unable to preload form lookup data.", error);
+    });
     if (activePageId === "inventory" || activePageId === "inventory-form") {
       void loadInventoryPage(activePageId);
     } else if (HISTORY_FORM_TYPES[activePageId]) {
@@ -3656,4 +3659,5 @@ document.querySelector("#close-account-edit").addEventListener("click", () =>
 document.querySelector("#cancel-account-edit").addEventListener("click", () =>
   document.querySelector("#account-edit-dialog").close());
 document.querySelector("#password-change-form").addEventListener("submit", changeTemporaryPassword);
+document.querySelector("#refresh-dashboard").addEventListener("click", () => window.location.reload());
 passwordChangeDialog.addEventListener("cancel", event => event.preventDefault());
