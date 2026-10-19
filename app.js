@@ -3661,6 +3661,7 @@ window.addEventListener("afterprint", () => document.body.classList.remove("prin
 document.addEventListener("input", event => {
   const input = event.target;
   if (!(input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement) ||
+    input.closest("#auth-form") ||
     (input instanceof HTMLInputElement && !["text", "search"].includes(input.type))) return;
   const start = input.selectionStart;
   const end = input.selectionEnd;
