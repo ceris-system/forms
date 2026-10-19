@@ -88,6 +88,7 @@ const inventoryLoadIds = new Map();
 const historyRows = new Map();
 const historyDepartments = new Map();
 const historyLoadIds = new Map();
+const sequencePreviewRequests = new Map();
 
 function resetIdleSignOutTimer() {
   clearTimeout(idleSignOutTimer);
@@ -255,6 +256,7 @@ function openRequestForm(form) {
     </div>
     <div class="request-sheet-actions">
       <button class="button add-product-button" type="button" data-add-item disabled><span aria-hidden="true">➕</span> Select products</button>
+      <span class="request-selected-department" data-selected-department aria-live="polite"></span>
       <button class="button button-primary submit-request-button" type="submit"><span aria-hidden="true">📤</span> Submit</button>
     </div>
     <p class="request-inline-notice" role="status" aria-live="polite"></p>
@@ -273,11 +275,13 @@ function openRequestForm(form) {
   const addProductButton = requestFormBody.querySelector("[data-add-item]");
   outgoingDepartment.addEventListener("change", () => {
     addProductButton.disabled = !outgoingDepartment.value;
-    void loadSequencePreview(form.id, outgoingDepartment.value);
+    updateSelectedProductDepartment(outgoingDepartment.value);
   });
+  updateSelectedProductDepartment("");
   document.querySelector(".request-form-notice").textContent = `Signed in as ${currentUserProfile.username || "user"}.`;
   requestFormPage.dataset.formType = form.id;
   activatePortalPage("request-form-page");
+  void loadSequencePreview(form.id);
   loadRequestLookups(form.id);
 }
 
@@ -294,6 +298,11 @@ function setRequestNotice(message) {
   document.querySelector(".request-form-notice").textContent = message;
   const inlineNotice = requestFormBody.querySelector(".request-inline-notice");
   if (inlineNotice) inlineNotice.textContent = message;
+}
+
+function updateSelectedProductDepartment(department) {
+  const label = requestFormBody.querySelector("[data-selected-department]");
+  if (label) label.textContent = department ? `Products for: ${department}` : "Select a department for products";
 }
 
 function makeRequestItemRow(number, product = {}) {
@@ -338,6 +347,7 @@ async function openProductCatalog() {
   catalogRows = [];
   catalogStatus.textContent = "Loading products from the spreadsheet…";
   catalogDialog.showModal();
+  document.querySelector("#catalog-department").textContent = `Products for: ${outgoingDepartment}`;
 
   try {
     const result = await loadLookupData();
@@ -790,22 +800,25 @@ async function saveInventoryAdjustment(event) {
   }
 }
 
-async function loadSequencePreview(formType, outgoingDepartment) {
+async function loadSequencePreview(formType) {
   const number = requestFormBody.querySelector(".request-number");
-  const outgoing = requestFormBody.querySelector("#outgoing-department");
   const requestId = Number(requestFormPage.dataset.sequenceRequest || 0) + 1;
   requestFormPage.dataset.sequenceRequest = String(requestId);
-  if (!outgoingDepartment) {
-    number.textContent = "Select outgoing department";
-    return;
-  }
   number.textContent = "Loading…";
   try {
-    const result = await requestSheetData("sequence_preview", { form_type: formType });
+    let previewRequest = sequencePreviewRequests.get(formType);
+    if (!previewRequest) {
+      previewRequest = requestSheetData("sequence_preview", { form_type: formType });
+      sequencePreviewRequests.set(formType, previewRequest);
+      const clearPreviewRequest = () => {
+        if (sequencePreviewRequests.get(formType) === previewRequest) sequencePreviewRequests.delete(formType);
+      };
+      void previewRequest.then(clearPreviewRequest, clearPreviewRequest);
+    }
+    const result = await previewRequest;
     if (!isRequestFormOpen()
       || requestFormPage.dataset.formType !== formType
-      || requestFormPage.dataset.sequenceRequest !== String(requestId)
-      || outgoing.value !== outgoingDepartment) return;
+      || requestFormPage.dataset.sequenceRequest !== String(requestId)) return;
     const prefix = FORM_TYPES.find((form) => form.id === formType)?.prefix;
     if (!prefix) throw new Error("The selected form has no request number prefix.");
     number.textContent = `${prefix}-${String(result.sequence_number).padStart(7, "0")}`;
@@ -813,8 +826,7 @@ async function loadSequencePreview(formType, outgoingDepartment) {
     console.error("Unable to preview the next request sequence.", error);
     if (isRequestFormOpen()
       && requestFormPage.dataset.formType === formType
-      && requestFormPage.dataset.sequenceRequest === String(requestId)
-      && outgoing.value === outgoingDepartment) {
+      && requestFormPage.dataset.sequenceRequest === String(requestId)) {
       number.textContent = "Unavailable";
       setRequestNotice(`Could not preview the next sequence number: ${error.message || "Request failed."}`);
     }
