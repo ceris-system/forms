@@ -237,7 +237,7 @@ function openRequestForm(form) {
   requestFormBody.innerHTML = `
     <div class="request-sheet-top">
       <div class="request-department-field">
-        <label for="outgoing-department">OUTGOING DEPARTMENT:<small>(REQUESTED FROM)</small></label>
+        <label for="outgoing-department">OUTGOING DEPARTMENT:<small>${isUserPullOut ? "(YOUR ASSIGNED DEPARTMENT)" : "(REQUESTED FROM)"}</small></label>
         ${isUserPullOut
           ? `<input id="outgoing-department" type="text" value="" readonly disabled required>`
           : `<select id="outgoing-department" required disabled><option value="">Loading departments…</option></select>`}
@@ -3463,7 +3463,9 @@ async function submitRequest(event) {
   const outgoingDepartment = document.querySelector("#outgoing-department");
   const incomingDepartment = document.querySelector("#incoming-department");
   if (outgoingDepartment.disabled || !outgoingDepartment.value) {
-    setRequestNotice("Select an outgoing department before submitting. If no departments are listed, check the Products tab's column G or the configured outgoing-departments tab's column A.");
+    setRequestNotice(formType === "pull-out" && !isAdmin
+      ? "Your account has no department assigned. Ask the Master Admin to update your account."
+      : "Select an outgoing department before submitting. If no departments are listed, check the Products tab's column G or the configured outgoing-departments tab's column A.");
     outgoingDepartment.focus();
     return;
   }

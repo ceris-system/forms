@@ -942,7 +942,9 @@ async function createFormNotifications(
   const messages: Record<FormNotificationEvent, string> = {
     submitted: "A new request is pending approval.",
     approved: "The request was approved and is ready for release.",
-    released: "The request was released and is ready to receive.",
+    released: details.formType === "pull-out"
+      ? "The pull-out request is complete."
+      : "The request was released and is ready to receive.",
     received: "The request was marked as received.",
   };
   const formName = formNames[details.formType];
@@ -961,10 +963,10 @@ async function createFormNotifications(
       ...(admins.data || []).map(admin => String(admin.user_id)),
     ])];
   } else {
-      const targetDepartment = details.event === "approved" || details.event === "received"
-        || (details.event === "released" && details.formType === "pull-out")
-        ? details.outgoingDepartment
-        : details.incomingDepartment;
+    const targetDepartment = details.event === "approved" || details.event === "received"
+      || (details.event === "released" && details.formType === "pull-out")
+      ? details.outgoingDepartment
+      : details.incomingDepartment;
     const [requesterResult, departmentResult] = await Promise.all([
       adminClient.from("login_usernames").select("user_id").eq("username", details.submittedBy.trim().toLocaleLowerCase()).maybeSingle(),
       adminClient.from("login_usernames").select("user_id, department, role, allowed_form_types"),
