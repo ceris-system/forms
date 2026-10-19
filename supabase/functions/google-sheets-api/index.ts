@@ -812,7 +812,8 @@ async function loadWorkflowRequests(
         : filter === "approved"
         ? status === "approved" && (allDepartments || outgoing.toLocaleLowerCase() === department.toLocaleLowerCase())
         : filter === "released"
-        ? status === "released" && (allDepartments || incoming.toLocaleLowerCase() === department.toLocaleLowerCase())
+        ? status === "released" && formType !== "pull-out"
+          && (allDepartments || incoming.toLocaleLowerCase() === department.toLocaleLowerCase())
         : filter === "mine"
         ? submittedBy.toLocaleLowerCase() === username.toLocaleLowerCase()
         : filter === "department"
@@ -1064,6 +1065,9 @@ async function applyWorkflowAction(
   }
   if (action !== "approve" && action !== "release" && action !== "receive") {
     throw new Error("Unknown request workflow action.");
+  }
+  if (action === "receive" && formType === "pull-out") {
+    throw new Error("Pull Out requests are complete once marked Released and do not require receipt.");
   }
   if (!user.isAdmin && !user.allowedFormTypes.includes(formType)) {
     throw new Error("Your account is not assigned access to this form.");
@@ -1404,6 +1408,7 @@ Deno.serve(async (request: Request) => {
           ).length,
           receive_count: requests.filter(request =>
             String(request.status).toLocaleLowerCase() === "released"
+            && request.form_type_id !== "pull-out"
             && (user.isAdmin || String(request.incoming_department).trim().toLocaleLowerCase() === user.department.trim().toLocaleLowerCase())
           ).length,
         });
