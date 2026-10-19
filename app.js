@@ -1763,7 +1763,7 @@ function updateNotificationPolling(enabled) {
         void refreshNotificationCount();
         void refreshWorkflowCounts();
       }
-    }, 60_000);
+    }, 5 * 60_000);
   } else if (!enabled && notificationRefreshTimer) {
     window.clearInterval(notificationRefreshTimer);
     notificationRefreshTimer = null;

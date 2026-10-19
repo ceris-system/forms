@@ -120,21 +120,18 @@ async function googleRequest(path: string, options: RequestInit = {}): Promise<R
 }
 
 async function googleReadRequest(path: string): Promise<Record<string, any>> {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await googleRequest(path);
-    } catch (error) {
-      const apiError = error as Error & { status?: number; reason?: string };
-      const quotaExceeded = apiError.status === 429
-        || (apiError.status === 403 && /quota|rate.?limit/i.test(`${apiError.reason || ""} ${apiError.message}`));
-      if (!quotaExceeded) throw error;
-      if (attempt >= 2) {
-        const retryError = new Error("Google Sheets is temporarily limiting read requests. Wait about a minute, then refresh.") as Error & { status?: number };
-        retryError.status = 429;
-        throw retryError;
-      }
-      await new Promise(resolve => setTimeout(resolve, 400 * (attempt + 1)));
-    }
+  try {
+    return await googleRequest(path);
+  } catch (error) {
+    const apiError = error as Error & { status?: number; reason?: string };
+    const quotaExceeded = apiError.status === 429
+      || (apiError.status === 403 && /quota|rate.?limit/i.test(`${apiError.reason || ""} ${apiError.message}`));
+    if (!quotaExceeded) throw error;
+    const quotaError = new Error(
+      "Google Sheets read quota has been reached. Wait one minute, then refresh. To remove this limit, ask your Google Cloud administrator to increase the Sheets API quota.",
+    ) as Error & { status?: number };
+    quotaError.status = apiError.status;
+    throw quotaError;
   }
 }
 
