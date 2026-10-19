@@ -1346,6 +1346,23 @@ async function loadDailySales(
   return { daily: [...dailyByDate.values()], today_products };
 }
 
+async function loadTopRank(
+  spreadsheetId: string,
+): Promise<{ departments: string[][]; products: string[][] }> {
+  const [departmentRows, productRows] = await readValuesBatch(spreadsheetId, [
+    a1Range("Sales", "BU3:BW"),
+    a1Range("Sales", "BY3:CB"),
+  ]);
+  const normalizeRows = (rows: unknown[][], columnCount: number): string[][] => rows
+    .map(row => Array.from({ length: columnCount }, (_, index) => String(row[index] ?? "").trim()))
+    .filter(row => row.some(value => value !== ""));
+
+  return {
+    departments: normalizeRows(departmentRows, 3),
+    products: normalizeRows(productRows, 4),
+  };
+}
+
 Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method !== "POST") return respond({ error: "Method not allowed." }, 405);
@@ -1480,12 +1497,17 @@ Deno.serve(async (request: Request) => {
         if (!user.isAdmin) return respond({ error: "Admin access is required to view the summary report." }, 403);
         return respond({ sales_daily: await loadDailySales(settings.spreadsheet_id) });
       }
+      if (body.action === "report_summary_top_rank") {
+        if (!user.isAdmin) return respond({ error: "Admin access is required to view the summary report." }, 403);
+        return respond({ top_rank: await loadTopRank(settings.spreadsheet_id) });
+      }
       if (body.action === "report_summary") {
         if (!user.isAdmin) return respond({ error: "Admin access is required to view the summary report." }, 403);
-        const [requests, productRows, salesData] = await Promise.all([
+        const [requests, productRows, salesData, topRank] = await Promise.all([
           loadWorkflowRequests(settings.spreadsheet_id, "all", "", "", true, Object.keys(requestTabs)),
           readValues(settings.spreadsheet_id, settings.products_tab || "data", "A2:N"),
           loadDailySales(settings.spreadsheet_id),
+          loadTopRank(settings.spreadsheet_id),
         ]);
         const stockRows = productRows
           .filter(row => String(row[0] ?? "").trim() || String(row[1] ?? "").trim())
@@ -1505,6 +1527,7 @@ Deno.serve(async (request: Request) => {
           stock_rows: stockRows,
           products_tab: settings.products_tab || "data",
           sales_daily: salesData,
+          top_rank: topRank,
         });
       }
       if (body.action === "workflow_counts") {

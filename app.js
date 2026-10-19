@@ -62,14 +62,13 @@ let activityLogs = [];
 let activityLogOffset = 0;
 let activityLogsHaveMore = false;
 let activityLogLoadId = 0;
-let reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] } };
+let reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] }, top_rank: { departments: [], products: [] } };
 let reportSummaryActiveTab = "DAILY_SALES";
 let reportSummaryOverviewLoaded = false;
+let reportSummaryTopRankLoaded = false;
 let reportSummaryLoadId = 0;
 let reportSummaryRefreshTimer = null;
 let reportSummarySearch = "";
-let reportSummaryTopRankMode = "MONTH";
-let reportSummaryTopRankPeriod = "";
 let reportSummaryHistoryMonth = "LIVE";
 let reportSummaryHistorySearch = "";
 let reportSummaryTransientStatus = "";
@@ -1024,8 +1023,9 @@ function updateSessionUi(session, navigate = true) {
     isMasterAdmin = false;
     isAdmin = false;
     lookupCache = null;
-    reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] } };
+    reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] }, top_rank: { departments: [], products: [] } };
     reportSummaryOverviewLoaded = false;
+    reportSummaryTopRankLoaded = false;
     reportSummaryTransientStatus = "";
     setNotificationCount(0);
     document.body.classList.remove("admin-mode");
@@ -2378,33 +2378,10 @@ function reportSummaryTransactionsInRange(transactions, start, end) {
   return transactions.filter(row => row.date >= start && row.date <= end);
 }
 
-function reportSummaryAggregate(transactions, keyFor) {
-  const groups = new Map();
-  for (const row of transactions) {
-    const key = keyFor(row);
-    if (!key) continue;
-    const item = groups.get(key) || { key, qty: 0, amount: 0 };
-    item.qty += row.qty;
-    item.amount += row.amount;
-    groups.set(key, item);
-  }
-  return [...groups.values()].sort((left, right) => right.amount - left.amount || right.qty - left.qty);
-}
-
-function reportSummaryAggregateProducts(transactions) {
-  return reportSummaryAggregate(transactions, row => `${row.sku}\u0000${row.description}`)
-    .map(item => {
-      const [sku, description] = item.key.split("\u0000");
-      return { ...item, sku, description };
-    });
-}
-
-function reportSummaryRankRows(items, product = false) {
-  return items.slice(0, 10).map((item, index) => [
+function reportSummaryRankRows(rows, product = false) {
+  return rows.map((row, index) => [
     reportSummaryCell(index + 1, `report-summary-rank report-summary-rank-${index + 1}`),
-    ...(product ? [item.sku || "—", item.description || "—"] : [item.key]),
-    item.qty,
-    reportSummaryCurrency(item.amount),
+    ...(product ? [row[0] || "—", row[1] || "—", row[2] || "—", row[3] || "—"] : [row[0] || "—", row[1] || "—", row[2] || "—"]),
   ]);
 }
 
@@ -2467,50 +2444,15 @@ function reportSummaryRenderDailyReference(content, salesDaily) {
   ]);
 }
 
-function reportSummaryRenderTopRankReference(content, transactions) {
-  const dates = [...new Map(transactions.map(row => [reportSummaryDateKey(row.date), new Date(row.date.getFullYear(), row.date.getMonth(), row.date.getDate())])).values()]
-    .sort((left, right) => right - left);
-  const months = [...new Set(dates.map(date => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`))].sort().reverse();
-  const today = new Date();
-  const currentKey = reportSummaryTopRankMode === "DAY"
-    ? reportSummaryTopRankPeriod || reportSummaryDateKey(today)
-    : reportSummaryTopRankPeriod || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`;
-  const periodOptions = reportSummaryTopRankMode === "DAY"
-    ? [...new Set([reportSummaryDateKey(today), ...dates.map(reportSummaryDateKey)])].sort().reverse()
-    : [...new Set([`${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}`, ...months])].sort().reverse();
-  const chosen = periodOptions.includes(currentKey) ? currentKey : periodOptions[0];
-  reportSummaryTopRankPeriod = chosen;
-  const [year, month, day] = chosen.split("-").map(Number);
-  const start = reportSummaryTopRankMode === "DAY" ? new Date(year, month - 1, day) : new Date(year, month - 1, 1);
-  const end = reportSummaryTopRankMode === "DAY" ? new Date(year, month - 1, day, 23, 59, 59, 999) : new Date(year, month, 0, 23, 59, 59, 999);
-  const selectedRows = reportSummaryTransactionsInRange(transactions, start, end);
-  const label = reportSummaryTopRankMode === "DAY"
-    ? reportSummaryDateLabel(start, { weekday: "long", month: "long", day: "numeric", year: "numeric" })
-    : reportSummaryDateLabel(start, { month: "long", year: "numeric" });
-  const total = selectedRows.reduce((sum, row) => ({ qty: sum.qty + row.qty, amount: sum.amount + row.amount }), { qty: 0, amount: 0 });
-  const controls = reportSummaryCreateControls();
-  reportSummaryAddSelect(controls, "▾ VIEW", [["DAY", "PER DATE"], ["MONTH", "PER MONTH"]], reportSummaryTopRankMode, value => {
-    reportSummaryTopRankMode = value;
-    reportSummaryTopRankPeriod = "";
-    renderReportSummary();
-  }, "Top rank period type");
-  reportSummaryAddSelect(controls, "", periodOptions.map(value => [value, reportSummaryTopRankMode === "DAY"
-    ? reportSummaryDateLabel(reportSummaryDate(value), { weekday: "short", month: "short", day: "numeric", year: "numeric" })
-    : reportSummaryDateLabel(new Date(Number(value.slice(0, 4)), Number(value.slice(5, 7)) - 1, 1), { month: "long", year: "numeric" })]),
-  chosen, value => { reportSummaryTopRankPeriod = value; renderReportSummary(); }, "Select date or month");
-  const deptRows = reportSummaryAggregate(selectedRows, row => row.department || "NO DEPARTMENT");
-  const productRows = reportSummaryAggregateProducts(selectedRows);
-  reportSummaryHero(content, [
-    [reportSummaryTopRankMode === "DAY" ? "SALE FOR THE DAY" : "TOTAL SALE FOR THE MONTH", reportSummaryCurrency(total.amount), label, "var(--rs-accent)"],
-    ["UNITS RELEASED", total.qty.toLocaleString("en-US"), reportSummaryTopRankMode === "DAY" ? "that day" : "that month", "#4ade80"],
-  ], [
-    reportSummaryNote(`Top departments and products for ${label}; switch the period picker to view a different day or month.`),
-    controls,
+function reportSummaryRenderTopRankReference(content) {
+  const { departments, products } = reportSummaryData.top_rank;
+  reportSummaryHero(content, [], [
+    reportSummaryNote("Ranked sales data is read directly from the Sales sheet."),
     reportSummaryElement("div", "report-summary-grid"),
   ]);
   const grid = content.querySelector(".report-summary-grid");
-  reportSummaryAddSection(grid, "BY DEPARTMENT", ["RANK", "DEPARTMENT", "TOTAL RELEASED", "TOTAL AMOUNT"], reportSummaryRankRows(deptRows), "No rank data found for this period.");
-  reportSummaryAddSection(grid, "BY PRODUCT", ["RANK", "SKU CODE", "ITEM DESCRIPTION", "TOTAL RELEASED", "TOTAL AMOUNT"], reportSummaryRankRows(productRows, true), "No rank data found for this period.");
+  reportSummaryAddSection(grid, "BY DEPARTMENT", ["RANK", "DEPARTMENT", "TOTAL RELEASED", "TOTAL AMOUNT"], reportSummaryRankRows(departments), "No department ranking data found in Sales!BU3:BW.");
+  reportSummaryAddSection(grid, "BY PRODUCT", ["RANK", "SKU CODE", "ITEM DESCRIPTION", "TOTAL RELEASED", "TOTAL AMOUNT"], reportSummaryRankRows(products, true), "No product ranking data found in Sales!BY3:CB.");
 }
 
 function reportSummaryRenderMonthCompareReference(content, transactions) {
@@ -2840,14 +2782,16 @@ function reportSummaryRenderReference() {
   const section = document.querySelector("#report-summary");
   section.dataset.reportTab = tab.id;
   content.replaceChildren();
-  const transactions = reportSummaryTransactions();
   if (tab.id === "DAILY_SALES") reportSummaryRenderDailyReference(content, reportSummaryData.sales_daily);
-  else if (tab.id === "TOP_RANK") reportSummaryRenderTopRankReference(content, transactions);
-  else if (tab.id === "MONTH_COMPARE") reportSummaryRenderMonthCompareReference(content, transactions);
-  else if (["CRITICAL_STOCK", "OUT_OF_STOCK", "STOCK_AVAILABILITY"].includes(tab.id)) reportSummaryRenderStockReference(content, tab.id);
-  else if (["NEAR_EXPIRATION", "EXPIRATION_MONITORING"].includes(tab.id)) reportSummaryRenderExpiryReference(content, tab.id);
-  else if (tab.id === "AGING") reportSummaryRenderAgingReference(content);
-  else if (tab.id === "HISTORICAL_DATA") reportSummaryRenderHistoryReference(content, transactions);
+  else if (tab.id === "TOP_RANK") reportSummaryRenderTopRankReference(content);
+  else {
+    const transactions = reportSummaryTransactions();
+    if (tab.id === "MONTH_COMPARE") reportSummaryRenderMonthCompareReference(content, transactions);
+    else if (["CRITICAL_STOCK", "OUT_OF_STOCK", "STOCK_AVAILABILITY"].includes(tab.id)) reportSummaryRenderStockReference(content, tab.id);
+    else if (["NEAR_EXPIRATION", "EXPIRATION_MONITORING"].includes(tab.id)) reportSummaryRenderExpiryReference(content, tab.id);
+    else if (tab.id === "AGING") reportSummaryRenderAgingReference(content);
+    else if (tab.id === "HISTORICAL_DATA") reportSummaryRenderHistoryReference(content, transactions);
+  }
   const clock = document.querySelector("#report-summary-clock");
   if (clock) {
     clock.textContent = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }).format(new Date()).toUpperCase();
@@ -2880,7 +2824,9 @@ function renderReportSummaryTabs() {
       reportSummaryActiveTab = tab.id;
       reportSummarySearch = "";
       renderReportSummary();
-      if (tab.id !== "DAILY_SALES" && !reportSummaryOverviewLoaded) void loadReportSummary();
+      if (tab.id === "TOP_RANK" ? !reportSummaryTopRankLoaded : tab.id !== "DAILY_SALES" && !reportSummaryOverviewLoaded) {
+        void loadReportSummary();
+      }
     });
     container.append(button);
   }
@@ -2893,7 +2839,12 @@ function renderReportSummary() {
 
 async function loadReportSummary(force = false) {
   const dailySalesOnly = reportSummaryActiveTab === "DAILY_SALES";
-  if (!dailySalesOnly && reportSummaryOverviewLoaded && !force) {
+  const topRankOnly = reportSummaryActiveTab === "TOP_RANK";
+  if (topRankOnly && reportSummaryTopRankLoaded && !force) {
+    renderReportSummary();
+    return;
+  }
+  if (!dailySalesOnly && !topRankOnly && reportSummaryOverviewLoaded && !force) {
     renderReportSummary();
     return;
   }
@@ -2906,12 +2857,21 @@ async function loadReportSummary(force = false) {
   button.disabled = true;
   status.textContent = "Loading summary report data…";
   try {
-    const result = await requestSheetData(dailySalesOnly ? "report_summary_daily_sales" : "report_summary");
+    const action = dailySalesOnly ? "report_summary_daily_sales" : topRankOnly ? "report_summary_top_rank" : "report_summary";
+    const result = await requestSheetData(action);
     if (loadId !== reportSummaryLoadId || activePageId !== "report-summary" || currentSession?.user.id !== userId) return;
     if (dailySalesOnly) {
       reportSummaryData.sales_daily = result.sales_daily && typeof result.sales_daily === "object"
         ? result.sales_daily
         : { daily: [], today_products: [] };
+    } else if (topRankOnly) {
+      reportSummaryData.top_rank = result.top_rank && typeof result.top_rank === "object"
+        ? {
+          departments: Array.isArray(result.top_rank.departments) ? result.top_rank.departments : [],
+          products: Array.isArray(result.top_rank.products) ? result.top_rank.products : [],
+        }
+        : { departments: [], products: [] };
+      reportSummaryTopRankLoaded = true;
     } else {
       reportSummaryData = {
         requests: Array.isArray(result.requests) ? result.requests : [],
@@ -2920,14 +2880,23 @@ async function loadReportSummary(force = false) {
         sales_daily: result.sales_daily && typeof result.sales_daily === "object"
           ? result.sales_daily
           : { daily: [], today_products: [] },
+        top_rank: result.top_rank && typeof result.top_rank === "object"
+          ? {
+            departments: Array.isArray(result.top_rank.departments) ? result.top_rank.departments : [],
+            products: Array.isArray(result.top_rank.products) ? result.top_rank.products : [],
+          }
+          : { departments: [], products: [] },
       };
       reportSummaryOverviewLoaded = true;
+      reportSummaryTopRankLoaded = true;
     }
     renderReportSummary();
     const updatedAt = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(new Date());
     status.textContent = dailySalesOnly
       ? `Updated ${updatedAt} · Sales.`
-      : `Updated ${updatedAt} · Sales, ${reportSummaryData.products_tab}, and request history.`;
+      : topRankOnly
+        ? `Updated ${updatedAt} · Sales top rank.`
+        : `Updated ${updatedAt} · Sales, ${reportSummaryData.products_tab}, and request history.`;
   } catch (error) {
     if (loadId !== reportSummaryLoadId || currentSession?.user.id !== userId) return;
     console.error("Unable to load the summary report.", error);
