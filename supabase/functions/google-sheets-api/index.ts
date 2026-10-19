@@ -990,6 +990,19 @@ async function notifyAfterSheetWrite(
   }
 }
 
+function scheduleFormNotification(
+  adminClient: ReturnType<typeof createClient>,
+  details: Parameters<typeof createFormNotifications>[1],
+): string | undefined {
+  try {
+    EdgeRuntime.waitUntil(notifyAfterSheetWrite(adminClient, details));
+    return undefined;
+  } catch (error) {
+    console.error(`Google Sheets saved ${details.requestNumber}, but its notification could not be scheduled.`, error);
+    return "The form update was saved, but its notification could not be scheduled. Contact a Master Admin if it is missing from the inbox.";
+  }
+}
+
 function formTypeFromRequestNumber(requestNumber: string): string {
   const match = requestNumber.match(/^(RRF|TRF|PUF|POF)-\d{7,}$/);
   const formType = match
@@ -1036,7 +1049,7 @@ async function applyWorkflowAction(
     const tabName = requestTabs[formType];
     const metadata = await getSheetMetadata(spreadsheetId);
     const actualTab = await ensureOutputTab(spreadsheetId, tabName, metadata);
-    const rows = await ensureRequestHeaders(spreadsheetId, actualTab, metadata);
+    const rows = await ensureRequestHeaders(spreadsheetId, actualTab, metadata, 0, false);
     const matchingRows = rows
       .map((row, index) => ({ row, sheetRow: index + 1 }))
       .filter(({ row }) => String(row[0] || "").trim() === requestNumber);
@@ -1107,7 +1120,7 @@ async function applyWorkflowAction(
     };
   });
   const event = action === "approve" ? "approved" : action === "release" ? "released" : "received";
-  const notificationWarning = await notifyAfterSheetWrite(adminClient, {
+  const notificationWarning = scheduleFormNotification(adminClient, {
     event,
     formType,
     requestNumber,

@@ -3396,7 +3396,7 @@ function makeWorkflowActionButton(request, action, card) {
       card.remove();
       const refresh = action === "approval_queue" ? loadApprovalQueue
         : action === "pending_release" ? loadPendingRelease : loadPendingReceived;
-      await refresh();
+      void refresh();
       void refreshWorkflowCounts();
       if (result.notification_warning) window.alert(result.notification_warning);
     } catch (error) {
