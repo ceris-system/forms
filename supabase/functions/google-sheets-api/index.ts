@@ -50,6 +50,14 @@ function decodePrivateKey(pem: string): Uint8Array {
 let cachedGoogleToken = "";
 let googleTokenExpiresAt = 0;
 const googleReadCache = new Map<string, { expiresAt: number; promise: Promise<unknown[][][]> }>();
+const googleMetadataCache = new Map<string, { expiresAt: number; promise: Promise<Record<string, any>> }>();
+
+function invalidateGoogleReadCache(spreadsheetId: string): void {
+  for (const key of googleReadCache.keys()) {
+    if (key.startsWith(`${spreadsheetId}:`)) googleReadCache.delete(key);
+  }
+  googleMetadataCache.delete(spreadsheetId);
+}
 
 async function getGoogleAccessToken(): Promise<string> {
   if (cachedGoogleToken && Date.now() < googleTokenExpiresAt - 60_000) return cachedGoogleToken;
@@ -104,7 +112,30 @@ async function googleRequest(path: string, options: RequestInit = {}): Promise<R
     error.reason = String(result.error?.errors?.[0]?.reason || result.error?.status || "");
     throw error;
   }
+  const spreadsheetId = path.match(/^spreadsheets\/([^/]+)/)?.[1];
+  if (spreadsheetId && (options.method || "GET").toLocaleUpperCase() !== "GET") {
+    invalidateGoogleReadCache(spreadsheetId);
+  }
   return result;
+}
+
+async function googleReadRequest(path: string): Promise<Record<string, any>> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await googleRequest(path);
+    } catch (error) {
+      const apiError = error as Error & { status?: number; reason?: string };
+      const quotaExceeded = apiError.status === 429
+        || (apiError.status === 403 && /quota|rate.?limit/i.test(`${apiError.reason || ""} ${apiError.message}`));
+      if (!quotaExceeded) throw error;
+      if (attempt >= 2) {
+        const retryError = new Error("Google Sheets is temporarily limiting read requests. Wait about a minute, then refresh.") as Error & { status?: number };
+        retryError.status = 429;
+        throw retryError;
+      }
+      await new Promise(resolve => setTimeout(resolve, 400 * (attempt + 1)));
+    }
+  }
 }
 
 function safeTabName(value: unknown): string {
@@ -124,7 +155,7 @@ function range(tab: string, cells: string): string {
 }
 
 async function readValues(spreadsheetId: string, tab: string, cells: string): Promise<unknown[][]> {
-  const result = await googleRequest(
+  const result = await googleReadRequest(
     `spreadsheets/${spreadsheetId}/values/${range(tab, cells)}?valueRenderOption=FORMATTED_VALUE`,
   );
   return Array.isArray(result.values) ? result.values : [];
@@ -138,25 +169,7 @@ async function readValuesBatch(spreadsheetId: string, ranges: string[]): Promise
   const promise = (async () => {
     const query = new URLSearchParams({ valueRenderOption: "FORMATTED_VALUE" });
     ranges.forEach(value => query.append("ranges", value));
-    let result: Record<string, any>;
-    for (let attempt = 0; ; attempt++) {
-      try {
-        result = await googleRequest(`spreadsheets/${spreadsheetId}/values:batchGet?${query}`);
-        break;
-      } catch (error) {
-        const apiError = error as Error & { status?: number; reason?: string };
-        const quotaExceeded = apiError.status === 429
-          || (apiError.status === 403 && /quota|rate.?limit/i.test(`${apiError.reason || ""} ${apiError.message}`));
-        if (!quotaExceeded) throw error;
-        if (attempt >= 2) {
-          throw new InventoryRequestError(
-            "Google Sheets is temporarily limiting read requests. Wait about a minute, then refresh.",
-            429,
-          );
-        }
-        await new Promise(resolve => setTimeout(resolve, 400 * (attempt + 1)));
-      }
-    }
+    const result = await googleReadRequest(`spreadsheets/${spreadsheetId}/values:batchGet?${query}`);
     const valueRanges = Array.isArray(result.valueRanges) ? result.valueRanges : [];
     return ranges.map((_, index) => Array.isArray(valueRanges[index]?.values) ? valueRanges[index].values : []);
   })();
@@ -486,7 +499,17 @@ async function loadRequestHistory(
 }
 
 async function getSheetMetadata(spreadsheetId: string): Promise<Record<string, any>> {
-  return googleRequest(`spreadsheets/${spreadsheetId}?fields=sheets(properties(sheetId,title,gridProperties(rowCount)))`);
+  const cached = googleMetadataCache.get(spreadsheetId);
+  if (cached && cached.expiresAt > Date.now()) return cached.promise;
+
+  const promise = googleReadRequest(`spreadsheets/${spreadsheetId}?fields=sheets(properties(sheetId,title,gridProperties(rowCount)))`);
+  googleMetadataCache.set(spreadsheetId, { expiresAt: Date.now() + 10_000, promise });
+  try {
+    return await promise;
+  } catch (error) {
+    googleMetadataCache.delete(spreadsheetId);
+    throw error;
+  }
 }
 
 async function ensureOutputTab(
@@ -602,8 +625,9 @@ async function ensureRequestHeaders(
   knownMetadata?: Record<string, any>,
   additionalRows = 0,
   compactRows = true,
+  initialValues?: unknown[][],
 ): Promise<unknown[][]> {
-  let current = await readValues(spreadsheetId, tabName, "A:Z");
+  let current = initialValues || await readValues(spreadsheetId, tabName, "A:Z");
   if (!current.length) {
     await googleRequest(`spreadsheets/${spreadsheetId}/values/${range(tabName, "A1:Z1")}?valueInputOption=RAW`, {
       method: "PUT",
@@ -763,11 +787,17 @@ async function loadWorkflowRequests(
       String(sheet.properties?.title || ""),
     ]),
   );
-  const rowsByTab = await Promise.all(Object.entries(requestTabs).map(async ([formType, tabName]) => {
-    if (!allowedFormTypes.includes(formType)) return [];
-    const actualTab = availableTabs.get(tabName.toLocaleLowerCase());
-    if (!actualTab) return [];
-    const rows = await ensureRequestHeaders(spreadsheetId, actualTab, metadata, 0, false);
+  const availableRequestTabs = Object.entries(requestTabs)
+    .filter(([formType, tabName]) => allowedFormTypes.includes(formType) && availableTabs.has(tabName.toLocaleLowerCase()))
+    .map(([formType, tabName]) => ({
+      formType,
+      actualTab: availableTabs.get(tabName.toLocaleLowerCase())!,
+    }));
+  const tabValues = availableRequestTabs.length
+    ? await readValuesBatch(spreadsheetId, availableRequestTabs.map(({ actualTab }) => a1Range(actualTab, "A:Z")))
+    : [];
+  const rowsByTab = await Promise.all(availableRequestTabs.map(async ({ formType, actualTab }, index) => {
+    const rows = await ensureRequestHeaders(spreadsheetId, actualTab, metadata, 0, false, tabValues[index]);
     return rows.slice(1).map(row => ({ formType, row }));
   }));
   const requests = new Map<string, Record<string, unknown>>();
