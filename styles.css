@@ -188,7 +188,7 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .report-summary-bar-row { display: grid; grid-template-columns: 68px minmax(0, 1fr) minmax(70px, 100px); align-items: center; gap: 7px; color: #c3bfe8; font-size: 7px; }
 .report-summary-bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .report-summary-bar-track { height: 12px; overflow: hidden; background: rgb(255 255 255 / 9%); }
-.report-summary-bar-fill { height: 100%; background: linear-gradient(90deg, rgb(var(--rs-rgb) / 40%), var(--rs-accent)); }
+.report-summary-bar-fill { height: 100%; background: linear-gradient(90deg, var(--rs-accent), var(--rs-light)); }
 .report-summary-bar-value { color: #f6f4ff; text-align: right; white-space: nowrap; }
 .report-summary-bar-value span { color: #9d98c8; }
 .report-summary-rank { display: inline-grid; width: 20px; height: 20px; place-items: center; background: rgb(var(--rs-rgb) / 22%); color: var(--rs-light); font-size: 8px; font-weight: 800; }
