@@ -3222,7 +3222,7 @@ function printReleaseForm(sheet, requestNumber) {
   const style = printWindow.document.createElement("style");
   style.textContent = `
     @page { size: A4 portrait; margin: 10mm; }
-    * { box-sizing: border-box; font-family: Arial, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    * { box-sizing: border-box; font-family: "Roboto Mono", "Cascadia Mono", Consolas, monospace; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     body { margin: 0; color: #171719; }
     .release-form-sheet { width: 100%; padding: 0; }
     .release-form-header { display: grid; justify-items: center; gap: 5px; margin-bottom: 18px; text-align: center; }
