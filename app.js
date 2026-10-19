@@ -3389,10 +3389,17 @@ function makeWorkflowActionButton(request, action, card) {
     try {
       const result = await requestSheetData("workflow_action", payload);
       card.remove();
-      const refresh = action === "approval_queue" ? loadApprovalQueue
-        : action === "pending_release" ? loadPendingRelease : loadPendingReceived;
-      void refresh();
-      void refreshWorkflowCounts();
+      const queueDetails = {
+        approval_queue: { status: "#approval-list-status", list: "#approval-list", count: "#approval-nav-count" },
+        pending_release: { status: "#pending-release-status", list: "#pending-release-list", count: "#release-nav-count" },
+        pending_received: { status: "#pending-received-status", list: "#pending-received-list", count: "#receive-nav-count" },
+      }[action];
+      const status = document.querySelector(queueDetails.status);
+      const remaining = document.querySelectorAll(`${queueDetails.list} [data-request-number]`).length;
+      status.textContent = remaining
+        ? `${remaining} request${remaining === 1 ? "" : "s"}.`
+        : "No more requests in this stage.";
+      setWorkflowCount(queueDetails.count, remaining);
       if (result.notification_warning) window.alert(result.notification_warning);
     } catch (error) {
       console.error("Unable to update request workflow status.", error);
