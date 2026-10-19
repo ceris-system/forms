@@ -517,8 +517,7 @@ body.user-mode section.request-form-page { display: flex; height: min(780px, cal
 .catalog-dialog::backdrop { background: rgb(25 37 31 / 58%); }
 .catalog-dialog-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; margin-bottom: 17px; }
 .catalog-dialog-heading h2 { margin-bottom: 5px; }
-.catalog-department-label { display: inline-block; margin: 3px 0 0; padding: 5px 8px; border-radius: 5px; background: #edf5ef; color: #315a42; font-size: 10px; font-weight: 700; }
-.catalog-department-label:empty { display: none; }
+.catalog-dialog-heading h2 { overflow-wrap: anywhere; }
 .catalog-search-label { display: block; margin-bottom: 6px; color: #67736b; font-size: 10px; font-weight: 600; }
 .catalog-search { width: 100%; height: 38px; padding: 0 11px; border: 1px solid #dfe4df; border-radius: 6px; background: #fff; color: var(--ink); font-size: 11px; }
 .auth-password-label { margin-top: 13px; }

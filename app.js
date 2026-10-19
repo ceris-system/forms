@@ -255,7 +255,7 @@ function openRequestForm(form) {
       </div>
     </div>
     <div class="request-sheet-actions">
-      <button class="button add-product-button" type="button" data-add-item disabled><span aria-hidden="true">➕</span> <span data-add-item-label>Select products</span></button>
+      <button class="button add-product-button" type="button" data-add-item disabled><span aria-hidden="true">➕</span> Select products</button>
       <button class="button button-primary submit-request-button" type="submit"><span aria-hidden="true">📤</span> Submit</button>
     </div>
     <p class="request-inline-notice" role="status" aria-live="polite"></p>
@@ -274,9 +274,7 @@ function openRequestForm(form) {
   const addProductButton = requestFormBody.querySelector("[data-add-item]");
   outgoingDepartment.addEventListener("change", () => {
     addProductButton.disabled = !outgoingDepartment.value;
-    updateSelectedProductDepartment(outgoingDepartment.value);
   });
-  updateSelectedProductDepartment("");
   document.querySelector(".request-form-notice").textContent = `Signed in as ${currentUserProfile.username || "user"}.`;
   requestFormPage.dataset.formType = form.id;
   activatePortalPage("request-form-page");
@@ -297,11 +295,6 @@ function setRequestNotice(message) {
   document.querySelector(".request-form-notice").textContent = message;
   const inlineNotice = requestFormBody.querySelector(".request-inline-notice");
   if (inlineNotice) inlineNotice.textContent = message;
-}
-
-function updateSelectedProductDepartment(department) {
-  const label = requestFormBody.querySelector("[data-add-item-label]");
-  if (label) label.textContent = department ? `Select products from ${department}` : "Select products";
 }
 
 function makeRequestItemRow(number, product = {}) {
@@ -346,7 +339,7 @@ async function openProductCatalog() {
   catalogRows = [];
   catalogStatus.textContent = "Loading products from the spreadsheet…";
   catalogDialog.showModal();
-  document.querySelector("#catalog-department").textContent = `Products for: ${outgoingDepartment}`;
+  document.querySelector("#catalog-dialog-title").textContent = `Select products from ${outgoingDepartment}`;
 
   try {
     const result = await loadLookupData();
