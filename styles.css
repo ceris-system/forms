@@ -203,7 +203,8 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .report-summary-bar-value { color: #f6f4ff; text-align: right; white-space: nowrap; }
 .report-summary-bar-value span { color: #9d98c8; }
 .report-summary-rank { display: inline-grid; width: 20px; height: 20px; place-items: center; background: rgb(var(--rs-rgb) / 22%); color: var(--rs-light); font-size: 8px; font-weight: 800; }
-.report-summary-rank-1 { background: linear-gradient(135deg, #fbbf24, #fef08a); color: #422006; }
+.report-summary-rank-1 { width: 28px; height: 36px; grid-template-rows: 18px 12px; align-content: center; border: 1px solid #d99000; background: linear-gradient(145deg, #ffd84a, #ffad08); box-shadow: inset 0 1px 0 rgb(255 255 255 / 55%), 0 2px 4px rgb(154 96 0 / 22%); color: #422006; font-size: 10px; }
+.report-summary-rank-1::before { content: "🏆"; font-size: 13px; line-height: 17px; }
 .report-summary-rank-2 { background: linear-gradient(135deg, #cbd5e1, #f8fafc); color: #172033; }
 .report-summary-rank-3 { background: linear-gradient(135deg, #c08457, #fed7aa); color: #431407; }
 .report-summary-change { display: inline-block; padding: 3px 6px; border: 1px solid currentColor; color: var(--change-color, #4ade80); font-size: 7px; white-space: nowrap; }
