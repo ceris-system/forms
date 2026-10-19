@@ -64,7 +64,7 @@ let activityLogsHaveMore = false;
 let activityLogLoadId = 0;
 let reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] }, top_rank: { daily: { departments: [], products: [] }, monthly: { departments: [], products: [] } } };
 let reportSummaryActiveTab = "DAILY_SALES";
-let reportSummaryTopRankView = { daily: "departments", monthly: "departments" };
+let reportSummaryTopRankPeriod = "daily";
 let reportSummaryOverviewLoaded = false;
 let reportSummaryTopRankLoaded = false;
 let reportSummaryLoadId = 0;
@@ -2460,41 +2460,36 @@ function reportSummaryRenderDailyReference(content, salesDaily) {
 
 function reportSummaryRenderTopRankReference(content) {
   const { daily, monthly } = reportSummaryNormalizeTopRank(reportSummaryData.top_rank);
+  const selectedPeriod = reportSummaryTopRankPeriod === "monthly" ? monthly : daily;
+  const periodLabel = reportSummaryTopRankPeriod === "monthly" ? "this month" : "today";
   reportSummaryHero(content, [], [
     reportSummaryNote("Daily rankings use today's Sales sheet totals. Monthly rankings include month-to-date sales."),
-    reportSummaryElement("div", "report-summary-grid report-summary-rank-grid"),
+    reportSummaryElement("div", "report-summary-grid report-summary-top-rank-grid"),
   ]);
-  const grid = content.querySelector(".report-summary-grid");
-  for (const [period, title, rankings, emptySuffix] of [
-    ["daily", "DAILY TOP RANK", daily, "today"],
-    ["monthly", "MONTHLY TOP RANK · MONTH TO DATE", monthly, "this month"],
-  ]) {
-    const selectedView = reportSummaryTopRankView[period];
-    const product = selectedView === "products";
-    const rows = rankings[selectedView];
-    const panel = reportSummaryElement("section", "report-summary-panel report-summary-rank-period");
-    const header = reportSummaryElement("div", "report-summary-rank-header");
-    header.append(reportSummarySectionHeading(title, "♛"));
-    const select = reportSummaryElement("select", "report-summary-rank-select");
-    select.setAttribute("aria-label", `${title}: ranking type`);
-    select.append(new Option("By Department", "departments"), new Option("By Product", "products"));
-    select.value = selectedView;
-    select.addEventListener("change", () => {
-      reportSummaryTopRankView[period] = select.value;
-      renderReportSummary();
-    });
-    header.append(select);
-    panel.append(header);
-    const headers = product
-      ? ["RANK", "SKU CODE", "ITEM DESCRIPTION", "TOTAL RELEASED", "TOTAL AMOUNT"]
-      : ["RANK", "DEPARTMENT", "TOTAL RELEASED", "TOTAL AMOUNT"];
-    panel.append(reportSummaryTable(
-      headers,
-      reportSummaryRankRows(rows, product),
-      `No ${product ? "product" : "department"} sales recorded ${emptySuffix}.`,
-    ));
-    grid.append(panel);
-  }
+  const rankSelect = reportSummaryElement("select", "report-summary-rank-select report-summary-top-rank-select");
+  rankSelect.setAttribute("aria-label", "Top Rank period");
+  rankSelect.append(new Option("Daily", "daily"), new Option("Monthly", "monthly"));
+  rankSelect.value = reportSummaryTopRankPeriod;
+  rankSelect.addEventListener("change", () => {
+    reportSummaryTopRankPeriod = rankSelect.value;
+    reportSummaryRenderReference();
+  });
+  content.querySelector(".report-summary-hero-top").append(rankSelect);
+  const departmentPanel = reportSummaryElement("section", "report-summary-panel report-summary-rank-period");
+  departmentPanel.append(reportSummarySectionHeading("BY DEPARTMENT", "♛"));
+  departmentPanel.append(reportSummaryTable(
+    ["RANK", "DEPARTMENT", "TOTAL RELEASED", "TOTAL AMOUNT"],
+    reportSummaryRankRows(selectedPeriod.departments),
+    `No department sales recorded ${periodLabel}.`,
+  ));
+  const productPanel = reportSummaryElement("section", "report-summary-panel report-summary-rank-period");
+  productPanel.append(reportSummarySectionHeading("BY PRODUCT", "♛"));
+  productPanel.append(reportSummaryTable(
+    ["RANK", "SKU CODE", "ITEM DESCRIPTION", "TOTAL RELEASED", "TOTAL AMOUNT"],
+    reportSummaryRankRows(selectedPeriod.products, true),
+    `No product sales recorded ${periodLabel}.`,
+  ));
+  content.querySelector(".report-summary-top-rank-grid").append(departmentPanel, productPanel);
 }
 
 function reportSummaryRenderMonthCompareReference(content, transactions) {
@@ -2855,6 +2850,7 @@ function renderReportSummaryTabs() {
       heading.style.setProperty("--group-accent", REPORT_SUMMARY_GROUP_COLORS[group]);
       container.append(heading);
     }
+    const tabRow = reportSummaryElement("div", "report-summary-tab-row");
     const button = reportSummaryElement("button", "report-summary-tab", tab.label);
     button.type = "button";
     button.dataset.summaryTab = tab.id;
@@ -2870,7 +2866,8 @@ function renderReportSummaryTabs() {
         void loadReportSummary();
       }
     });
-    container.append(button);
+    tabRow.append(button);
+    container.append(tabRow);
   }
 }
 
