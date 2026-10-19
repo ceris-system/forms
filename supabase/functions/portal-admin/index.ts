@@ -148,6 +148,22 @@ Deno.serve(async (request: Request) => {
       if (!notification) return respond({ error: "That notification was not found in your inbox." }, 404);
       return respond({ ok: true });
     }
+    if (body.action === "notification_delete") {
+      const notificationId = typeof body.notification_id === "string" ? body.notification_id : "";
+      if (!/^[0-9a-f-]{36}$/i.test(notificationId)) {
+        return respond({ error: "Choose a valid notification." }, 400);
+      }
+      const { data: notification, error } = await adminClient
+        .from("mw_form_notifications")
+        .delete()
+        .eq("id", notificationId)
+        .eq("recipient_id", authData.user.id)
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      if (!notification) return respond({ error: "That notification was not found in your inbox." }, 404);
+      return respond({ ok: true });
+    }
     if (body.action === "notifications_mark_all_read") {
       const { error } = await adminClient
         .from("mw_form_notifications")

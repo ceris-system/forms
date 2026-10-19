@@ -1925,6 +1925,13 @@ function renderNotifications(container, notifications, append = false) {
       readButton.addEventListener("click", () => void markNotificationRead(notification.id));
       actions.append(readButton);
     }
+    const deleteButton = document.createElement("button");
+    deleteButton.className = "button button-secondary notification-delete-button";
+    deleteButton.type = "button";
+    deleteButton.textContent = "Delete";
+    deleteButton.setAttribute("aria-label", `Delete notification: ${notification.title}`);
+    deleteButton.addEventListener("click", () => void deleteNotification(notification.id));
+    actions.append(deleteButton);
     card.append(main, actions);
     container.append(card);
   }
@@ -2938,6 +2945,17 @@ async function markNotificationRead(notificationId) {
   } catch (error) {
     console.error("Unable to mark the notification as read.", error);
     window.alert(`Could not update this notification: ${error.message || "Request failed."}`);
+  }
+}
+
+async function deleteNotification(notificationId) {
+  if (!window.confirm("Delete this notification from your inbox? This cannot be undone.")) return;
+  try {
+    await callPortalAdmin({ action: "notification_delete", notification_id: notificationId });
+    await loadNotifications();
+  } catch (error) {
+    console.error("Unable to delete the notification.", error);
+    window.alert(`Could not delete this notification: ${error.message || "Request failed."}`);
   }
 }
 
