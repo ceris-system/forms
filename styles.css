@@ -475,8 +475,6 @@ body.user-mode section.request-form-page { display: flex; height: min(780px, cal
 .request-number-date p { display: flex; justify-content: space-between; gap: 9px; margin: 0; font-size: 8px; }
 .request-number-date strong { font-size: 9px; text-align: right; }
 .request-sheet-actions { display: flex; justify-content: flex-end; gap: 8px; margin: -1px 0 2px; }
-.request-selected-department { max-width: 40%; align-self: center; color: #52665b; font-size: 9px; font-weight: 700; overflow-wrap: anywhere; text-align: right; }
-.request-selected-department:empty { display: none; }
 .request-inline-notice { min-height: 0; margin: 0 0 5px; color: #8a6e4d; font-size: 10px; }
 .request-inline-notice:empty { display: none; }
 .approval-status { display: flex; min-height: 33px; align-items: center; gap: 8px; padding: 0 9px; border: 0; color: #171719; font-size: 8px; }
@@ -708,7 +706,6 @@ td { padding: 10px 12px; border-top: 1px solid #f0f1ef; color: #536057; font-siz
   .request-dialog { padding: 8px; }
   .request-sheet-top { grid-template-columns: 1fr; gap: 10px; padding: 12px 0 16px; }
   .request-sheet-actions { flex-wrap: wrap; }
-  .request-selected-department { max-width: 100%; }
   .request-number-date { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .request-sheet-signatures { gap: 8px; padding-top: 20px; }
   .request-sheet-signatures strong, .request-sheet-signatures small { font-size: 6px; }

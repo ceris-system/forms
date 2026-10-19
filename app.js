@@ -255,8 +255,7 @@ function openRequestForm(form) {
       </div>
     </div>
     <div class="request-sheet-actions">
-      <button class="button add-product-button" type="button" data-add-item disabled><span aria-hidden="true">➕</span> Select products</button>
-      <span class="request-selected-department" data-selected-department aria-live="polite"></span>
+      <button class="button add-product-button" type="button" data-add-item disabled><span aria-hidden="true">➕</span> <span data-add-item-label>Select products</span></button>
       <button class="button button-primary submit-request-button" type="submit"><span aria-hidden="true">📤</span> Submit</button>
     </div>
     <p class="request-inline-notice" role="status" aria-live="polite"></p>
@@ -301,8 +300,8 @@ function setRequestNotice(message) {
 }
 
 function updateSelectedProductDepartment(department) {
-  const label = requestFormBody.querySelector("[data-selected-department]");
-  if (label) label.textContent = department ? `Products for: ${department}` : "Select a department for products";
+  const label = requestFormBody.querySelector("[data-add-item-label]");
+  if (label) label.textContent = department ? `Select products from ${department}` : "Select products";
 }
 
 function makeRequestItemRow(number, product = {}) {
