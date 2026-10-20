@@ -2481,6 +2481,7 @@ function reportSummaryRenderTopRankReference(content) {
     ["RANK", "DEPARTMENT", "TOTAL RELEASED", "TOTAL AMOUNT"],
     reportSummaryRankRows(selectedPeriod.departments),
     `No department sales recorded ${periodLabel}.`,
+    "report-summary-top-rank-departments",
   ));
   const productPanel = reportSummaryElement("section", "report-summary-panel report-summary-rank-period");
   productPanel.append(reportSummarySectionHeading("BY PRODUCT", "♛"));
@@ -2488,6 +2489,7 @@ function reportSummaryRenderTopRankReference(content) {
     ["RANK", "SKU CODE", "ITEM DESCRIPTION", "TOTAL RELEASED", "TOTAL AMOUNT"],
     reportSummaryRankRows(selectedPeriod.products, true),
     `No product sales recorded ${periodLabel}.`,
+    "report-summary-top-rank-products",
   ));
   content.querySelector(".report-summary-top-rank-grid").append(departmentPanel, productPanel);
 }
