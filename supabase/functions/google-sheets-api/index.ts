@@ -1389,7 +1389,7 @@ async function loadTopRank(
     productRows.forEach((row, rowIndex) => {
       const sku = String(row[0] ?? "").trim();
       const description = String(row[1] ?? "").trim();
-      const department = String(row[2] ?? "").trim();
+      const department = String(row[5] ?? "").trim();
       let qty = 0;
       let amount = 0;
       for (const [index, columns] of dateColumns.entries()) {
