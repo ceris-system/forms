@@ -455,13 +455,12 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .inventory-alert-summary-card strong { color: #263e2e; font-size: 20px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums; }
 .inventory-alert-carousel { display: grid; grid-template-columns: 42px minmax(0, 1fr) 42px; align-items: center; gap: 12px; }
 .inventory-alert-viewport { min-width: 0; overflow: hidden; padding: 3px; }
-.inventory-alert-grid { display: grid; grid-template-columns: repeat(5, 100%); align-items: stretch; transition: transform .42s cubic-bezier(.2, .75, .25, 1); }
+.inventory-alert-grid { display: flex; width: 500%; align-items: stretch; transition: transform .42s cubic-bezier(.2, .75, .25, 1); }
 .inventory-alert-carousel-arrow { display: grid; width: 42px; height: 54px; place-items: center; border: 1px solid #dce8de; border-radius: 13px; background: linear-gradient(145deg, #fff, #edf5ee); color: #3b6e4a; box-shadow: 0 5px 14px rgb(27 53 35 / 8%); cursor: pointer; font-size: 30px; line-height: 1; transition: transform .16s ease, box-shadow .16s ease, opacity .16s ease; }
 .inventory-alert-carousel-arrow:hover:not(:disabled) { transform: scale(1.05); box-shadow: 0 8px 20px rgb(27 53 35 / 13%); }
 .inventory-alert-carousel-arrow:disabled { cursor: default; opacity: .35; }
-.inventory-alert-panel { grid-row: 1; grid-column: 1; }
 .inventory-alert-carousel-status { margin: 10px 0 0; color: #78877c; font-size: 10px; font-weight: 750; letter-spacing: .45px; text-align: center; }
-.inventory-alert-panel { position: relative; min-width: 0; overflow: hidden; border: 1px solid #dfe9e1; border-radius: 15px; background: linear-gradient(180deg, #fff 0%, #fff 72%, #fbfdfb 100%); box-shadow: 0 8px 24px rgb(27 53 35 / 6%), 0 1px 3px rgb(27 53 35 / 4%); transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease; animation: inventory-alert-card-enter .3s ease-out both; }
+.inventory-alert-panel { position: relative; flex: 0 0 20%; min-width: 0; overflow: hidden; border: 1px solid #dfe9e1; border-radius: 15px; background: linear-gradient(180deg, #fff 0%, #fff 72%, #fbfdfb 100%); box-shadow: 0 8px 24px rgb(27 53 35 / 6%), 0 1px 3px rgb(27 53 35 / 4%); transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease; animation: inventory-alert-card-enter .3s ease-out both; }
 .inventory-alert-panel:nth-child(2) { animation-delay: 35ms; }
 .inventory-alert-panel:nth-child(3) { animation-delay: 70ms; }
 .inventory-alert-panel:nth-child(4) { animation-delay: 105ms; }
@@ -479,7 +478,6 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .inventory-alert-panel:nth-child(4) h3::before { content: "0"; font-size: 12px; font-weight: 850; }
 .inventory-alert-panel:nth-child(5) h3::before { content: "↗"; font-weight: 850; }
 .inventory-alert-panel h3 span { display: grid; min-width: 34px; min-height: 31px; place-items: center; padding: 0 9px; border: 1px solid color-mix(in srgb, var(--alert-accent) 20%, white); border-radius: 10px; background: var(--alert-tint); color: var(--alert-accent); font-size: 12px; font-variant-numeric: tabular-nums; box-shadow: inset 0 1px 0 rgb(255 255 255 / 80%); }
-.inventory-alert-aging-panel { grid-column: 1; }
 .inventory-alert-table-wrap { max-height: 310px; overflow: auto; }
 .inventory-alert-aging-panel .inventory-alert-table-wrap { max-height: 380px; }
 .inventory-alert-table { width: 100%; min-width: 620px; border-collapse: collapse; }
@@ -898,8 +896,7 @@ td { padding: 10px 12px; border-top: 1px solid #f0f1ef; color: #536057; font-siz
   .inventory-alert-summary-card strong { font-size: 17px; }
   .inventory-alert-carousel { grid-template-columns: 30px minmax(0, 1fr) 30px; gap: 6px; }
   .inventory-alert-carousel-arrow { width: 30px; height: 44px; border-radius: 10px; font-size: 23px; }
-  .inventory-alert-grid { grid-template-columns: repeat(5, 100%); }
-  .inventory-alert-aging-panel { grid-column: 1; }
+  .inventory-alert-grid { width: 500%; }
   .inventory-alert-table { min-width: 620px; }
   .inventory-search-label { margin-left: 0; }
   .inventory-page-actions { margin-top: 13px; }
