@@ -2069,49 +2069,29 @@ Deno.serve(async (request: Request) => {
         if (!user.isAdmin) return respond({ error: "Admin access is required to view the summary report." }, 403);
         const [requests, stockValues, salesData, topRank] = await Promise.all([
           loadWorkflowRequests(settings.spreadsheet_id, "all", "", "", true, Object.keys(requestTabs)),
-          readValuesBatch(settings.spreadsheet_id, [
-            a1Range(settings.products_tab || "data", "A2:N"),
-            a1Range("data", "A2:Y"),
-          ]),
+          readValues(settings.spreadsheet_id, "data", "A2:N"),
           loadDailySales(settings.spreadsheet_id),
           loadTopRank(settings.spreadsheet_id),
         ]);
-        const productRows = stockValues[0] || [];
-        const dataRows = stockValues[1] || [];
-        const stockDataByKey = new Map<string, { status: string; qty: string; totalOnHand: string }>();
-        for (const row of dataRows) {
-          const sku = String(row[0] ?? "").trim();
-          if (!sku) continue;
-          const key = `${sku.toLocaleLowerCase()}\u0000${String(row[6] ?? "").trim().toLocaleLowerCase()}`;
-          stockDataByKey.set(key, {
-            status: String(row[12] ?? "").trim(),
-            qty: String(row[4] ?? "").trim(),
-            totalOnHand: String(row[5] ?? "").trim(),
-          });
-        }
-        const stockRows = productRows
+        const stockRows = stockValues
           .filter(row => String(row[0] ?? "").trim() || String(row[1] ?? "").trim())
-          .map(row => {
-            const key = `${String(row[0] ?? "").trim().toLocaleLowerCase()}\u0000${String(row[6] ?? "").trim().toLocaleLowerCase()}`;
-            const data = stockDataByKey.get(key);
-            return {
-              sku_code: String(row[0] ?? "").trim(),
-              description: String(row[1] ?? "").trim(),
-              expiration_date: String(row[3] ?? "").trim(),
-              on_hand: String(row[5] ?? "").trim(),
-              department: String(row[6] ?? "").trim(),
-              srp: String(row[8] ?? "").trim(),
-              last_received: String(row[9] ?? "").trim(),
-              status: data?.status || "",
-              form_qty: data?.qty || "",
-              data_total_on_hand: data?.totalOnHand || "",
-              expiry: String(row[13] ?? "").trim(),
-            };
-          });
+          .map(row => ({
+            sku_code: String(row[0] ?? "").trim(),
+            description: String(row[1] ?? "").trim(),
+            expiration_date: String(row[3] ?? "").trim(),
+            on_hand: String(row[5] ?? "").trim(),
+            department: String(row[6] ?? "").trim(),
+            srp: String(row[8] ?? "").trim(),
+            last_received: String(row[9] ?? "").trim(),
+            status: String(row[12] ?? "").trim(),
+            form_qty: String(row[4] ?? "").trim(),
+            data_total_on_hand: String(row[5] ?? "").trim(),
+            expiry: String(row[13] ?? "").trim(),
+          }));
         return respond({
           requests,
           stock_rows: stockRows,
-          products_tab: settings.products_tab || "data",
+          products_tab: "data",
           sales_daily: salesData,
           top_rank: topRank,
         });
