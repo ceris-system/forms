@@ -579,15 +579,12 @@ function renderInventoryFormRows() {
   for (const row of inventoryRows) {
     const tr = document.createElement("tr");
     const values = [
-      row.sku_code, row.description, row.uom, row.expiration_2, row.total_on_hand,
-      row.expiration_1, row.qty_1, row.expiration_2, row.qty_2,
-      row.expiration_3, row.qty_3, row.total_on_hand,
+      row.sku_code, row.description, row.uom, row.srp, row.total_on_hand,
+      "", "", "", "", "", "", "",
     ];
     for (const [index, value] of values.entries()) {
       const cell = document.createElement("td");
-      cell.textContent = [3, 5, 7, 9].includes(index)
-        ? formatDisplayDate(value)
-        : value == null ? "" : String(value);
+      cell.textContent = value == null ? "" : String(value);
       tr.append(cell);
     }
     body.append(tr);
