@@ -2071,35 +2071,41 @@ Deno.serve(async (request: Request) => {
           loadWorkflowRequests(settings.spreadsheet_id, "all", "", "", true, Object.keys(requestTabs)),
           readValuesBatch(settings.spreadsheet_id, [
             a1Range(settings.products_tab || "data", "A2:N"),
-            a1Range("data", "A2:M"),
+            a1Range("data", "A2:Y"),
           ]),
           loadDailySales(settings.spreadsheet_id),
           loadTopRank(settings.spreadsheet_id),
         ]);
         const productRows = stockValues[0] || [];
         const dataRows = stockValues[1] || [];
-        const stockStatusByKey = new Map<string, string>();
+        const stockDataByKey = new Map<string, { status: string; qty: string }>();
         for (const row of dataRows) {
           const sku = String(row[0] ?? "").trim();
           if (!sku) continue;
           const key = `${sku.toLocaleLowerCase()}\u0000${String(row[6] ?? "").trim().toLocaleLowerCase()}`;
-          stockStatusByKey.set(key, String(row[12] ?? "").trim());
+          stockDataByKey.set(key, {
+            status: String(row[12] ?? "").trim(),
+            qty: String(row[24] ?? "").trim(),
+          });
         }
         const stockRows = productRows
           .filter(row => String(row[0] ?? "").trim() || String(row[1] ?? "").trim())
-          .map(row => ({
-            sku_code: String(row[0] ?? "").trim(),
-            description: String(row[1] ?? "").trim(),
-            expiration_date: String(row[3] ?? "").trim(),
-            on_hand: String(row[5] ?? "").trim(),
-            department: String(row[6] ?? "").trim(),
-            srp: String(row[8] ?? "").trim(),
-            last_received: String(row[9] ?? "").trim(),
-            status: stockStatusByKey.get(
-              `${String(row[0] ?? "").trim().toLocaleLowerCase()}\u0000${String(row[6] ?? "").trim().toLocaleLowerCase()}`,
-            ) || "",
-            expiry: String(row[13] ?? "").trim(),
-          }));
+          .map(row => {
+            const key = `${String(row[0] ?? "").trim().toLocaleLowerCase()}\u0000${String(row[6] ?? "").trim().toLocaleLowerCase()}`;
+            const data = stockDataByKey.get(key);
+            return {
+              sku_code: String(row[0] ?? "").trim(),
+              description: String(row[1] ?? "").trim(),
+              expiration_date: String(row[3] ?? "").trim(),
+              on_hand: String(row[5] ?? "").trim(),
+              department: String(row[6] ?? "").trim(),
+              srp: String(row[8] ?? "").trim(),
+              last_received: String(row[9] ?? "").trim(),
+              status: data?.status || "",
+              form_qty: data?.qty || "",
+              expiry: String(row[13] ?? "").trim(),
+            };
+          });
         return respond({
           requests,
           stock_rows: stockRows,
