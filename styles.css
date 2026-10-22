@@ -222,6 +222,10 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 #report-summary .report-summary-expiry-table .report-summary-pill { padding: 4px 7px; color: #000; font-size: 10px; }
 #report-summary .report-summary-expiry-table th:nth-child(6),
 #report-summary .report-summary-expiry-table td:nth-child(6) { text-align: center; }
+#report-summary .report-summary-expiry-table th:nth-child(5),
+#report-summary .report-summary-expiry-table td:nth-child(5),
+#report-summary .report-summary-expiry-table th:nth-child(7),
+#report-summary .report-summary-expiry-table td:nth-child(7) { text-align: center; }
 .report-summary-aging-table th,
 .report-summary-aging-table td { white-space: normal; overflow-wrap: anywhere; }
 .report-summary-aging-table th:nth-child(1), .report-summary-aging-table td:nth-child(1) { width: 11%; }
