@@ -701,10 +701,13 @@ function renderInventoryAlerts(department) {
   setCount("out", outOfStock.length);
   setCount("aging", agingRows.length);
   document.querySelector("#inventory-alert-department").textContent = `Department: ${department}`;
+  return near.length + expired.length + critical.length + outOfStock.length + agingRows.length;
 }
 
 async function loadInventoryPage(pageId, refresh = false, showDepartmentAlerts = false) {
   const isInventoryForm = pageId === "inventory-form";
+  const alertDialog = document.querySelector("#inventory-alert-dialog");
+  if (!isInventoryForm && showDepartmentAlerts && alertDialog.open) alertDialog.close();
   const loadId = (inventoryLoadIds.get(pageId) || 0) + 1;
   const userId = currentSession?.user.id;
   inventoryLoadIds.set(pageId, loadId);
@@ -736,7 +739,10 @@ async function loadInventoryPage(pageId, refresh = false, showDepartmentAlerts =
     inventoryRowsUserId = userId || "";
     setInventoryDepartmentOptions(result.departments || []);
     inventoryRows = result.rows || [];
-    inventoryAlertRows = result.alert_rows || [];
+    if (!isInventoryForm && showDepartmentAlerts && !Array.isArray(result.alert_rows)) {
+      throw new Error('Department alert data was not returned. Deploy the updated google-sheets-api function to load the "data" sheet.');
+    }
+    inventoryAlertRows = Array.isArray(result.alert_rows) ? result.alert_rows : [];
     if (!inventoryDepartment) {
       if (isInventoryForm) renderInventoryFormRows();
       else renderInventoryRows();
@@ -745,9 +751,11 @@ async function loadInventoryPage(pageId, refresh = false, showDepartmentAlerts =
     if (isInventoryForm) renderInventoryFormRows();
     else renderInventoryRows();
     if (!isInventoryForm && showDepartmentAlerts) {
-      renderInventoryAlerts(inventoryDepartment);
-      const dialog = document.querySelector("#inventory-alert-dialog");
-      if (!dialog.open) dialog.showModal();
+      const alertCount = renderInventoryAlerts(inventoryDepartment);
+      if (alertCount > 0) alertDialog.showModal();
+      if (alertCount === 0) {
+        status.textContent = `No near-expiration, expired, critical-stock, out-of-stock, or aging items found for ${inventoryDepartment}.`;
+      }
     }
     return true;
   } catch (error) {
