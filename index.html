@@ -474,6 +474,34 @@
         </div>
       </form>
     </dialog>
+    <dialog class="inventory-alert-dialog" id="inventory-alert-dialog" aria-labelledby="inventory-alert-title">
+      <header class="inventory-alert-heading">
+        <div><p class="eyebrow">DEPARTMENT STOCK OVERVIEW</p><h2 id="inventory-alert-title">Inventory alerts</h2><p id="inventory-alert-department"></p></div>
+        <button class="dialog-close" id="close-inventory-alerts" type="button" aria-label="Close inventory alerts">✖️</button>
+      </header>
+      <div class="inventory-alert-grid">
+        <section class="inventory-alert-panel" aria-labelledby="inventory-alert-near-title">
+          <h3 id="inventory-alert-near-title">Near expiration <span id="inventory-alert-near-count">0</span></h3>
+          <div class="inventory-alert-table-wrap" id="inventory-alert-near"></div>
+        </section>
+        <section class="inventory-alert-panel" aria-labelledby="inventory-alert-expired-title">
+          <h3 id="inventory-alert-expired-title">Expired <span id="inventory-alert-expired-count">0</span></h3>
+          <div class="inventory-alert-table-wrap" id="inventory-alert-expired"></div>
+        </section>
+        <section class="inventory-alert-panel" aria-labelledby="inventory-alert-critical-title">
+          <h3 id="inventory-alert-critical-title">Critical stock <span id="inventory-alert-critical-count">0</span></h3>
+          <div class="inventory-alert-table-wrap" id="inventory-alert-critical"></div>
+        </section>
+        <section class="inventory-alert-panel" aria-labelledby="inventory-alert-out-title">
+          <h3 id="inventory-alert-out-title">Out of stock <span id="inventory-alert-out-count">0</span></h3>
+          <div class="inventory-alert-table-wrap" id="inventory-alert-out"></div>
+        </section>
+        <section class="inventory-alert-panel inventory-alert-aging-panel" aria-labelledby="inventory-alert-aging-title">
+          <h3 id="inventory-alert-aging-title">Aging information <span id="inventory-alert-aging-count">0</span></h3>
+          <div class="inventory-alert-table-wrap" id="inventory-alert-aging"></div>
+        </section>
+      </div>
+    </dialog>
     <dialog class="catalog-dialog auth-dialog" id="password-change-dialog" aria-labelledby="password-change-title">
       <form id="password-change-form">
         <div class="catalog-dialog-heading">

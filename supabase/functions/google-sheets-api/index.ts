@@ -455,12 +455,26 @@ async function loadInventory(
 ): Promise<Record<string, unknown>> {
   const { departments, categories } = await loadInventoryValues(spreadsheetId);
   const department = resolveInventoryDepartment(user, requestedDepartment, departments);
-  if (!department) return { department, departments, categories, rows: [] };
+  if (!department) return { department, departments, categories, rows: [], alert_rows: [] };
   const [values, dataValues] = await Promise.all([
     readValues(spreadsheetId, department, "B8:X"),
-    readValues(spreadsheetId, "data", "A2:F"),
+    readValues(spreadsheetId, "data", "A2:N"),
   ]);
   const formQtyByKey = new Map<string, string>();
+  const alertRows = dataValues
+    .filter(row => String(row[6] ?? "").trim().toLocaleLowerCase() === department.toLocaleLowerCase())
+    .filter(row => String(row[0] ?? "").trim() || String(row[1] ?? "").trim())
+    .map(row => ({
+      sku_code: String(row[0] ?? "").trim(),
+      description: String(row[1] ?? "").trim(),
+      expiration_date: String(row[3] ?? "").trim(),
+      form_qty: String(row[4] ?? "").trim(),
+      on_hand: String(row[5] ?? "").trim(),
+      department: String(row[6] ?? "").trim(),
+      last_received: String(row[9] ?? "").trim(),
+      status: String(row[12] ?? "").trim(),
+      expiry: String(row[13] ?? "").trim(),
+    }));
   for (const row of dataValues) {
     const sku = String(row[0] ?? "").trim();
     if (!sku) continue;
@@ -476,7 +490,7 @@ async function loadInventory(
         `${String(row.sku_code).toLocaleLowerCase()}\u0000${String(row.department).toLocaleLowerCase()}`,
       ) || "",
     }));
-  return { department, departments, categories, rows };
+  return { department, departments, categories, rows, alert_rows: alertRows };
 }
 
 async function updateInventoryAdjustment(

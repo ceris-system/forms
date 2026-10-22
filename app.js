@@ -84,6 +84,7 @@ let workflowCountLoadId = 0;
 const IDLE_SIGN_OUT_DELAY = 10 * 60 * 1000;
 let idleSignOutTimer = null;
 let inventoryRows = [];
+let inventoryAlertRows = [];
 let inventoryCategories = [];
 let inventoryDepartment = "";
 let inventoryRowsDepartment = "";
@@ -606,7 +607,103 @@ function renderInventoryFormRows() {
   }
 }
 
-async function loadInventoryPage(pageId, refresh = false) {
+function renderInventoryAlertTable(targetId, rows, emptyText) {
+  const target = document.querySelector(`#${targetId}`);
+  target.replaceChildren();
+  if (!rows.length) {
+    const empty = document.createElement("p");
+    empty.className = "inventory-alert-empty";
+    empty.textContent = emptyText;
+    target.append(empty);
+    return;
+  }
+  const table = document.createElement("table");
+  table.className = "inventory-alert-table";
+  const thead = document.createElement("thead");
+  const headerRow = document.createElement("tr");
+  for (const label of rows[0].headers) {
+    const th = document.createElement("th");
+    th.textContent = label;
+    headerRow.append(th);
+  }
+  thead.append(headerRow);
+  const tbody = document.createElement("tbody");
+  for (const cells of rows.map(row => row.cells)) {
+    const tr = document.createElement("tr");
+    for (const value of cells) {
+      const td = document.createElement("td");
+      td.textContent = value == null || value === "" ? "—" : String(value);
+      tr.append(td);
+    }
+    tbody.append(tr);
+  }
+  table.append(thead, tbody);
+  target.append(table);
+}
+
+function renderInventoryAlerts(department) {
+  const rows = inventoryAlertRows;
+  const parsed = rows.map(row => ({ row, expiry: reportSummaryParseExpiry(row.expiry) }));
+  const near = parsed.filter(item => item.expiry && !item.expiry.expired && item.expiry.days <= 90)
+    .sort((a, b) => a.expiry.days - b.expiry.days);
+  const expired = parsed.filter(item => item.expiry?.expired)
+    .sort((a, b) => (a.expiry.days ?? -Infinity) - (b.expiry.days ?? -Infinity));
+  const critical = rows.filter(row => String(row.status || "").trim().toLocaleUpperCase() === "CRITICAL IN STOCK");
+  const outOfStock = rows.filter(row => String(row.status || "").trim().toLocaleUpperCase() === "OUT OF STOCK");
+  const countIds = {
+    near: "inventory-alert-near-count",
+    expired: "inventory-alert-expired-count",
+    critical: "inventory-alert-critical-count",
+    out: "inventory-alert-out-count",
+    aging: "inventory-alert-aging-count",
+  };
+  const setCount = (key, count) => { document.querySelector(`#${countIds[key]}`).textContent = String(count); };
+  const stockCells = row => [row.sku_code, row.description, row.on_hand, formatDisplayDate(row.last_received) || row.last_received];
+  const expiryRows = entries => entries.map(({ row, expiry }) => ({
+    headers: ["SKU CODE", "ITEM DESCRIPTION", "EXPIRATION DATE", "QTY", "DAYS", "TOTAL ON HAND"],
+    cells: [
+      row.sku_code, row.description, formatDisplayDate(row.expiration_date) || row.expiration_date,
+      row.form_qty, expiry.days === null ? "EXPIRED" : `${Math.abs(expiry.days)} days`, row.on_hand,
+    ],
+  }));
+  renderInventoryAlertTable("inventory-alert-near", expiryRows(near), "No items expiring within 90 days.");
+  renderInventoryAlertTable("inventory-alert-expired", expiryRows(expired), "No expired items.");
+  renderInventoryAlertTable("inventory-alert-critical", critical.map(row => ({
+    headers: ["SKU CODE", "ITEM DESCRIPTION", "TOTAL ON HAND", "LAST RECEIVED"],
+    cells: stockCells(row),
+  })), "No critical-stock items.");
+  renderInventoryAlertTable("inventory-alert-out", outOfStock.map(row => ({
+    headers: ["SKU CODE", "ITEM DESCRIPTION", "TOTAL ON HAND", "LAST RECEIVED"],
+    cells: stockCells(row),
+  })), "No out-of-stock items.");
+  const agingRows = rows.map(row => {
+    const qty = reportSummaryNumber(row.on_hand);
+    if (qty <= 0) return null;
+    const age = reportSummaryDaysSince(row.last_received);
+    const buckets = [0, 0, 0, 0, 0];
+    if (age === null) buckets[0] = qty;
+    else if (age <= 30) buckets[1] = qty;
+    else if (age <= 60) buckets[2] = qty;
+    else if (age <= 90) buckets[3] = qty;
+    else buckets[4] = qty;
+    return {
+      headers: ["SKU CODE", "ITEM DESCRIPTION", "EXPIRATION DATE", "QTY", "NO DATE", "0–30D", "31–60D", "61–90D", "90D+", "TOTAL ON HAND"],
+      cells: [
+        row.sku_code, row.description, formatDisplayDate(row.expiration_date) || row.expiration_date,
+        row.form_qty, ...buckets.map(value => value || ""), qty,
+      ],
+    };
+  }).filter(Boolean);
+  renderInventoryAlertTable("inventory-alert-aging", agingRows, "No on-hand stock to age.");
+  setCount("near", near.length);
+  setCount("expired", expired.length);
+  setCount("critical", critical.length);
+  setCount("out", outOfStock.length);
+  setCount("aging", agingRows.length);
+  document.querySelector("#inventory-alert-department").textContent = `Department: ${department}`;
+}
+
+async function loadInventoryPage(pageId, refresh = false, showDepartmentAlerts = false) {
   const isInventoryForm = pageId === "inventory-form";
   const loadId = (inventoryLoadIds.get(pageId) || 0) + 1;
   const userId = currentSession?.user.id;
@@ -639,6 +736,7 @@ async function loadInventoryPage(pageId, refresh = false) {
     inventoryRowsUserId = userId || "";
     setInventoryDepartmentOptions(result.departments || []);
     inventoryRows = result.rows || [];
+    inventoryAlertRows = result.alert_rows || [];
     if (!inventoryDepartment) {
       if (isInventoryForm) renderInventoryFormRows();
       else renderInventoryRows();
@@ -646,6 +744,11 @@ async function loadInventoryPage(pageId, refresh = false) {
     }
     if (isInventoryForm) renderInventoryFormRows();
     else renderInventoryRows();
+    if (!isInventoryForm && showDepartmentAlerts) {
+      renderInventoryAlerts(inventoryDepartment);
+      const dialog = document.querySelector("#inventory-alert-dialog");
+      if (!dialog.open) dialog.showModal();
+    }
     return true;
   } catch (error) {
     if (inventoryLoadIds.get(pageId) !== loadId || activePageId !== pageId || currentSession?.user.id !== userId) return false;
@@ -1950,7 +2053,7 @@ function activatePortalPage(pageId, refresh = true) {
     notifications: loadNotifications,
     "report-summary": loadReportSummary,
     "user-logs-history": loadActivityLogs,
-    inventory: () => loadInventoryPage("inventory"),
+    inventory: () => loadInventoryPage("inventory", false, true),
     "inventory-form": () => loadInventoryPage("inventory-form"),
     ...Object.fromEntries(Object.keys(HISTORY_FORM_TYPES).map(pageId => [pageId, () => loadRequestHistory(pageId)])),
   };
@@ -3844,7 +3947,7 @@ document.querySelector("#refresh-inventory-form").addEventListener("click", () =
 document.querySelector("#inventory-department").addEventListener("change", event => {
   inventoryDepartment = event.target.value;
   setInventoryDepartmentOptions([...event.target.options].slice(1).map(option => option.value));
-  void loadInventoryPage("inventory", true);
+  void loadInventoryPage("inventory", true, true);
 });
 document.querySelector("#inventory-form-department").addEventListener("change", event => {
   inventoryDepartment = event.target.value;
@@ -3861,6 +3964,9 @@ document.querySelectorAll(".history-page").forEach(section => {
   section.querySelector("[data-history-search]").addEventListener("input", () => renderRequestHistory(pageId));
 });
 document.querySelector("#inventory-search").addEventListener("input", renderInventoryRows);
+document.querySelector("#close-inventory-alerts").addEventListener("click", () => {
+  document.querySelector("#inventory-alert-dialog").close();
+});
 document.querySelector("#inventory-rows").addEventListener("click", event => {
   const button = event.target.closest("[data-inventory-row]");
   if (button) showInventoryItem(Number(button.dataset.inventoryRow));
