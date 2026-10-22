@@ -188,6 +188,21 @@ function formatDisplayDate(value) {
   } else {
     match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:$|[\s,])/);
     if (match) [, month, day, year] = match;
+    else {
+      match = text.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})(?:$|\s)/);
+      if (match) {
+        const monthName = match[1].toLocaleLowerCase();
+        const monthIndex = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"]
+          .findIndex(value => value === monthName || value.slice(0, 3) === monthName);
+        if (monthIndex >= 0) {
+          day = match[2];
+          year = match[3];
+          month = String(monthIndex + 1);
+        } else {
+          match = null;
+        }
+      }
+    }
   }
 
   let date;
