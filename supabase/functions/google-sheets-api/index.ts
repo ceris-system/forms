@@ -179,6 +179,31 @@ async function readValuesBatch(spreadsheetId: string, ranges: string[]): Promise
   }
 }
 
+async function readValuesWithFallback(
+  spreadsheetId: string,
+  tabs: string[],
+  cells: string,
+): Promise<{ values: unknown[][]; tab: string }> {
+  const candidates = [...new Set(tabs.map(value => String(value ?? "").trim()).filter(Boolean))];
+  if (!candidates.length) return { values: [], tab: "" };
+
+  let lastError: unknown;
+  for (const tab of candidates) {
+    try {
+      return { values: await readValues(spreadsheetId, tab, cells), tab };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const reason = typeof error === "object" && error !== null && "reason" in error ? String((error as { reason?: string }).reason || "") : "";
+      const isMissingSheet = /not found|does not match any of the sheet names|unable to parse range|invalid.*range|sheet.*not.*exist|missing.*sheet/i.test(`${reason} ${message}`);
+      if (!isMissingSheet) throw error;
+      lastError = error;
+    }
+  }
+
+  if (lastError) throw lastError;
+  return { values: [], tab: candidates[0] };
+}
+
 function lookupProductRows(rows: unknown[][]): Record<string, string>[] {
   const text = (row: unknown[], index: number): string => String(row[index] ?? "").trim();
   return rows.filter(row => text(row, 0) && text(row, 1)).map(row => ({
@@ -203,25 +228,30 @@ async function lookupLists(
     suppliers_tab: string;
   },
 ): Promise<Record<string, unknown>> {
-  const [productValues, suppliers, accountDepartments] = await Promise.all([
-    readValues(spreadsheetId, tabs.products_tab, "A2:I"),
-    readValues(spreadsheetId, tabs.suppliers_tab, "B:B"),
-    readValues(spreadsheetId, "AREA", "A1:A"),
+  const [productData, supplierData, accountDepartments, incomingDepartments] = await Promise.all([
+    readValuesWithFallback(spreadsheetId, [tabs.products_tab, "data", "products", "Products", "PRODUCTS", "Product Catalog", "product catalog"], "A2:I"),
+    readValuesWithFallback(spreadsheetId, [tabs.suppliers_tab, "dd", "suppliers", "Suppliers", "SUPPLIERS"], "B:B"),
+    readValuesWithFallback(spreadsheetId, ["AREA", "Area", "area"], "A1:A"),
+    readValuesWithFallback(spreadsheetId, [tabs.incoming_departments_tab, tabs.outgoing_departments_tab, "AREA", "Area", "area"], "A1:A"),
   ]);
   const uniqueColumn = (rows: unknown[][]): string[] => [
     ...new Set(rows.map(row => String(row[0] ?? "").trim()).filter(Boolean)),
   ];
-  const productDepartments = uniqueColumn(productValues.map(row => [row[6]]));
+  const productDepartments = uniqueColumn(productData.values.map(row => [row[6]]));
   const outgoingDepartments = productDepartments.length
     ? productDepartments
-    : uniqueColumn(await readValues(spreadsheetId, tabs.outgoing_departments_tab, "A:A"));
+    : uniqueColumn((await readValuesWithFallback(
+      spreadsheetId,
+      [tabs.outgoing_departments_tab, tabs.incoming_departments_tab, "AREA", "Area", "area"],
+      "A:A",
+    )).values);
   return {
-    products_tab: tabs.products_tab,
-    products: lookupProductRows(productValues),
+    products_tab: productData.tab,
+    products: lookupProductRows(productData.values),
     outgoing_departments: outgoingDepartments,
-    account_departments: uniqueColumn(accountDepartments),
-    incoming_departments: [],
-    suppliers: uniqueColumn(suppliers),
+    account_departments: uniqueColumn(accountDepartments.values),
+    incoming_departments: uniqueColumn(incomingDepartments.values),
+    suppliers: uniqueColumn(supplierData.values),
   };
 }
 
