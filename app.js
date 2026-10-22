@@ -657,7 +657,10 @@ function renderInventoryAlerts(department) {
     out: "inventory-alert-out-count",
     aging: "inventory-alert-aging-count",
   };
-  const setCount = (key, count) => { document.querySelector(`#${countIds[key]}`).textContent = String(count); };
+  const setCount = (key, count) => {
+    document.querySelector(`#${countIds[key]}`).textContent = String(count);
+    document.querySelector(`[data-alert-summary-count="${key}"]`).textContent = String(count);
+  };
   const stockCells = row => [row.sku_code, row.description, row.on_hand, formatDisplayDate(row.last_received) || row.last_received];
   const expiryRows = entries => entries.map(({ row, expiry }) => ({
     headers: ["SKU CODE", "ITEM DESCRIPTION", "EXPIRATION DATE", "QTY", "DAYS", "TOTAL ON HAND"],
