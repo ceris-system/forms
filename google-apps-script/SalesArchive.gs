@@ -5,16 +5,58 @@ function installSalesArchiveTrigger() {
   if (!spreadsheet) throw new Error("Open this Apps Script from the Sales spreadsheet.");
   PropertiesService.getScriptProperties().setProperty("SALES_ARCHIVE_SPREADSHEET_ID", spreadsheet.getId());
 
-  const handler = "archivePreviousMonthSales";
+  const handlers = ["archivePreviousMonthSales", "copySalesToCurrentDate"];
   for (const trigger of ScriptApp.getProjectTriggers()) {
-    if (trigger.getHandlerFunction() === handler) ScriptApp.deleteTrigger(trigger);
+    if (handlers.includes(trigger.getHandlerFunction())) ScriptApp.deleteTrigger(trigger);
   }
-  ScriptApp.newTrigger(handler)
+  ScriptApp.newTrigger("archivePreviousMonthSales")
     .timeBased()
     .onMonthDay(1)
     .atHour(2)
     .inTimezone(spreadsheet.getSpreadsheetTimeZone())
     .create();
+  ScriptApp.newTrigger("copySalesToCurrentDate")
+    .timeBased()
+    .everyDays(1)
+    .atHour(0)
+    .inTimezone(spreadsheet.getSpreadsheetTimeZone())
+    .create();
+}
+
+function copySalesToCurrentDate() {
+  const spreadsheetId = PropertiesService.getScriptProperties().getProperty("SALES_ARCHIVE_SPREADSHEET_ID");
+  if (!spreadsheetId) throw new Error("Run installSalesArchiveTrigger from the Sales spreadsheet first.");
+  const spreadsheet = SpreadsheetApp.openById(spreadsheetId);
+  const sheet = spreadsheet.getSheetByName("Sales");
+  if (!sheet) throw new Error('The "Sales" tab was not found.');
+
+  const timezone = spreadsheet.getSpreadsheetTimeZone();
+  const targetDate = Utilities.formatDate(new Date(), timezone, "yyyy-MM-dd");
+  const lastColumn = sheet.getLastColumn();
+  const lastRow = sheet.getLastRow();
+  if (lastColumn < 8 || lastRow < 3) throw new Error("The Sales sheet is missing its report headers or product rows.");
+  const headerValues = sheet.getRange(1, 1, 2, lastColumn).getValues();
+  const headerDisplay = sheet.getRange(1, 1, 2, lastColumn).getDisplayValues();
+  const matchingColumns = [];
+
+  for (let salesColumn = 1; salesColumn < lastColumn; salesColumn++) {
+    if (String(headerDisplay[1][salesColumn] || "").trim().toUpperCase() !== "SALES") continue;
+    const qtyColumn = salesColumn - 1;
+    if (String(headerDisplay[1][qtyColumn] || "").trim().toUpperCase() !== "QTY RELEASED") continue;
+    const rawDate = headerValues[0][salesColumn] || headerValues[0][qtyColumn];
+    const displayDate = headerDisplay[0][salesColumn] || headerDisplay[0][qtyColumn];
+    if (salesArchiveDateKey(rawDate, displayDate, timezone) === targetDate) {
+      matchingColumns.push({ qtyColumn: qtyColumn + 1, salesColumn: salesColumn + 1 });
+    }
+  }
+  if (matchingColumns.length !== 1) {
+    throw new Error("Expected one QTY RELEASED / SALES column pair for " + targetDate + ", found " + matchingColumns.length + ".");
+  }
+
+  const sourceValues = sheet.getRange(3, 7, lastRow - 2, 2).getValues();
+  const target = matchingColumns[0];
+  sheet.getRange(3, target.qtyColumn, sourceValues.length, 2).setValues(sourceValues);
+  console.log("Copied " + sourceValues.length + " Sales rows from G:H to the date pair for " + targetDate + ".");
 }
 
 function archivePreviousMonthSales() {
