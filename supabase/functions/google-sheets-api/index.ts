@@ -228,8 +228,7 @@ async function lookupLists(
     suppliers_tab: string;
   },
 ): Promise<Record<string, unknown>> {
-  const [productData, supplierData, accountDepartments, incomingDepartments] = await Promise.all([
-    readValuesWithFallback(spreadsheetId, [tabs.products_tab, "data", "products", "Products", "PRODUCTS", "Product Catalog", "product catalog"], "A2:I"),
+  const [supplierData, accountDepartments, incomingDepartments] = await Promise.all([
     readValuesWithFallback(spreadsheetId, [tabs.suppliers_tab, "dd", "suppliers", "Suppliers", "SUPPLIERS"], "B:B"),
     readValuesWithFallback(spreadsheetId, ["AREA", "Area", "area"], "A1:A"),
     readValuesWithFallback(spreadsheetId, [tabs.incoming_departments_tab, tabs.outgoing_departments_tab, "AREA", "Area", "area"], "A1:A"),
@@ -237,21 +236,32 @@ async function lookupLists(
   const uniqueColumn = (rows: unknown[][]): string[] => [
     ...new Set(rows.map(row => String(row[0] ?? "").trim()).filter(Boolean)),
   ];
-  const productDepartments = uniqueColumn(productData.values.map(row => [row[6]]));
-  const outgoingDepartments = productDepartments.length
-    ? productDepartments
-    : uniqueColumn((await readValuesWithFallback(
-      spreadsheetId,
-      [tabs.outgoing_departments_tab, tabs.incoming_departments_tab, "AREA", "Area", "area"],
-      "A:A",
-    )).values);
+  const outgoingDepartments = uniqueColumn((await readValuesWithFallback(
+    spreadsheetId,
+    [tabs.outgoing_departments_tab, tabs.incoming_departments_tab, "AREA", "Area", "area"],
+    "A:A",
+  )).values);
   return {
-    products_tab: productData.tab,
-    products: lookupProductRows(productData.values),
+    products_tab: tabs.products_tab,
     outgoing_departments: outgoingDepartments,
     account_departments: uniqueColumn(accountDepartments.values),
     incoming_departments: uniqueColumn(incomingDepartments.values),
     suppliers: uniqueColumn(supplierData.values),
+  };
+}
+
+async function loadProductCatalog(
+  spreadsheetId: string,
+  productsTab: string,
+): Promise<Record<string, unknown>> {
+  const productData = await readValuesWithFallback(
+    spreadsheetId,
+    [productsTab, "data", "products", "Products", "PRODUCTS", "Product Catalog", "product catalog"],
+    "A2:I",
+  );
+  return {
+    products_tab: productData.tab,
+    products: lookupProductRows(productData.values),
   };
 }
 
@@ -1494,6 +1504,9 @@ Deno.serve(async (request: Request) => {
       incoming_departments_tab: settings.incoming_departments_tab || "area",
       suppliers_tab: settings.suppliers_tab || "dd",
     }));
+    if (body.action === "product_catalog") {
+      return respond(await loadProductCatalog(settings.spreadsheet_id, settings.products_tab || "data"));
+    }
     if (
       body.action === "inventory_load"
       || body.action === "inventory_adjustment_update"

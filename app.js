@@ -47,6 +47,7 @@ let isAdmin = false;
 let profileUserId = "";
 let adminStatusUserId = "";
 let lookupCache = null;
+let productCatalogCache = null;
 let activePageId = "";
 let activitySessionId = "";
 let activitySessionUserId = "";
@@ -350,7 +351,7 @@ async function openProductCatalog() {
   document.querySelector("#catalog-dialog-title").textContent = `Select products from ${outgoingDepartment}`;
 
   try {
-    const result = await loadLookupData();
+    const result = await loadProductCatalog();
     const selectedDepartment = outgoingDepartment.toLocaleLowerCase();
     catalogRows = result.products.filter(product =>
       String(product["OUTGOING DEPARTMENT"] || "").trim().toLocaleLowerCase() === selectedDepartment
@@ -368,7 +369,7 @@ async function openProductCatalog() {
   }
 }
 
-async function loadLookupData() {
+async function loadLookupLists() {
   const userId = currentSession?.user.id;
   if (!userId) throw new Error("Sign in before loading spreadsheet lists.");
   if (lookupCache?.userId === userId && lookupCache.expiresAt > Date.now()) {
@@ -386,6 +387,28 @@ async function loadLookupData() {
     return result;
   } catch (error) {
     if (lookupCache === cacheEntry) lookupCache = null;
+    throw error;
+  }
+}
+
+async function loadProductCatalog() {
+  const userId = currentSession?.user.id;
+  if (!userId) throw new Error("Sign in before loading spreadsheet products.");
+  if (productCatalogCache?.userId === userId && productCatalogCache.expiresAt > Date.now()) {
+    return productCatalogCache.promise;
+  }
+  const cacheEntry = {
+    userId,
+    expiresAt: Date.now() + 30_000,
+    promise: requestSheetData("product_catalog"),
+  };
+  productCatalogCache = cacheEntry;
+  try {
+    const result = await cacheEntry.promise;
+    cacheEntry.expiresAt = Date.now() + 30_000;
+    return result;
+  } catch (error) {
+    if (productCatalogCache === cacheEntry) productCatalogCache = null;
     throw error;
   }
 }
@@ -867,7 +890,7 @@ async function refreshUserProfile(session) {
     }
     renderUserForms();
     updateSessionUi(session, false);
-    void loadLookupData().catch(error => {
+    void loadLookupLists().catch(error => {
       console.error("Unable to preload form lookup data.", error);
     });
     if (activePageId === "inventory" || activePageId === "inventory-form") {
@@ -910,7 +933,7 @@ async function loadRequestLookups(formType) {
   }
   setRequestNotice(`Signed in as ${currentUserProfile.username || "your account"}. Loading outgoing departments…`);
   try {
-    const result = await loadLookupData();
+    const result = await loadLookupLists();
     if (!isRequestFormOpen() || requestFormPage.dataset.formType !== formType) return;
     populateSelect(outgoing, result.account_departments || [], "department");
     if (supplier) populateSelect(supplier, result.suppliers || [], "supplier");
@@ -1024,6 +1047,7 @@ function updateSessionUi(session, navigate = true) {
     isMasterAdmin = false;
     isAdmin = false;
     lookupCache = null;
+    productCatalogCache = null;
     reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] }, top_rank: { daily: { departments: [], products: [] }, monthly: { departments: [], products: [] } } };
     reportSummaryOverviewLoaded = false;
     reportSummaryTopRankLoaded = false;
@@ -1250,7 +1274,7 @@ async function loadAccountDepartmentOptions() {
   editSelect.disabled = true;
   editSelect.replaceChildren(new Option("Loading departments from AREA!A1:A…", ""));
   try {
-    const lookups = await loadLookupData();
+    const lookups = await loadLookupLists();
     const departments = Array.isArray(lookups.account_departments) ? lookups.account_departments : [];
     populateSelect(select, departments, "department");
     populateSelect(editSelect, departments, "department");
@@ -1561,6 +1585,7 @@ async function saveWorkbook() {
     await recordUserActivity("Updated spreadsheet settings");
     input.value = result.spreadsheet_url;
     lookupCache = null;
+    productCatalogCache = null;
     document.querySelector("#admin-status").textContent = "Spreadsheet and lookup tabs saved. Make sure the workbook is shared with the Google service account as an Editor.";
   } catch (error) {
     console.error("Unable to save the shared spreadsheet.", error);

@@ -19,7 +19,7 @@ Dates displayed in request forms, inventory, approvals, and history use the `MON
    - `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`: the complete `private_key` value, including its `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` lines. Keep this secret private.
 4. Share the common Google workbook with that service-account email as an **Editor**.
 5. Keep the shared lookup lists in these tabs:
-   - Product catalog tab, read from row 2 onward and shown in this order: SKU Code from column A, Product Description from B, UOM from C, Cost from H, SRP from I, Expiration Date from D, Onhand from E, and Total Onhand from F. Column G contains the associated outgoing department; **Select products** only shows rows whose G value matches the selected outgoing department. Rows without both a SKU Code and Product Description are skipped.
+   - Product catalog tab, read from row 2 onward and loaded only when **Select products** is opened. It is shown in this order: SKU Code from column A, Product Description from B, UOM from C, Cost from H, SRP from I, Expiration Date from D, Onhand from E, and Total Onhand from F. Column G contains the associated outgoing department; **Select products** only shows rows whose G value matches the selected outgoing department. Rows without both a SKU Code and Product Description are skipped.
    - The outgoing-department dropdown is loaded from unique non-empty values in `AREA!A1:A`. Product selection still matches the chosen department against Products column G.
    - User account department choices come from non-empty values in `AREA!A1:A`.
    - Each staff member's department (set by the Master Admin) is automatically used as their Incoming Department.
