@@ -2222,7 +2222,7 @@ function reportSummaryAddTable(content, title, note, headers, rows, emptyText) {
   content.append(panel);
 }
 
-function reportSummaryTable(headers, rows, emptyText = "No matching records.", className = "", lastRowClassName = "") {
+function reportSummaryTable(headers, rows, emptyText = "No matching records.", className = "") {
   const wrapper = reportSummaryElement("div", "report-summary-scroll");
   const table = reportSummaryElement("table", ["report-summary-table", className].filter(Boolean).join(" "));
   const thead = reportSummaryElement("thead");
@@ -2231,9 +2231,8 @@ function reportSummaryTable(headers, rows, emptyText = "No matching records.", c
   thead.append(headerRow);
   const tbody = reportSummaryElement("tbody");
   const values = rows.length ? rows : [[emptyText]];
-  for (const [index, rowValues] of values.entries()) {
-    const isGrandTotal = rows.length > 0 && index === values.length - 1 && lastRowClassName;
-    const row = reportSummaryElement("tr", rows.length ? isGrandTotal ? lastRowClassName : "" : "report-summary-empty");
+  for (const rowValues of values) {
+    const row = reportSummaryElement("tr", rows.length ? "" : "report-summary-empty");
     for (const value of rowValues) {
       const cell = reportSummaryElement("td");
       if (value && typeof value === "object") {
@@ -2553,26 +2552,13 @@ function reportSummaryTransactionsInRange(transactions, start, end) {
   return transactions.filter(row => row.date >= start && row.date <= end);
 }
 
-function reportSummaryRankRows(rows, product = false, includeGrandTotal = false) {
-  const rankedRows = rows.map((row, index) => [
+function reportSummaryRankRows(rows, product = false) {
+  return rows.map((row, index) => [
     reportSummaryCell(index + 1, `report-summary-rank report-summary-rank-${index + 1}`),
     ...(product
       ? [row[0] || "—", row[1] || "—", row[2] || "—", reportSummaryCurrency(reportSummaryNumber(row[3]))]
       : [row[0] || "—", row[1] || "—", reportSummaryCurrency(reportSummaryNumber(row[2]))]),
   ]);
-  if (!includeGrandTotal || !rows.length) return rankedRows;
-  const quantityIndex = product ? 2 : 1;
-  const amountIndex = product ? 3 : 2;
-  const totalQuantity = rows.reduce((total, row) => total + reportSummaryNumber(row[quantityIndex]), 0);
-  const totalAmount = rows.reduce((total, row) => total + reportSummaryNumber(row[amountIndex]), 0);
-  rankedRows.push([
-    "—",
-    "GRAND TOTAL",
-    ...(product ? [""] : []),
-    String(totalQuantity),
-    reportSummaryCurrency(totalAmount),
-  ]);
-  return rankedRows;
 }
 
 function reportSummaryNormalizeTopRank(topRank) {
@@ -2688,19 +2674,17 @@ function reportSummaryRenderTopRankReference(content) {
   departmentPanel.append(reportSummarySectionHeading("BY DEPARTMENT", "♛"));
   departmentPanel.append(reportSummaryTable(
     ["RANK", "DEPARTMENT", "TOTAL RELEASED", "TOTAL AMOUNT"],
-    reportSummaryRankRows(selectedPeriod.departments, false, true),
+    reportSummaryRankRows(selectedPeriod.departments),
     `No department sales recorded ${periodLabel}.`,
     "report-summary-top-rank-departments",
-    "report-summary-grand-total",
   ));
   const productPanel = reportSummaryElement("section", "report-summary-panel report-summary-rank-period");
   productPanel.append(reportSummarySectionHeading("BY PRODUCT", "♛"));
   productPanel.append(reportSummaryTable(
     ["RANK", "SKU CODE", "ITEM DESCRIPTION", "TOTAL RELEASED", "TOTAL AMOUNT"],
-    reportSummaryRankRows(selectedPeriod.products, true, true),
+    reportSummaryRankRows(selectedPeriod.products, true),
     `No product sales recorded ${periodLabel}.`,
     "report-summary-top-rank-products",
-    "report-summary-grand-total",
   ));
   content.querySelector(".report-summary-top-rank-grid").append(departmentPanel, productPanel);
 }

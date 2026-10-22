@@ -187,7 +187,6 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .report-summary-top-rank-products th:nth-child(3), .report-summary-top-rank-products td:nth-child(3) { width: 36%; }
 .report-summary-top-rank-products th:nth-child(4), .report-summary-top-rank-products td:nth-child(4) { width: 20%; }
 .report-summary-top-rank-products th:nth-child(5), .report-summary-top-rank-products td:nth-child(5) { width: 22%; }
-.report-summary-grand-total td { border-top: 2px solid #64748b; background: #f1f5f9; color: #1e293b; font-weight: 800; }
 .report-summary-tab-row { display: contents; }
 .report-summary-rank-select { min-height: 29px; max-width: 145px; padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 5px; background: #fff; color: #243447; color-scheme: light; font: 700 9px var(--font); }
 .report-summary-top-rank-select { width: 105px; margin-left: 4px; }
