@@ -458,14 +458,14 @@ async function loadInventory(
   if (!department) return { department, departments, categories, rows: [] };
   const [values, dataValues] = await Promise.all([
     readValues(spreadsheetId, department, "B8:X"),
-    readValues(spreadsheetId, "data", "A2:Y"),
+    readValues(spreadsheetId, "data", "A2:F"),
   ]);
   const formQtyByKey = new Map<string, string>();
   for (const row of dataValues) {
     const sku = String(row[0] ?? "").trim();
     if (!sku) continue;
     const key = `${sku.toLocaleLowerCase()}\u0000${String(row[6] ?? "").trim().toLocaleLowerCase()}`;
-    formQtyByKey.set(key, String(row[24] ?? "").trim());
+    formQtyByKey.set(key, String(row[4] ?? "").trim());
   }
   const rows = values
     .map((row, index) => inventoryRow(row, index))
@@ -2078,14 +2078,15 @@ Deno.serve(async (request: Request) => {
         ]);
         const productRows = stockValues[0] || [];
         const dataRows = stockValues[1] || [];
-        const stockDataByKey = new Map<string, { status: string; qty: string }>();
+        const stockDataByKey = new Map<string, { status: string; qty: string; totalOnHand: string }>();
         for (const row of dataRows) {
           const sku = String(row[0] ?? "").trim();
           if (!sku) continue;
           const key = `${sku.toLocaleLowerCase()}\u0000${String(row[6] ?? "").trim().toLocaleLowerCase()}`;
           stockDataByKey.set(key, {
             status: String(row[12] ?? "").trim(),
-            qty: String(row[24] ?? "").trim(),
+            qty: String(row[4] ?? "").trim(),
+            totalOnHand: String(row[5] ?? "").trim(),
           });
         }
         const stockRows = productRows
@@ -2103,6 +2104,7 @@ Deno.serve(async (request: Request) => {
               last_received: String(row[9] ?? "").trim(),
               status: data?.status || "",
               form_qty: data?.qty || "",
+              data_total_on_hand: data?.totalOnHand || "",
               expiry: String(row[13] ?? "").trim(),
             };
           });

@@ -2494,11 +2494,12 @@ function reportSummaryAddSection(content, title, headers, rows, emptyText, note 
     panel.querySelector(".report-summary-table").classList.add("report-summary-stock-table");
   }
   if (headers[0] === "DEPARTMENT" && headers[3] === "EXPIRATION DATE" &&
-    headers[4] === "QTY" && ["DAYS LEFT", "DAYS EXPIRED"].includes(headers[5])) {
+    headers[4] === "QTY" && ["DAYS LEFT", "DAYS EXPIRED"].includes(headers[5]) &&
+    headers[6] === "TOTAL ONHAND") {
     panel.querySelector(".report-summary-table").classList.add("report-summary-expiry-table");
   }
   if (headers[0] === "DEPARTMENT" && headers[3] === "EXPIRATION DATE" && headers[4] === "QTY" &&
-    headers[5] === "NO DATE" && headers[9] === "90D+") {
+    headers[5] === "NO DATE" && headers[9] === "90D+" && headers[11] === "TOTAL ONHAND") {
     panel.querySelector(".report-summary-table").classList.add("report-summary-aging-table");
   }
   content.append(panel);
@@ -2824,8 +2825,9 @@ function reportSummaryRenderExpiryReference(content, mode) {
     formatDisplayDate(row.expiration_date) || row.expiration_date || "—",
     row.form_qty === "" ? "—" : row.form_qty,
     reportSummaryCell(parsed.days === null ? "EXPIRED" : `${isExpired ? Math.abs(parsed.days) : parsed.days} days`, "report-summary-pill", isExpired ? "#ef4444" : parsed.days <= 30 ? "#ef4444" : parsed.days <= 60 ? "#fbbf24" : "#bfdbfe"),
+    row.data_total_on_hand === "" ? "—" : row.data_total_on_hand,
   ]);
-  reportSummaryAddSection(content, isExpired ? "EXPIRED ITEMS" : "NEAR EXPIRATION", ["DEPARTMENT", "SKU CODE", "ITEM DESCRIPTION", "EXPIRATION DATE", "QTY", isExpired ? "DAYS EXPIRED" : "DAYS LEFT"], rows,
+  reportSummaryAddSection(content, isExpired ? "EXPIRED ITEMS" : "NEAR EXPIRATION", ["DEPARTMENT", "SKU CODE", "ITEM DESCRIPTION", "EXPIRATION DATE", "QTY", isExpired ? "DAYS EXPIRED" : "DAYS LEFT", "TOTAL ONHAND"], rows,
     isExpired ? "No expired items on file." : "Nothing expiring in the next 90 days.");
 }
 
@@ -2848,7 +2850,8 @@ function reportSummaryRenderAgingReference(content) {
     const key = `${sku}\u0000${description}\u0000${department}`;
     const item = grouped.get(key) || {
       sku, description, department, noDate: 0, d30: 0, d60: 0, d90: 0, over90: 0, total: 0,
-      expiration_date: row.expiration_date || "", form_qty: row.form_qty || "", expiryDays: Infinity,
+      expiration_date: row.expiration_date || "", form_qty: row.form_qty || "",
+      data_total_on_hand: row.data_total_on_hand || "", expiryDays: Infinity,
     };
     item.total += qty;
     const age = reportSummaryDaysSince(row.last_received);
@@ -2863,6 +2866,7 @@ function reportSummaryRenderAgingReference(content) {
       item.expiryDays = sortDays;
       item.expiration_date = row.expiration_date || "";
       item.form_qty = row.form_qty || "";
+      item.data_total_on_hand = row.data_total_on_hand || "";
     }
     grouped.set(key, item);
   }
@@ -2877,6 +2881,7 @@ function reportSummaryRenderAgingReference(content) {
       reportSummaryCell(item.d90 || "", "report-summary-pill", "#ff8a3d"),
       reportSummaryCell(item.over90 || "", "report-summary-pill", "#ef4444"),
       item.total,
+      item.data_total_on_hand || "—",
     ]);
   const controls = reportSummaryCreateControls();
   reportSummaryAddSearch(controls, reportSummarySearch, "Search department, SKU or description", value => {
@@ -2887,7 +2892,7 @@ function reportSummaryRenderAgingReference(content) {
     controls,
     reportSummaryNote(`Source: LAST RECEIVED date (column J) gives true days in stock, not remaining shelf life. Expiration date (column D) shows the soonest date for each SKU and department. Rows without a received date fall under NO DATE.`),
   ]);
-  reportSummaryAddSection(content, "AGING PER DESCRIPTION", ["DEPARTMENT", "SKU CODE", "ITEM DESCRIPTION", "EXPIRATION DATE", "QTY", "NO DATE", "0–30D", "31–60D", "61–90D", "90D+", "TOTAL QTY"], rows, "No stock on hand.");
+  reportSummaryAddSection(content, "AGING PER DESCRIPTION", ["DEPARTMENT", "SKU CODE", "ITEM DESCRIPTION", "EXPIRATION DATE", "QTY", "NO DATE", "0–30D", "31–60D", "61–90D", "90D+", "TOTAL QTY", "TOTAL ONHAND"], rows, "No stock on hand.");
 }
 
 function reportSummaryDownload(name, content, mimeType) {
