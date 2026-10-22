@@ -49,10 +49,14 @@ function decodePrivateKey(pem: string): Uint8Array {
 
 let cachedGoogleToken = "";
 let googleTokenExpiresAt = 0;
+const googleValuesCache = new Map<string, { expiresAt: number; promise: Promise<unknown[][]> }>();
 const googleReadCache = new Map<string, { expiresAt: number; promise: Promise<unknown[][][]> }>();
 const googleMetadataCache = new Map<string, { expiresAt: number; promise: Promise<Record<string, any>> }>();
 
 function invalidateGoogleReadCache(spreadsheetId: string): void {
+  for (const key of googleValuesCache.keys()) {
+    if (key.startsWith(`${spreadsheetId}:`)) googleValuesCache.delete(key);
+  }
   for (const key of googleReadCache.keys()) {
     if (key.startsWith(`${spreadsheetId}:`)) googleReadCache.delete(key);
   }
@@ -152,10 +156,24 @@ function range(tab: string, cells: string): string {
 }
 
 async function readValues(spreadsheetId: string, tab: string, cells: string): Promise<unknown[][]> {
-  const result = await googleReadRequest(
-    `spreadsheets/${spreadsheetId}/values/${range(tab, cells)}?valueRenderOption=FORMATTED_VALUE`,
-  );
-  return Array.isArray(result.values) ? result.values : [];
+  const rangeName = a1Range(tab, cells);
+  const cacheKey = `${spreadsheetId}:${rangeName}`;
+  const cached = googleValuesCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.promise;
+
+  const promise = (async () => {
+    const result = await googleReadRequest(
+      `spreadsheets/${spreadsheetId}/values/${range(tab, cells)}?valueRenderOption=FORMATTED_VALUE`,
+    );
+    return Array.isArray(result.values) ? result.values : [];
+  })();
+  googleValuesCache.set(cacheKey, { expiresAt: Date.now() + 30_000, promise });
+  try {
+    return await promise;
+  } catch (error) {
+    googleValuesCache.delete(cacheKey);
+    throw error;
+  }
 }
 
 async function readValuesBatch(spreadsheetId: string, ranges: string[]): Promise<unknown[][][]> {
@@ -219,6 +237,21 @@ function lookupProductRows(rows: unknown[][]): Record<string, string>[] {
   }));
 }
 
+function resolveLookupTab(
+  metadata: Record<string, any>,
+  candidates: string[],
+  label: string,
+): string {
+  const sheets = Array.isArray(metadata.sheets) ? metadata.sheets : [];
+  for (const candidate of candidates) {
+    const match = sheets.find((sheet: Record<string, any>) =>
+      String(sheet.properties?.title || "").toLocaleLowerCase() === candidate.toLocaleLowerCase()
+    );
+    if (match) return String(match.properties.title);
+  }
+  throw new Error(`Could not find the ${label} sheet. Check the configured tab name in the Master Admin settings.`);
+}
+
 async function lookupLists(
   spreadsheetId: string,
   tabs: {
@@ -228,40 +261,63 @@ async function lookupLists(
     suppliers_tab: string;
   },
 ): Promise<Record<string, unknown>> {
-  const [supplierData, accountDepartments, incomingDepartments] = await Promise.all([
-    readValuesWithFallback(spreadsheetId, [tabs.suppliers_tab, "dd", "suppliers", "Suppliers", "SUPPLIERS"], "B:B"),
-    readValuesWithFallback(spreadsheetId, ["AREA", "Area", "area"], "A1:A"),
-    readValuesWithFallback(spreadsheetId, [tabs.incoming_departments_tab, tabs.outgoing_departments_tab, "AREA", "Area", "area"], "A1:A"),
-  ]);
+  const metadata = await getSheetMetadata(spreadsheetId);
+  const accountDepartmentTab = resolveLookupTab(metadata, ["AREA"], "account department");
+  const outgoingDepartmentTab = resolveLookupTab(
+    metadata,
+    [tabs.outgoing_departments_tab, tabs.incoming_departments_tab, "AREA"],
+    "outgoing department",
+  );
+  const incomingDepartmentTab = resolveLookupTab(
+    metadata,
+    [tabs.incoming_departments_tab, tabs.outgoing_departments_tab, "AREA"],
+    "incoming department",
+  );
+  const supplierTab = resolveLookupTab(
+    metadata,
+    [tabs.suppliers_tab, "dd", "suppliers", "Suppliers", "SUPPLIERS"],
+    "supplier",
+  );
+  const requestedRanges = [
+    a1Range(supplierTab, "B:B"),
+    a1Range(accountDepartmentTab, "A:A"),
+    a1Range(incomingDepartmentTab, "A:A"),
+    a1Range(outgoingDepartmentTab, "A:A"),
+  ];
+  const uniqueRanges = [...new Set(requestedRanges)];
+  const values = await readValuesBatch(spreadsheetId, uniqueRanges);
+  const valuesByRange = new Map(uniqueRanges.map((value, index) => [value, values[index]]));
   const uniqueColumn = (rows: unknown[][]): string[] => [
     ...new Set(rows.map(row => String(row[0] ?? "").trim()).filter(Boolean)),
   ];
-  const outgoingDepartments = uniqueColumn((await readValuesWithFallback(
-    spreadsheetId,
-    [tabs.outgoing_departments_tab, tabs.incoming_departments_tab, "AREA", "Area", "area"],
-    "A:A",
-  )).values);
   return {
     products_tab: tabs.products_tab,
-    outgoing_departments: outgoingDepartments,
-    account_departments: uniqueColumn(accountDepartments.values),
-    incoming_departments: uniqueColumn(incomingDepartments.values),
-    suppliers: uniqueColumn(supplierData.values),
+    outgoing_departments: uniqueColumn(valuesByRange.get(a1Range(outgoingDepartmentTab, "A:A")) || []),
+    account_departments: uniqueColumn(valuesByRange.get(a1Range(accountDepartmentTab, "A:A")) || []),
+    incoming_departments: uniqueColumn(valuesByRange.get(a1Range(incomingDepartmentTab, "A:A")) || []),
+    suppliers: uniqueColumn(valuesByRange.get(a1Range(supplierTab, "B:B")) || []),
   };
 }
 
 async function loadProductCatalog(
   spreadsheetId: string,
   productsTab: string,
+  requestedDepartment: unknown,
 ): Promise<Record<string, unknown>> {
-  const productData = await readValuesWithFallback(
-    spreadsheetId,
+  const metadata = await getSheetMetadata(spreadsheetId);
+  const actualTab = resolveLookupTab(
+    metadata,
     [productsTab, "data", "products", "Products", "PRODUCTS", "Product Catalog", "product catalog"],
-    "A2:I",
+    "product catalog",
+  );
+  const productValues = await readValues(spreadsheetId, actualTab, "A2:I");
+  const department = typeof requestedDepartment === "string" ? requestedDepartment.trim().toLocaleLowerCase() : "";
+  const products = lookupProductRows(productValues).filter(product =>
+    !department || product["OUTGOING DEPARTMENT"].toLocaleLowerCase() === department
   );
   return {
-    products_tab: productData.tab,
-    products: lookupProductRows(productData.values),
+    products_tab: actualTab,
+    products,
   };
 }
 
@@ -1498,14 +1554,24 @@ Deno.serve(async (request: Request) => {
     } catch {
       return respond({ error: "Enter a valid spreadsheet request." }, 400);
     }
-    if (body.action === "lookup") return respond(await lookupLists(settings.spreadsheet_id, {
+    const lookupTabs = {
       products_tab: settings.products_tab || "data",
       outgoing_departments_tab: settings.outgoing_departments_tab || "area",
       incoming_departments_tab: settings.incoming_departments_tab || "area",
       suppliers_tab: settings.suppliers_tab || "dd",
-    }));
+    };
+    if (body.action === "lookup_fast") {
+      return respond(await lookupLists(settings.spreadsheet_id, lookupTabs));
+    }
+    if (body.action === "lookup") {
+      const [lists, catalog] = await Promise.all([
+        lookupLists(settings.spreadsheet_id, lookupTabs),
+        loadProductCatalog(settings.spreadsheet_id, lookupTabs.products_tab, ""),
+      ]);
+      return respond({ ...lists, ...catalog });
+    }
     if (body.action === "product_catalog") {
-      return respond(await loadProductCatalog(settings.spreadsheet_id, settings.products_tab || "data"));
+      return respond(await loadProductCatalog(settings.spreadsheet_id, settings.products_tab || "data", body.department));
     }
     if (
       body.action === "inventory_load"

@@ -351,7 +351,7 @@ async function openProductCatalog() {
   document.querySelector("#catalog-dialog-title").textContent = `Select products from ${outgoingDepartment}`;
 
   try {
-    const result = await loadProductCatalog();
+    const result = await loadProductCatalog(outgoingDepartment);
     const selectedDepartment = outgoingDepartment.toLocaleLowerCase();
     catalogRows = result.products.filter(product =>
       String(product["OUTGOING DEPARTMENT"] || "").trim().toLocaleLowerCase() === selectedDepartment
@@ -378,7 +378,7 @@ async function loadLookupLists() {
   const cacheEntry = {
     userId,
     expiresAt: Date.now() + 30_000,
-    promise: requestSheetData("lookup"),
+    promise: requestSheetData("lookup_fast"),
   };
   lookupCache = cacheEntry;
   try {
@@ -391,16 +391,22 @@ async function loadLookupLists() {
   }
 }
 
-async function loadProductCatalog() {
+async function loadProductCatalog(department) {
   const userId = currentSession?.user.id;
   if (!userId) throw new Error("Sign in before loading spreadsheet products.");
-  if (productCatalogCache?.userId === userId && productCatalogCache.expiresAt > Date.now()) {
+  const normalizedDepartment = department.toLocaleLowerCase();
+  if (
+    productCatalogCache?.userId === userId
+    && productCatalogCache.department === normalizedDepartment
+    && productCatalogCache.expiresAt > Date.now()
+  ) {
     return productCatalogCache.promise;
   }
   const cacheEntry = {
     userId,
+    department: normalizedDepartment,
     expiresAt: Date.now() + 30_000,
-    promise: requestSheetData("product_catalog"),
+    promise: requestSheetData("product_catalog", { department }),
   };
   productCatalogCache = cacheEntry;
   try {
