@@ -569,7 +569,7 @@ function renderInventoryRows() {
   body.replaceChildren();
   for (const row of filtered) {
     const tr = document.createElement("tr");
-    const values = [row.sku_code, row.description, row.uom, row.cost, row.srp, row.near_expiration, row.on_hand, row.total_on_hand, row.department];
+    const values = [row.sku_code, row.description, row.uom, row.cost, row.srp, row.near_expiration, row.on_hand, row.total_on_hand];
     for (const [index, value] of values.entries()) {
       const cell = document.createElement("td");
       cell.textContent = index === 5 ? formatDisplayDate(value) : value == null ? "" : String(value);
