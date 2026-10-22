@@ -238,6 +238,8 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .report-summary-aging-table td:nth-child(n+7):nth-child(-n+10) { width: 7%; }
 .report-summary-aging-table th:nth-child(11), .report-summary-aging-table td:nth-child(11) { width: 5%; }
 .report-summary-aging-table th:nth-child(12), .report-summary-aging-table td:nth-child(12) { width: 5%; }
+.report-summary-history-table th:nth-child(n+5),
+.report-summary-history-table td:nth-child(n+5) { text-align: center; }
 .report-summary-table-centered th:nth-child(1), .report-summary-table-centered td:nth-child(1),
 .report-summary-table-centered th:nth-child(2), .report-summary-table-centered td:nth-child(2) { text-align: left; }
 .report-summary-table-centered th:nth-child(n+3), .report-summary-table-centered td:nth-child(n+3) { text-align: center; }

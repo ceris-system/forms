@@ -2517,6 +2517,10 @@ function reportSummaryAddSection(content, title, headers, rows, emptyText, note 
     headers[5] === "NO DATE" && headers[9] === "90D+" && headers[11] === "TOTAL ONHAND") {
     panel.querySelector(".report-summary-table").classList.add("report-summary-aging-table");
   }
+  if (headers[0] === "DATE" && headers[1] === "SKU CODE" && headers[4] === "QTY RELEASED" &&
+    headers[5] === "SRP" && headers[6] === "SALES") {
+    panel.querySelector(".report-summary-table").classList.add("report-summary-history-table");
+  }
   content.append(panel);
   return panel;
 }
