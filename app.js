@@ -65,11 +65,12 @@ let activityLogOffset = 0;
 let activityLogsHaveMore = false;
 let activityLogLoadId = 0;
 let activityLogDeleteInProgress = false;
-let reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] }, top_rank: { daily: { departments: [], products: [] }, monthly: { departments: [], products: [] } } };
+let reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] }, top_rank: { daily: { departments: [], products: [] }, monthly: { departments: [], products: [] } }, month_compare: null };
 let reportSummaryActiveTab = "DAILY_SALES";
 let reportSummaryTopRankPeriod = "daily";
 let reportSummaryOverviewLoaded = false;
 let reportSummaryTopRankLoaded = false;
+let reportSummaryMonthCompareLoaded = false;
 let reportSummaryLoadId = 0;
 let reportSummaryRefreshTimer = null;
 let reportSummarySearch = "";
@@ -1056,9 +1057,10 @@ function updateSessionUi(session, navigate = true) {
     isAdmin = false;
     lookupCache = null;
     productCatalogCache = null;
-    reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] }, top_rank: { daily: { departments: [], products: [] }, monthly: { departments: [], products: [] } } };
+    reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] }, top_rank: { daily: { departments: [], products: [] }, monthly: { departments: [], products: [] } }, month_compare: null };
     reportSummaryOverviewLoaded = false;
     reportSummaryTopRankLoaded = false;
+    reportSummaryMonthCompareLoaded = false;
     reportSummaryTransientStatus = "";
     setNotificationCount(0);
     document.body.classList.remove("admin-mode");
@@ -2689,54 +2691,52 @@ function reportSummaryRenderTopRankReference(content) {
   content.querySelector(".report-summary-top-rank-grid").append(departmentPanel, productPanel);
 }
 
-function reportSummaryRenderMonthCompareReference(content, transactions) {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const thisStart = new Date(today.getFullYear(), today.getMonth(), 1);
-  const lastStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-  const lastComparableEnd = new Date(today.getFullYear(), today.getMonth() - 1, Math.min(today.getDate(), new Date(today.getFullYear(), today.getMonth(), 0).getDate()), 23, 59, 59, 999);
-  const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59, 999);
-  const sum = rows => rows.reduce((total, row) => ({ qty: total.qty + row.qty, amount: total.amount + row.amount }), { qty: 0, amount: 0 });
-  const currentRows = reportSummaryTransactionsInRange(transactions, thisStart, today);
-  const previousRows = reportSummaryTransactionsInRange(transactions, lastStart, lastComparableEnd);
-  const fullPreviousRows = reportSummaryTransactionsInRange(transactions, lastStart, lastMonthEnd);
-  const current = sum(currentRows);
-  const previous = sum(previousRows);
-  const fullPrevious = sum(fullPreviousRows);
-  const hasPrevious = fullPreviousRows.length > 0;
-  const deptMap = new Map();
-  for (const row of [...currentRows, ...previousRows]) {
-    const key = row.department || "NO DEPARTMENT";
-    const item = deptMap.get(key) || { current: 0, previous: 0 };
-    if (currentRows.includes(row)) item.current += row.amount;
-    else item.previous += row.amount;
-    deptMap.set(key, item);
+function reportSummaryMonthLabel(monthKey) {
+  const [year, month] = String(monthKey || "").split("-").map(Number);
+  if (!year || !month) return "—";
+  return reportSummaryDateLabel(new Date(year, month - 1, 1), { month: "long", year: "numeric" });
+}
+
+function reportSummaryRenderMonthCompareReference(content, comparison) {
+  if (!comparison) {
+    reportSummaryHero(content, [], [reportSummaryNote("Loading actual sales from the Sales sheet…")]);
+    return;
   }
-  const deptRows = [...deptMap.entries()].sort((a, b) => a[0].localeCompare(b[0]))
-    .map(([name, values]) => [name, reportSummaryCurrency(values.current), hasPrevious ? reportSummaryCurrency(values.previous) : "—", reportSummaryChangeCell(values.current, values.previous)]);
-  const productMap = new Map();
-  for (const row of [...currentRows, ...previousRows]) {
-    const key = `${row.sku}\u0000${row.description}`;
-    const item = productMap.get(key) || { sku: row.sku, description: row.description, current: 0, previous: 0 };
-    if (currentRows.includes(row)) item.current += row.amount;
-    else item.previous += row.amount;
-    productMap.set(key, item);
-  }
-  const productRows = [...productMap.values()].sort((a, b) => b.current - a.current)
-    .map(item => [item.sku || "—", item.description || "—", reportSummaryCurrency(item.current), hasPrevious ? reportSummaryCurrency(item.previous) : "—", reportSummaryChangeCell(item.current, item.previous)]);
-  const noLast = hasPrevious ? "" : "No last-month data found yet, so this month is shown on its own. The comparison will fill in when last month has released requests.";
+  const current = comparison.current || { qty: 0, amount: 0 };
+  const previous = comparison.previous_comparable || { qty: 0, amount: 0 };
+  const fullPrevious = comparison.previous_full || { qty: 0, amount: 0 };
+  const hasPrevious = Boolean(comparison.has_previous_data);
+  const currentLabel = reportSummaryMonthLabel(comparison.current_month);
+  const previousLabel = reportSummaryMonthLabel(comparison.previous_month);
+  const deptRows = (comparison.departments || []).map(row => [
+    row.name || "—",
+    reportSummaryCurrency(reportSummaryNumber(row.current_amount)),
+    hasPrevious ? reportSummaryCurrency(reportSummaryNumber(row.previous_amount)) : "—",
+    hasPrevious
+      ? reportSummaryChangeCell(reportSummaryNumber(row.current_amount), reportSummaryNumber(row.previous_amount))
+      : "N/A",
+  ]);
+  const productRows = (comparison.products || []).map(row => [
+    row.sku || "—",
+    row.description || "—",
+    reportSummaryCurrency(reportSummaryNumber(row.current_amount)),
+    hasPrevious ? reportSummaryCurrency(reportSummaryNumber(row.previous_amount)) : "—",
+    hasPrevious
+      ? reportSummaryChangeCell(reportSummaryNumber(row.current_amount), reportSummaryNumber(row.previous_amount))
+      : "N/A",
+  ]);
   reportSummaryHero(content, [
-    ["THIS MONTH (MTD)", reportSummaryCurrency(current.amount), `${current.qty} units`, "var(--rs-accent)"],
-    ["LAST MONTH (SAME DAYS)", hasPrevious ? reportSummaryCurrency(previous.amount) : "—", hasPrevious ? `${previous.qty} units` : "no data for last month", "#a78bfa"],
-    ["CHANGE (MTD VS MTD)", hasPrevious ? reportSummaryFormatPercent(current.amount, previous.amount) : "N/A", hasPrevious ? "same number of days" : "nothing to compare yet", "#2dd4bf"],
-    ["LAST MONTH (FULL)", hasPrevious ? reportSummaryCurrency(fullPrevious.amount) : "—", hasPrevious ? `${fullPrevious.qty} units` : "no data for last month", "#f472b6"],
+    [`${currentLabel.toLocaleUpperCase()} (MTD)`, reportSummaryCurrency(reportSummaryNumber(current.amount)), `${reportSummaryNumber(current.qty).toLocaleString("en-US")} units`, "var(--rs-accent)"],
+    [`${previousLabel.toLocaleUpperCase()} (SAME DAYS)`, hasPrevious ? reportSummaryCurrency(reportSummaryNumber(previous.amount)) : "—", hasPrevious ? `${reportSummaryNumber(previous.qty).toLocaleString("en-US")} units` : "no matching Sales data", "#a78bfa"],
+    ["CHANGE (MTD VS MTD)", hasPrevious ? reportSummaryFormatPercent(reportSummaryNumber(current.amount), reportSummaryNumber(previous.amount)) : "N/A", hasPrevious ? `first ${comparison.comparable_day} days` : "nothing to compare yet", "#2dd4bf"],
+    [`${previousLabel.toLocaleUpperCase()} (FULL)`, hasPrevious ? reportSummaryCurrency(reportSummaryNumber(fullPrevious.amount)) : "—", hasPrevious ? `${reportSummaryNumber(fullPrevious.qty).toLocaleString("en-US")} units` : "no last-month data", "#f472b6"],
   ], [
-    reportSummaryNote(`MTD compares this month with the same number of days last month. ${noLast} Values are estimates from released requests (approved quantity × SRP).`),
+    reportSummaryNote(`Actual quantities and sales amounts from the Sales sheet. Month-to-date is compared with the first ${comparison.comparable_day} days of ${previousLabel}; the full previous-month total is shown for reference.`),
     reportSummaryElement("div", "report-summary-grid"),
   ]);
   const grid = content.querySelector(".report-summary-grid");
-  reportSummaryAddSection(grid, "BY DEPARTMENT", ["DEPARTMENT", "THIS MONTH", "LAST MONTH", "CHANGE"], deptRows, "No release records yet.");
-  reportSummaryAddSection(grid, "BY PRODUCT", ["SKU CODE", "ITEM DESCRIPTION", "THIS MONTH", "LAST MONTH", "CHANGE"], productRows, "No release records yet.");
+  reportSummaryAddSection(grid, "BY DEPARTMENT", ["DEPARTMENT", currentLabel.toLocaleUpperCase(), previousLabel.toLocaleUpperCase(), "CHANGE"], deptRows, "No sales recorded in these periods.");
+  reportSummaryAddSection(grid, "BY PRODUCT", ["SKU CODE", "ITEM DESCRIPTION", currentLabel.toLocaleUpperCase(), previousLabel.toLocaleUpperCase(), "CHANGE"], productRows, "No sales recorded in these periods.");
 }
 
 function reportSummaryFilterStockRows(rows, query = reportSummarySearch) {
@@ -3018,10 +3018,10 @@ function reportSummaryRenderReference() {
   content.replaceChildren();
   if (tab.id === "DAILY_SALES") reportSummaryRenderDailyReference(content, reportSummaryData.sales_daily);
   else if (tab.id === "TOP_RANK") reportSummaryRenderTopRankReference(content);
+  else if (tab.id === "MONTH_COMPARE") reportSummaryRenderMonthCompareReference(content, reportSummaryData.month_compare);
   else {
     const transactions = reportSummaryTransactions();
-    if (tab.id === "MONTH_COMPARE") reportSummaryRenderMonthCompareReference(content, transactions);
-    else if (["CRITICAL_STOCK", "OUT_OF_STOCK", "STOCK_AVAILABILITY"].includes(tab.id)) reportSummaryRenderStockReference(content, tab.id);
+    if (["CRITICAL_STOCK", "OUT_OF_STOCK", "STOCK_AVAILABILITY"].includes(tab.id)) reportSummaryRenderStockReference(content, tab.id);
     else if (["NEAR_EXPIRATION", "EXPIRATION_MONITORING"].includes(tab.id)) reportSummaryRenderExpiryReference(content, tab.id);
     else if (tab.id === "AGING") reportSummaryRenderAgingReference(content);
     else if (tab.id === "HISTORICAL_DATA") reportSummaryRenderHistoryReference(content, transactions);
@@ -3059,7 +3059,9 @@ function renderReportSummaryTabs() {
       reportSummaryActiveTab = tab.id;
       reportSummarySearch = "";
       renderReportSummary();
-      if (tab.id === "TOP_RANK" ? !reportSummaryTopRankLoaded : tab.id !== "DAILY_SALES" && !reportSummaryOverviewLoaded) {
+      if (tab.id === "TOP_RANK" ? !reportSummaryTopRankLoaded
+        : tab.id === "MONTH_COMPARE" ? !reportSummaryMonthCompareLoaded
+        : tab.id !== "DAILY_SALES" && !reportSummaryOverviewLoaded) {
         void loadReportSummary();
       }
     });
@@ -3076,11 +3078,16 @@ function renderReportSummary() {
 async function loadReportSummary(force = false) {
   const dailySalesOnly = reportSummaryActiveTab === "DAILY_SALES";
   const topRankOnly = reportSummaryActiveTab === "TOP_RANK";
+  const monthCompareOnly = reportSummaryActiveTab === "MONTH_COMPARE";
   if (topRankOnly && reportSummaryTopRankLoaded && !force) {
     renderReportSummary();
     return;
   }
-  if (!dailySalesOnly && !topRankOnly && reportSummaryOverviewLoaded && !force) {
+  if (monthCompareOnly && reportSummaryMonthCompareLoaded && !force) {
+    renderReportSummary();
+    return;
+  }
+  if (!dailySalesOnly && !topRankOnly && !monthCompareOnly && reportSummaryOverviewLoaded && !force) {
     renderReportSummary();
     return;
   }
@@ -3093,7 +3100,10 @@ async function loadReportSummary(force = false) {
   button.disabled = true;
   status.textContent = "Loading summary report data…";
   try {
-    const action = dailySalesOnly ? "report_summary_daily_sales" : topRankOnly ? "report_summary_top_rank" : "report_summary";
+    const action = dailySalesOnly ? "report_summary_daily_sales"
+      : topRankOnly ? "report_summary_top_rank"
+      : monthCompareOnly ? "report_summary_month_compare"
+      : "report_summary";
     const result = await requestSheetData(action);
     if (loadId !== reportSummaryLoadId || activePageId !== "report-summary" || currentSession?.user.id !== userId) return;
     if (dailySalesOnly) {
@@ -3103,6 +3113,11 @@ async function loadReportSummary(force = false) {
     } else if (topRankOnly) {
       reportSummaryData.top_rank = reportSummaryNormalizeTopRank(result.top_rank);
       reportSummaryTopRankLoaded = true;
+    } else if (monthCompareOnly) {
+      reportSummaryData.month_compare = result.month_compare && typeof result.month_compare === "object"
+        ? result.month_compare
+        : null;
+      reportSummaryMonthCompareLoaded = true;
     } else {
       reportSummaryData = {
         requests: Array.isArray(result.requests) ? result.requests : [],
@@ -3112,6 +3127,7 @@ async function loadReportSummary(force = false) {
           ? result.sales_daily
           : { daily: [], today_products: [] },
         top_rank: reportSummaryNormalizeTopRank(result.top_rank),
+        month_compare: reportSummaryData.month_compare,
       };
       reportSummaryOverviewLoaded = true;
       reportSummaryTopRankLoaded = true;
@@ -3122,7 +3138,9 @@ async function loadReportSummary(force = false) {
       ? `Updated ${updatedAt} · Sales.`
       : topRankOnly
         ? `Updated ${updatedAt} · Daily and monthly Sales top rank.`
-        : `Updated ${updatedAt} · Sales, ${reportSummaryData.products_tab}, and request history.`;
+        : monthCompareOnly
+          ? `Updated ${updatedAt} · Month comparison from Sales.`
+          : `Updated ${updatedAt} · Sales, ${reportSummaryData.products_tab}, and request history.`;
   } catch (error) {
     if (loadId !== reportSummaryLoadId || currentSession?.user.id !== userId) return;
     console.error("Unable to load the summary report.", error);

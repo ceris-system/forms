@@ -1531,6 +1531,161 @@ async function loadTopRank(
   return { daily: buildRankings("daily"), monthly: buildRankings("monthly") };
 }
 
+async function loadMonthSalesComparison(spreadsheetId: string): Promise<{
+  current_month: string;
+  previous_month: string;
+  comparable_day: number;
+  has_previous_data: boolean;
+  current: { qty: number; amount: number };
+  previous_comparable: { qty: number; amount: number };
+  previous_full: { qty: number; amount: number };
+  departments: {
+    name: string;
+    current_qty: number;
+    current_amount: number;
+    previous_qty: number;
+    previous_amount: number;
+  }[];
+  products: {
+    sku: string;
+    description: string;
+    current_qty: number;
+    current_amount: number;
+    previous_qty: number;
+    previous_amount: number;
+  }[];
+}> {
+  const [headerRows] = await readValuesBatch(spreadsheetId, [a1Range("Sales", "1:2")]);
+  const dateHeaders = headerRows?.[0] || [];
+  const metricHeaders = headerRows?.[1] || [];
+  const todayParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type: string) => todayParts.find(item => item.type === type)?.value || "";
+  const today = `${part("year")}-${part("month")}-${part("day")}`;
+  const [year, month, day] = today.split("-").map(Number);
+  const currentMonthStart = `${year}-${String(month).padStart(2, "0")}-01`;
+  const previousMonthDate = new Date(Date.UTC(year, month - 2, 1));
+  const previousYear = previousMonthDate.getUTCFullYear();
+  const previousMonthNumber = previousMonthDate.getUTCMonth() + 1;
+  const previousMonthStart = `${previousYear}-${String(previousMonthNumber).padStart(2, "0")}-01`;
+  const previousMonthEnd = new Date(Date.UTC(year, month - 1, 0)).getUTCDate();
+  const previousMonthFullEnd = `${previousYear}-${String(previousMonthNumber).padStart(2, "0")}-${String(previousMonthEnd).padStart(2, "0")}`;
+  const comparableDay = Math.min(day, previousMonthEnd);
+  const previousComparableEnd = `${previousYear}-${String(previousMonthNumber).padStart(2, "0")}-${String(comparableDay).padStart(2, "0")}`;
+  const dateColumns: { date: string; qtyColumn: number; salesColumn: number }[] = [];
+  for (let salesColumn = 0; salesColumn < metricHeaders.length; salesColumn++) {
+    if (String(metricHeaders[salesColumn] ?? "").trim().toLocaleUpperCase() !== "SALES") continue;
+    const qtyColumn = salesColumn - 1;
+    if (qtyColumn < 0 || String(metricHeaders[qtyColumn] ?? "").trim().toLocaleUpperCase() !== "QTY RELEASED") continue;
+    const date = salesSheetDateKey(dateHeaders[salesColumn]) || salesSheetDateKey(dateHeaders[qtyColumn]);
+    if (!date || date < previousMonthStart || date > today) continue;
+    dateColumns.push({ date, qtyColumn, salesColumn });
+  }
+  const ranges = [
+    a1Range("Sales", "A3:H"),
+    ...dateColumns.flatMap(({ qtyColumn, salesColumn }) => [
+      a1Range("Sales", `${salesSheetColumn(qtyColumn)}3:${salesSheetColumn(qtyColumn)}`),
+      a1Range("Sales", `${salesSheetColumn(salesColumn)}3:${salesSheetColumn(salesColumn)}`),
+    ]),
+  ];
+  const values = await readValuesBatch(spreadsheetId, ranges);
+  const productRows = values[0] || [];
+  const emptyTotals = () => ({ qty: 0, amount: 0 });
+  const current = emptyTotals();
+  const previousComparable = emptyTotals();
+  const previousFull = emptyTotals();
+  const departments = new Map<string, {
+    current: { qty: number; amount: number };
+    previousComparable: { qty: number; amount: number };
+  }>();
+  const products = new Map<string, {
+    sku: string;
+    description: string;
+    current: { qty: number; amount: number };
+    previousComparable: { qty: number; amount: number };
+  }>();
+  const add = (target: { qty: number; amount: number }, qty: number, amount: number) => {
+    target.qty += qty;
+    target.amount += amount;
+  };
+  const hasPreviousData = dateColumns.some(({ date }) => date >= previousMonthStart && date <= previousComparableEnd);
+
+  productRows.forEach((row, rowIndex) => {
+    const sku = String(row[0] ?? "").trim();
+    if (!sku) return;
+    const description = String(row[1] ?? "").trim();
+    const department = String(row[5] ?? "").trim();
+    const product = products.get(sku) || {
+      sku,
+      description,
+      current: emptyTotals(),
+      previousComparable: emptyTotals(),
+    };
+    const departmentTotals = department
+      ? departments.get(department) || { current: emptyTotals(), previousComparable: emptyTotals() }
+      : null;
+    for (const [index, columns] of dateColumns.entries()) {
+      const qty = salesSheetNumber(values[index * 2 + 1]?.[rowIndex]?.[0]);
+      const amount = salesSheetNumber(values[index * 2 + 2]?.[rowIndex]?.[0]);
+      if (columns.date >= currentMonthStart && columns.date <= today) {
+        add(current, qty, amount);
+        add(product.current, qty, amount);
+        if (departmentTotals) add(departmentTotals.current, qty, amount);
+      } else if (columns.date >= previousMonthStart && columns.date <= previousMonthFullEnd) {
+        add(previousFull, qty, amount);
+        if (columns.date <= previousComparableEnd) {
+          add(previousComparable, qty, amount);
+          add(product.previousComparable, qty, amount);
+          if (departmentTotals) add(departmentTotals.previousComparable, qty, amount);
+        }
+      }
+    }
+    products.set(sku, product);
+    if (department && departmentTotals) departments.set(department, departmentTotals);
+  });
+
+  const rounded = (totals: { qty: number; amount: number }) => ({
+    qty: totals.qty,
+    amount: Math.round(totals.amount * 100) / 100,
+  });
+  return {
+    current_month: currentMonthStart.slice(0, 7),
+    previous_month: previousMonthStart.slice(0, 7),
+    comparable_day: comparableDay,
+    has_previous_data: hasPreviousData,
+    current: rounded(current),
+    previous_comparable: rounded(previousComparable),
+    previous_full: rounded(previousFull),
+    departments: [...departments.entries()]
+      .filter(([, totals]) => totals.current.qty || totals.current.amount
+        || totals.previousComparable.qty || totals.previousComparable.amount)
+      .map(([name, totals]) => ({
+        name,
+        current_qty: totals.current.qty,
+        current_amount: Math.round(totals.current.amount * 100) / 100,
+        previous_qty: totals.previousComparable.qty,
+        previous_amount: Math.round(totals.previousComparable.amount * 100) / 100,
+      }))
+      .sort((left, right) => left.name.localeCompare(right.name)),
+    products: [...products.values()]
+      .filter(product => product.current.qty || product.current.amount || product.previousComparable.qty
+        || product.previousComparable.amount)
+      .map(product => ({
+        sku: product.sku,
+        description: product.description,
+        current_qty: product.current.qty,
+        current_amount: Math.round(product.current.amount * 100) / 100,
+        previous_qty: product.previousComparable.qty,
+        previous_amount: Math.round(product.previousComparable.amount * 100) / 100,
+      }))
+      .sort((left, right) => right.current_amount - left.current_amount || right.current_qty - left.current_qty),
+  };
+}
+
 Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method !== "POST") return respond({ error: "Method not allowed." }, 405);
@@ -1617,6 +1772,7 @@ Deno.serve(async (request: Request) => {
       || body.action === "reports_history"
       || body.action === "report_summary_daily_sales"
       || body.action === "report_summary_top_rank"
+      || body.action === "report_summary_month_compare"
       || body.action === "report_summary"
       || body.action === "workflow_counts"
       || body.action === "workflow_action") {
@@ -1682,6 +1838,10 @@ Deno.serve(async (request: Request) => {
       if (body.action === "report_summary_top_rank") {
         if (!user.isAdmin) return respond({ error: "Admin access is required to view the summary report." }, 403);
         return respond({ top_rank: await loadTopRank(settings.spreadsheet_id) });
+      }
+      if (body.action === "report_summary_month_compare") {
+        if (!user.isAdmin) return respond({ error: "Admin access is required to view the summary report." }, 403);
+        return respond({ month_compare: await loadMonthSalesComparison(settings.spreadsheet_id) });
       }
       if (body.action === "report_summary") {
         if (!user.isAdmin) return respond({ error: "Admin access is required to view the summary report." }, 403);
