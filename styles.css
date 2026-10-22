@@ -201,6 +201,13 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .report-summary-table thead { position: sticky; z-index: 3; top: 66px; }
 .report-summary-table th { position: relative; z-index: 1; padding: 11px 9px; border-bottom: 1px solid #dce5ed; background: #edf4f8; box-shadow: 0 2px 4px rgb(36 55 75 / 5%); color: #334b60; font-size: 8px; letter-spacing: .45px; text-align: left; overflow-wrap: anywhere; }
 .report-summary-table td { padding: 10px 9px; border-top: 1px solid #edf1f4; color: #46586a; font-size: 8px; overflow-wrap: anywhere; white-space: normal; }
+.report-summary-stock-table th,
+.report-summary-stock-table td { white-space: normal; overflow-wrap: anywhere; }
+.report-summary-stock-table th:nth-child(1), .report-summary-stock-table td:nth-child(1) { width: 20%; }
+.report-summary-stock-table th:nth-child(2), .report-summary-stock-table td:nth-child(2) { width: 17%; }
+.report-summary-stock-table th:nth-child(3), .report-summary-stock-table td:nth-child(3) { width: 25%; }
+.report-summary-stock-table th:nth-child(4), .report-summary-stock-table td:nth-child(4) { width: 18%; }
+.report-summary-stock-table th:nth-child(5), .report-summary-stock-table td:nth-child(5) { width: 20%; }
 .report-summary-table-centered th:nth-child(1), .report-summary-table-centered td:nth-child(1),
 .report-summary-table-centered th:nth-child(2), .report-summary-table-centered td:nth-child(2) { text-align: left; }
 .report-summary-table-centered th:nth-child(n+3), .report-summary-table-centered td:nth-child(n+3) { text-align: center; }

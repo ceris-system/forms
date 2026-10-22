@@ -2490,6 +2490,9 @@ function reportSummaryAddSection(content, title, headers, rows, emptyText, note 
   panel.append(reportSummarySectionHeading(title));
   if (note) panel.append(reportSummaryNote(note));
   panel.append(reportSummaryTable(headers, rows, emptyText));
+  if (headers[0] === "DEPARTMENT" && headers[1] === "SKU CODE" && headers[2] === "ITEM DESCRIPTION") {
+    panel.querySelector(".report-summary-table").classList.add("report-summary-stock-table");
+  }
   content.append(panel);
   return panel;
 }
