@@ -208,6 +208,14 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .report-summary-stock-table th:nth-child(3), .report-summary-stock-table td:nth-child(3) { width: 25%; }
 .report-summary-stock-table th:nth-child(4), .report-summary-stock-table td:nth-child(4) { width: 18%; }
 .report-summary-stock-table th:nth-child(5), .report-summary-stock-table td:nth-child(5) { width: 20%; }
+.report-summary-expiry-table th,
+.report-summary-expiry-table td { white-space: normal; overflow-wrap: anywhere; }
+.report-summary-expiry-table th:nth-child(1), .report-summary-expiry-table td:nth-child(1) { width: 15%; }
+.report-summary-expiry-table th:nth-child(2), .report-summary-expiry-table td:nth-child(2) { width: 16%; }
+.report-summary-expiry-table th:nth-child(3), .report-summary-expiry-table td:nth-child(3) { width: 27%; }
+.report-summary-expiry-table th:nth-child(4), .report-summary-expiry-table td:nth-child(4) { width: 17%; }
+.report-summary-expiry-table th:nth-child(5), .report-summary-expiry-table td:nth-child(5) { width: 14%; }
+.report-summary-expiry-table th:nth-child(6), .report-summary-expiry-table td:nth-child(6) { width: 11%; }
 .report-summary-table-centered th:nth-child(1), .report-summary-table-centered td:nth-child(1),
 .report-summary-table-centered th:nth-child(2), .report-summary-table-centered td:nth-child(2) { text-align: left; }
 .report-summary-table-centered th:nth-child(n+3), .report-summary-table-centered td:nth-child(n+3) { text-align: center; }

@@ -2493,6 +2493,10 @@ function reportSummaryAddSection(content, title, headers, rows, emptyText, note 
   if (headers[0] === "DEPARTMENT" && headers[1] === "SKU CODE" && headers[2] === "ITEM DESCRIPTION") {
     panel.querySelector(".report-summary-table").classList.add("report-summary-stock-table");
   }
+  if (headers[0] === "DEPARTMENT" && headers[3] === "EXPIRATION DATE" &&
+    headers[4] === "DAYS LEFT" && headers[5] === "QTY ONHAND") {
+    panel.querySelector(".report-summary-table").classList.add("report-summary-expiry-table");
+  }
   content.append(panel);
   return panel;
 }

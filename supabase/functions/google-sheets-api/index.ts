@@ -1523,7 +1523,7 @@ async function loadTopRank(
   daily: { departments: string[][]; products: string[][] };
   monthly: { departments: string[][]; products: string[][] };
 }> {
-  const [headerRows] = await readValuesBatch(spreadsheetId, [a1Range("Sales", "1:2")]);
+  const headerRows = await readValues(spreadsheetId, "Sales", "1:2");
   const dateHeaders = headerRows?.[0] || [];
   const metricHeaders = headerRows?.[1] || [];
   const todayParts = new Intl.DateTimeFormat("en-US", {
@@ -2067,13 +2067,17 @@ Deno.serve(async (request: Request) => {
       }
       if (body.action === "report_summary") {
         if (!user.isAdmin) return respond({ error: "Admin access is required to view the summary report." }, 403);
-        const [requests, productRows, dataRows, salesData, topRank] = await Promise.all([
+        const [requests, stockValues, salesData, topRank] = await Promise.all([
           loadWorkflowRequests(settings.spreadsheet_id, "all", "", "", true, Object.keys(requestTabs)),
-          readValues(settings.spreadsheet_id, settings.products_tab || "data", "A2:N"),
-          readValues(settings.spreadsheet_id, "data", "A2:M"),
+          readValuesBatch(settings.spreadsheet_id, [
+            a1Range(settings.products_tab || "data", "A2:N"),
+            a1Range("data", "A2:M"),
+          ]),
           loadDailySales(settings.spreadsheet_id),
           loadTopRank(settings.spreadsheet_id),
         ]);
+        const productRows = stockValues[0] || [];
+        const dataRows = stockValues[1] || [];
         const stockStatusByKey = new Map<string, string>();
         for (const row of dataRows) {
           const sku = String(row[0] ?? "").trim();
