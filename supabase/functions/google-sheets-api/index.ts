@@ -1392,7 +1392,7 @@ async function loadDailySales(
     dateColumns.push({ date, qtyColumn, salesColumn });
   }
   const ranges = [
-    a1Range("Sales", "A3:F"),
+    a1Range("Sales", "A3:H"),
     ...dateColumns.flatMap(({ qtyColumn, salesColumn }) => [
       a1Range("Sales", `${salesSheetColumn(qtyColumn)}3:${salesSheetColumn(qtyColumn)}`),
       a1Range("Sales", `${salesSheetColumn(salesColumn)}3:${salesSheetColumn(salesColumn)}`),
@@ -1401,7 +1401,6 @@ async function loadDailySales(
   const values = ranges.length > 1 ? await readValuesBatch(spreadsheetId, ranges) : [[]];
   const products = values[0] || [];
   const dailyByDate = new Map<string, { date: string; qty: number; amount: number }>();
-  let todayProductValues: unknown[][] = [];
   for (const [index, columns] of dateColumns.entries()) {
     const qtyValues = values[index * 2 + 1] || [];
     const salesValues = values[index * 2 + 2] || [];
@@ -1412,18 +1411,15 @@ async function loadDailySales(
     if (!dailyByDate.has(columns.date)) {
       dailyByDate.set(columns.date, { date: columns.date, qty, amount: Math.round(amount * 100) / 100 });
     }
-    if (columns.date === todayKey && !todayProductValues.length) todayProductValues = [qtyValues, salesValues];
   }
-  const todayQtyValues = todayProductValues[0] || [];
-  const todaySalesValues = todayProductValues[1] || [];
   const productsBySku = new Map<string, Record<string, unknown>>();
-  products.forEach((row, index) => {
+  products.forEach(row => {
     const sku = String(row[0] ?? "").trim();
     const description = String(row[1] ?? "").trim();
-    const qty = salesSheetNumber(todayQtyValues[index]?.[0]);
-    const amount = salesSheetNumber(todaySalesValues[index]?.[0]);
+    const qty = salesSheetNumber(row[6]);
+    const amount = salesSheetNumber(row[7]);
     if (!sku || (!qty && !amount)) return;
-    const key = `${sku}\u0000${description}`;
+    const key = sku;
     const product = productsBySku.get(key) || {
       sku_code: sku,
       description,
@@ -1434,6 +1430,17 @@ async function loadDailySales(
     product.qty = Number(product.qty) + qty;
     product.amount = Number(product.amount) + amount;
     productsBySku.set(key, product);
+  });
+  let todayQty = 0;
+  let todayAmount = 0;
+  for (const product of productsBySku.values()) {
+    todayQty += Number(product.qty);
+    todayAmount += Number(product.amount);
+  }
+  dailyByDate.set(todayKey, {
+    date: todayKey,
+    qty: todayQty,
+    amount: Math.round(todayAmount * 100) / 100,
   });
   const today_products = [...productsBySku.values()]
     .map(product => ({ ...product, amount: Math.round(Number(product.amount) * 100) / 100 }))
@@ -1471,7 +1478,7 @@ async function loadTopRank(
   }
 
   const ranges = [
-    a1Range("Sales", "A3:F"),
+    a1Range("Sales", "A3:H"),
     ...dateColumns.flatMap(({ qtyColumn, salesColumn }) => [
       a1Range("Sales", `${salesSheetColumn(qtyColumn)}3:${salesSheetColumn(qtyColumn)}`),
       a1Range("Sales", `${salesSheetColumn(salesColumn)}3:${salesSheetColumn(salesColumn)}`),
@@ -1488,13 +1495,17 @@ async function loadTopRank(
       const department = String(row[5] ?? "").trim();
       let qty = 0;
       let amount = 0;
-      for (const [index, columns] of dateColumns.entries()) {
-        if (period === "daily" && columns.date !== todayKey) continue;
-        qty += salesSheetNumber(values[index * 2 + 1]?.[rowIndex]?.[0]);
-        amount += salesSheetNumber(values[index * 2 + 2]?.[rowIndex]?.[0]);
+      if (period === "daily") {
+        qty = salesSheetNumber(row[6]);
+        amount = salesSheetNumber(row[7]);
+      } else {
+        for (const [index, columns] of dateColumns.entries()) {
+          qty += salesSheetNumber(values[index * 2 + 1]?.[rowIndex]?.[0]);
+          amount += salesSheetNumber(values[index * 2 + 2]?.[rowIndex]?.[0]);
+        }
       }
       if (!sku || qty === 0) return;
-      const key = `${sku}\u0000${description}`;
+      const key = sku;
       const product = productTotals.get(key) || { sku, description, qty: 0, amount: 0 };
       product.qty += qty;
       product.amount += amount;
