@@ -480,34 +480,41 @@
         <button class="dialog-close" id="close-inventory-alerts" type="button" aria-label="Close inventory alerts">✖️</button>
       </header>
       <div class="inventory-alert-summary" aria-label="Alert counts">
-        <div class="inventory-alert-summary-card"><span aria-hidden="true">⌛</span><div><small>NEAR EXPIRATION</small><strong data-alert-summary-count="near">0</strong></div></div>
-        <div class="inventory-alert-summary-card"><span aria-hidden="true">!</span><div><small>EXPIRED</small><strong data-alert-summary-count="expired">0</strong></div></div>
-        <div class="inventory-alert-summary-card"><span aria-hidden="true">↓</span><div><small>CRITICAL STOCK</small><strong data-alert-summary-count="critical">0</strong></div></div>
-        <div class="inventory-alert-summary-card"><span aria-hidden="true">0</span><div><small>OUT OF STOCK</small><strong data-alert-summary-count="out">0</strong></div></div>
-        <div class="inventory-alert-summary-card"><span aria-hidden="true">↗</span><div><small>AGING ITEMS</small><strong data-alert-summary-count="aging">0</strong></div></div>
+        <button class="inventory-alert-summary-card" type="button" data-alert-slide="0" aria-controls="inventory-alert-panels"><span aria-hidden="true">⌛</span><div><small>NEAR EXPIRATION</small><strong data-alert-summary-count="near">0</strong></div></button>
+        <button class="inventory-alert-summary-card" type="button" data-alert-slide="1" aria-controls="inventory-alert-panels"><span aria-hidden="true">!</span><div><small>EXPIRED</small><strong data-alert-summary-count="expired">0</strong></div></button>
+        <button class="inventory-alert-summary-card" type="button" data-alert-slide="2" aria-controls="inventory-alert-panels"><span aria-hidden="true">↓</span><div><small>CRITICAL STOCK</small><strong data-alert-summary-count="critical">0</strong></div></button>
+        <button class="inventory-alert-summary-card" type="button" data-alert-slide="3" aria-controls="inventory-alert-panels"><span aria-hidden="true">0</span><div><small>OUT OF STOCK</small><strong data-alert-summary-count="out">0</strong></div></button>
+        <button class="inventory-alert-summary-card" type="button" data-alert-slide="4" aria-controls="inventory-alert-panels"><span aria-hidden="true">↗</span><div><small>AGING ITEMS</small><strong data-alert-summary-count="aging">0</strong></div></button>
       </div>
-      <div class="inventory-alert-grid">
-        <section class="inventory-alert-panel" aria-labelledby="inventory-alert-near-title">
+      <div class="inventory-alert-carousel" aria-roledescription="carousel" aria-label="Department inventory alerts">
+        <button class="inventory-alert-carousel-arrow" type="button" data-alert-previous aria-label="Show previous alert category" aria-controls="inventory-alert-panels">‹</button>
+        <div class="inventory-alert-viewport">
+          <div class="inventory-alert-grid" id="inventory-alert-panels">
+        <section class="inventory-alert-panel" data-alert-panel aria-labelledby="inventory-alert-near-title">
           <h3 id="inventory-alert-near-title">Near expiration <span id="inventory-alert-near-count">0</span></h3>
           <div class="inventory-alert-table-wrap" id="inventory-alert-near"></div>
         </section>
-        <section class="inventory-alert-panel" aria-labelledby="inventory-alert-expired-title">
+        <section class="inventory-alert-panel" data-alert-panel aria-labelledby="inventory-alert-expired-title">
           <h3 id="inventory-alert-expired-title">Expired <span id="inventory-alert-expired-count">0</span></h3>
           <div class="inventory-alert-table-wrap" id="inventory-alert-expired"></div>
         </section>
-        <section class="inventory-alert-panel" aria-labelledby="inventory-alert-critical-title">
+        <section class="inventory-alert-panel" data-alert-panel aria-labelledby="inventory-alert-critical-title">
           <h3 id="inventory-alert-critical-title">Critical stock <span id="inventory-alert-critical-count">0</span></h3>
           <div class="inventory-alert-table-wrap" id="inventory-alert-critical"></div>
         </section>
-        <section class="inventory-alert-panel" aria-labelledby="inventory-alert-out-title">
+        <section class="inventory-alert-panel" data-alert-panel aria-labelledby="inventory-alert-out-title">
           <h3 id="inventory-alert-out-title">Out of stock <span id="inventory-alert-out-count">0</span></h3>
           <div class="inventory-alert-table-wrap" id="inventory-alert-out"></div>
         </section>
-        <section class="inventory-alert-panel inventory-alert-aging-panel" aria-labelledby="inventory-alert-aging-title">
+        <section class="inventory-alert-panel inventory-alert-aging-panel" data-alert-panel aria-labelledby="inventory-alert-aging-title">
           <h3 id="inventory-alert-aging-title">Aging information <span id="inventory-alert-aging-count">0</span></h3>
           <div class="inventory-alert-table-wrap" id="inventory-alert-aging"></div>
         </section>
+          </div>
+        </div>
+        <button class="inventory-alert-carousel-arrow" type="button" data-alert-next aria-label="Show next alert category" aria-controls="inventory-alert-panels">›</button>
       </div>
+      <p class="inventory-alert-carousel-status" data-alert-slide-status aria-live="polite">1 of 5 · Near expiration</p>
     </dialog>
     <dialog class="catalog-dialog auth-dialog" id="password-change-dialog" aria-labelledby="password-change-title">
       <form id="password-change-form">

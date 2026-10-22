@@ -85,6 +85,8 @@ const IDLE_SIGN_OUT_DELAY = 10 * 60 * 1000;
 let idleSignOutTimer = null;
 let inventoryRows = [];
 let inventoryAlertRows = [];
+let inventoryAlertSlideIndex = 0;
+const inventoryAlertCountFrames = new Map();
 let inventoryCategories = [];
 let inventoryDepartment = "";
 let inventoryRowsDepartment = "";
@@ -641,6 +643,42 @@ function renderInventoryAlertTable(targetId, rows, emptyText) {
   target.append(table);
 }
 
+function animateInventoryAlertCount(key, targetCount) {
+  const counters = [
+    document.querySelector(`[data-alert-summary-count="${key}"]`),
+    document.querySelector(`#inventory-alert-${key}-count`),
+  ];
+  const previousFrame = inventoryAlertCountFrames.get(key);
+  if (previousFrame) cancelAnimationFrame(previousFrame);
+  const startCount = Number(counters[0].textContent) || 0;
+  const duration = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 550;
+  const startTime = performance.now();
+  const update = now => {
+    const progress = duration ? Math.min((now - startTime) / duration, 1) : 1;
+    const eased = 1 - (1 - progress) ** 3;
+    const count = String(Math.round(startCount + (targetCount - startCount) * eased));
+    counters.forEach(counter => { counter.textContent = count; });
+    if (progress < 1) inventoryAlertCountFrames.set(key, requestAnimationFrame(update));
+    else inventoryAlertCountFrames.delete(key);
+  };
+  inventoryAlertCountFrames.set(key, requestAnimationFrame(update));
+}
+
+function setInventoryAlertSlide(index) {
+  const panels = [...document.querySelectorAll("[data-alert-panel]")];
+  const labels = ["Near expiration", "Expired", "Critical stock", "Out of stock", "Aging information"];
+  if (!panels.length) return;
+  inventoryAlertSlideIndex = Math.max(0, Math.min(index, panels.length - 1));
+  document.querySelector("#inventory-alert-panels").style.transform = `translateX(-${inventoryAlertSlideIndex * 20}%)`;
+  document.querySelector("[data-alert-slide-status]").textContent =
+    `${inventoryAlertSlideIndex + 1} of ${panels.length} · ${labels[inventoryAlertSlideIndex]}`;
+  document.querySelector("[data-alert-previous]").disabled = inventoryAlertSlideIndex === 0;
+  document.querySelector("[data-alert-next]").disabled = inventoryAlertSlideIndex === panels.length - 1;
+  document.querySelectorAll("[data-alert-slide]").forEach((button, buttonIndex) => {
+    button.setAttribute("aria-pressed", String(buttonIndex === inventoryAlertSlideIndex));
+  });
+}
+
 function renderInventoryAlerts(department) {
   const rows = inventoryAlertRows;
   const parsed = rows.map(row => ({ row, expiry: reportSummaryParseExpiry(row.expiry) }));
@@ -659,7 +697,7 @@ function renderInventoryAlerts(department) {
   };
   const setCount = (key, count) => {
     document.querySelector(`#${countIds[key]}`).textContent = String(count);
-    document.querySelector(`[data-alert-summary-count="${key}"]`).textContent = String(count);
+    animateInventoryAlertCount(key, count);
   };
   const stockCells = row => [row.sku_code, row.description, row.on_hand, formatDisplayDate(row.last_received) || row.last_received];
   const expiryRows = entries => entries.map(({ row, expiry }) => ({
@@ -704,6 +742,7 @@ function renderInventoryAlerts(department) {
   setCount("out", outOfStock.length);
   setCount("aging", agingRows.length);
   document.querySelector("#inventory-alert-department").textContent = `Department: ${department}`;
+  setInventoryAlertSlide(0);
   return near.length + expired.length + critical.length + outOfStock.length + agingRows.length;
 }
 
@@ -3977,6 +4016,25 @@ document.querySelectorAll(".history-page").forEach(section => {
 document.querySelector("#inventory-search").addEventListener("input", renderInventoryRows);
 document.querySelector("#close-inventory-alerts").addEventListener("click", () => {
   document.querySelector("#inventory-alert-dialog").close();
+});
+document.querySelectorAll("[data-alert-slide]").forEach(button => {
+  button.addEventListener("click", () => setInventoryAlertSlide(Number(button.dataset.alertSlide)));
+});
+document.querySelector("[data-alert-previous]").addEventListener("click", () => {
+  setInventoryAlertSlide(inventoryAlertSlideIndex - 1);
+});
+document.querySelector("[data-alert-next]").addEventListener("click", () => {
+  setInventoryAlertSlide(inventoryAlertSlideIndex + 1);
+});
+document.querySelector("#inventory-alert-dialog").addEventListener("keydown", event => {
+  if (event.target.matches("input, textarea, select, [contenteditable='true']")) return;
+  if (event.key === "ArrowLeft") {
+    event.preventDefault();
+    setInventoryAlertSlide(inventoryAlertSlideIndex - 1);
+  } else if (event.key === "ArrowRight") {
+    event.preventDefault();
+    setInventoryAlertSlide(inventoryAlertSlideIndex + 1);
+  }
 });
 document.querySelector("#inventory-rows").addEventListener("click", event => {
   const button = event.target.closest("[data-inventory-row]");
