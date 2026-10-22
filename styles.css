@@ -428,7 +428,18 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 #inventory .inventory-table th:nth-child(n + 3), #inventory .inventory-table td:nth-child(n + 3) { text-align: center; }
 .inventory-print-table th:nth-child(n + 3), .inventory-print-table td:nth-child(n + 3) { text-align: center; }
 .inventory-view-button { min-height: 29px; padding: 0 10px; font-size: 10px; }
-.history-table { min-width: 1900px; }
+.history-table { width: max-content; min-width: 1900px; table-layout: auto; }
+.history-table th { white-space: nowrap; overflow-wrap: normal; }
+.history-table td { white-space: nowrap; overflow-wrap: normal; }
+.history-table th:nth-child(4), .history-table td:nth-child(4),
+.history-table th:nth-child(14), .history-table td:nth-child(14),
+#po-history .history-table th:nth-child(5), #po-history .history-table td:nth-child(5),
+#po-history .history-table th:nth-child(15), #po-history .history-table td:nth-child(15) {
+  min-width: 180px;
+  max-width: 320px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .history-table th:nth-child(n + 5), .history-table td:nth-child(n + 5) { text-align: center; }
 .inventory-form-toolbar { min-height: 55px; }
 .inventory-print-heading { display: none; }
