@@ -1686,6 +1686,102 @@ async function loadMonthSalesComparison(spreadsheetId: string): Promise<{
   };
 }
 
+async function loadSalesHistory(spreadsheetId: string, requestedMonth: unknown): Promise<{
+  month: string;
+  available_months: string[];
+  rows: {
+    date: string;
+    sku: string;
+    description: string;
+    department: string;
+    qty: number;
+    srp: number;
+    amount: number;
+  }[];
+}> {
+  let month: string;
+  if (requestedMonth === undefined || requestedMonth === null || requestedMonth === "") {
+    const todayParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Manila",
+      year: "numeric",
+      month: "2-digit",
+    }).formatToParts(new Date());
+    const part = (type: string) => todayParts.find(item => item.type === type)?.value || "";
+    month = `${part("year")}-${part("month")}`;
+  } else if (typeof requestedMonth === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(requestedMonth)) {
+    month = requestedMonth;
+  } else {
+    throw new Error("The requested sales-history month is invalid.");
+  }
+  const [headerRows] = await readValuesBatch(spreadsheetId, [a1Range("Sales", "1:2")]);
+  const dateHeaders = headerRows?.[0] || [];
+  const metricHeaders = headerRows?.[1] || [];
+  const currentDateParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const currentPart = (type: string) => currentDateParts.find(item => item.type === type)?.value || "";
+  const todayKey = `${currentPart("year")}-${currentPart("month")}-${currentPart("day")}`;
+  const dateColumns: { date: string; qtyColumn: number; salesColumn: number }[] = [];
+  for (let salesColumn = 0; salesColumn < metricHeaders.length; salesColumn++) {
+    if (String(metricHeaders[salesColumn] ?? "").trim().toLocaleUpperCase() !== "SALES") continue;
+    const qtyColumn = salesColumn - 1;
+    if (qtyColumn < 0 || String(metricHeaders[qtyColumn] ?? "").trim().toLocaleUpperCase() !== "QTY RELEASED") continue;
+    const date = salesSheetDateKey(dateHeaders[salesColumn]) || salesSheetDateKey(dateHeaders[qtyColumn]);
+    if (date && date <= todayKey) dateColumns.push({ date, qtyColumn, salesColumn });
+  }
+  const availableMonths = [...new Set(dateColumns.map(column => column.date.slice(0, 7)))]
+    .sort()
+    .reverse();
+  const selectedColumns = dateColumns.filter(column => column.date.startsWith(`${month}-`));
+  const ranges = [a1Range("Sales", "A3:F")];
+  if (selectedColumns.length) {
+    const firstColumn = Math.min(...selectedColumns.map(column => column.qtyColumn));
+    const lastColumn = Math.max(...selectedColumns.map(column => column.salesColumn));
+    ranges.push(a1Range("Sales", `${salesSheetColumn(firstColumn)}3:${salesSheetColumn(lastColumn)}`));
+  }
+  const values = await readValuesBatch(spreadsheetId, ranges);
+  const productRows = values[0] || [];
+  const dailyValues = values[1] || [];
+  const firstColumn = selectedColumns.length ? Math.min(...selectedColumns.map(column => column.qtyColumn)) : 0;
+  const grouped = new Map<string, {
+    date: string;
+    sku: string;
+    description: string;
+    department: string;
+    qty: number;
+    srp: number;
+    amount: number;
+  }>();
+  for (const [rowIndex, row] of productRows.entries()) {
+    const sku = String(row[0] ?? "").trim();
+    if (!sku) continue;
+    const description = String(row[1] ?? "").trim();
+    const srp = salesSheetNumber(row[4]);
+    const department = String(row[5] ?? "").trim();
+    for (const column of selectedColumns) {
+      const salesRow = dailyValues[rowIndex] || [];
+      const qty = salesSheetNumber(salesRow[column.qtyColumn - firstColumn]);
+      const amount = salesSheetNumber(salesRow[column.salesColumn - firstColumn]);
+      if (!qty && !amount) continue;
+      const key = `${column.date}\u0000${sku}\u0000${department}`;
+      const entry = grouped.get(key) || { date: column.date, sku, description, department, qty: 0, srp, amount: 0 };
+      entry.qty += qty;
+      entry.amount += amount;
+      grouped.set(key, entry);
+    }
+  }
+  return {
+    month,
+    available_months: availableMonths,
+    rows: [...grouped.values()]
+      .map(row => ({ ...row, amount: Math.round(row.amount * 100) / 100 }))
+      .sort((left, right) => right.date.localeCompare(left.date) || left.sku.localeCompare(right.sku)),
+  };
+}
+
 Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method !== "POST") return respond({ error: "Method not allowed." }, 405);
@@ -1773,6 +1869,7 @@ Deno.serve(async (request: Request) => {
       || body.action === "report_summary_daily_sales"
       || body.action === "report_summary_top_rank"
       || body.action === "report_summary_month_compare"
+      || body.action === "report_summary_sales_history"
       || body.action === "report_summary"
       || body.action === "workflow_counts"
       || body.action === "workflow_action") {
@@ -1842,6 +1939,10 @@ Deno.serve(async (request: Request) => {
       if (body.action === "report_summary_month_compare") {
         if (!user.isAdmin) return respond({ error: "Admin access is required to view the summary report." }, 403);
         return respond({ month_compare: await loadMonthSalesComparison(settings.spreadsheet_id) });
+      }
+      if (body.action === "report_summary_sales_history") {
+        if (!user.isAdmin) return respond({ error: "Admin access is required to view the summary report." }, 403);
+        return respond({ sales_history: await loadSalesHistory(settings.spreadsheet_id, body.month) });
       }
       if (body.action === "report_summary") {
         if (!user.isAdmin) return respond({ error: "Admin access is required to view the summary report." }, 403);

@@ -65,19 +65,19 @@ let activityLogOffset = 0;
 let activityLogsHaveMore = false;
 let activityLogLoadId = 0;
 let activityLogDeleteInProgress = false;
-let reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] }, top_rank: { daily: { departments: [], products: [] }, monthly: { departments: [], products: [] } }, month_compare: null };
+let reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] }, top_rank: { daily: { departments: [], products: [] }, monthly: { departments: [], products: [] } }, month_compare: null, sales_history: null };
 let reportSummaryActiveTab = "DAILY_SALES";
 let reportSummaryTopRankPeriod = "daily";
 let reportSummaryOverviewLoaded = false;
 let reportSummaryTopRankLoaded = false;
 let reportSummaryMonthCompareLoaded = false;
+let reportSummarySalesHistoryLoaded = false;
 let reportSummaryLoadId = 0;
 let reportSummaryRefreshTimer = null;
 let reportSummarySearch = "";
-let reportSummaryHistoryMonth = "LIVE";
+let reportSummaryHistoryMonth = "CURRENT";
 let reportSummaryHistorySearch = "";
 let reportSummaryTransientStatus = "";
-let reportSummarySnapshotError = "";
 let pendingInstallPrompt = null;
 const workflowLoadIds = new Map();
 let workflowCountLoadId = 0;
@@ -1057,10 +1057,12 @@ function updateSessionUi(session, navigate = true) {
     isAdmin = false;
     lookupCache = null;
     productCatalogCache = null;
-    reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] }, top_rank: { daily: { departments: [], products: [] }, monthly: { departments: [], products: [] } }, month_compare: null };
+    reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] }, top_rank: { daily: { departments: [], products: [] }, monthly: { departments: [], products: [] } }, month_compare: null, sales_history: null };
     reportSummaryOverviewLoaded = false;
     reportSummaryTopRankLoaded = false;
     reportSummaryMonthCompareLoaded = false;
+    reportSummarySalesHistoryLoaded = false;
+    reportSummaryHistoryMonth = "CURRENT";
     reportSummaryTransientStatus = "";
     setNotificationCount(0);
     document.body.classList.remove("admin-mode");
@@ -2450,10 +2452,6 @@ function reportSummaryRenderHistory(content, transactions) {
 
 const REPORT_SUMMARY_GROUP_COLORS = { SALES: "#22d3ee", "STOCK HEALTH": "#f472b6", EXPIRATION: "#fbbf24", HISTORY: "#38bdf8" };
 
-function reportSummarySnapshotsKey() {
-  return `mw-report-summary-snapshots-v1:${currentSession?.user.id || "signed-out"}`;
-}
-
 function reportSummarySelectedTab() {
   return REPORT_SUMMARY_TABS.find(tab => tab.id === reportSummaryActiveTab) || REPORT_SUMMARY_TABS[0];
 }
@@ -2879,17 +2877,6 @@ function reportSummaryRenderAgingReference(content) {
   reportSummaryAddSection(content, "AGING PER DESCRIPTION", ["DEPARTMENT", "SKU CODE", "ITEM DESCRIPTION", "EXPIRATION DATE", "NO DATE", "0–30D", "31–60D", "61–90D", "90D+", "TOTAL QTY"], rows, "No stock on hand.");
 }
 
-function reportSummaryReadSnapshots() {
-  try {
-    const snapshots = JSON.parse(localStorage.getItem(reportSummarySnapshotsKey()) || "[]");
-    return Array.isArray(snapshots) ? snapshots.filter(snapshot => snapshot && /^\d{4}-\d{2}$/.test(snapshot.month) && Array.isArray(snapshot.rows)) : [];
-  } catch (error) {
-    console.error("Unable to read saved summary report snapshots.", error);
-    reportSummarySnapshotError = error.message || "Browser storage is unavailable.";
-    return [];
-  }
-}
-
 function reportSummaryDownload(name, content, mimeType) {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -2903,53 +2890,36 @@ function reportSummaryDownload(name, content, mimeType) {
 }
 
 function reportSummaryCsv(rows) {
-  const headers = ["Date", "SKU Code", "Item Description", "Department", "Qty Released", "SRP", "Total Amount", "Request"];
-  return [headers, ...rows.map(row => [reportSummaryDateKey(row.date), row.sku, row.description, row.department, row.qty, row.srp, row.amount, row.requestNumber])]
+  const headers = ["Date", "SKU Code", "Item Description", "Department", "Qty Released", "SRP", "Sales"];
+  return [headers, ...rows.map(row => [row.date, row.sku, row.description, row.department, row.qty, row.srp, row.amount])]
     .map(row => row.map(value => `"${String(value ?? "").replaceAll('"', '""')}"`).join(","))
     .join("\r\n");
 }
 
-function reportSummarySaveSnapshot(transactions) {
-  const snapshots = reportSummaryReadSnapshots();
-  if (reportSummarySnapshotError) throw new Error(`Existing snapshots could not be read: ${reportSummarySnapshotError}`);
-  const months = [...new Set(transactions.map(row => `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, "0")}`))];
-  if (!months.length) throw new Error("There is no released request history to save yet.");
-  for (const month of months) {
-    const rows = transactions.filter(row => `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, "0")}` === month)
-      .map(row => ({ ...row, date: reportSummaryDateKey(row.date) }));
-    const snapshot = { month, saved_at: new Date().toISOString(), rows };
-    const oldIndex = snapshots.findIndex(item => item.month === month);
-    if (oldIndex >= 0) snapshots[oldIndex] = snapshot;
-    else snapshots.push(snapshot);
+function reportSummaryRenderHistoryReference(content, history) {
+  if (!history) {
+    reportSummaryHero(content, [], [reportSummaryNote("Loading actual sales history from the Sales sheet…")]);
+    return;
   }
-  localStorage.setItem(reportSummarySnapshotsKey(), JSON.stringify(snapshots));
-  reportSummarySnapshotError = "";
-  return months.length;
-}
-
-function reportSummaryRenderHistoryReference(content, transactions) {
-  const snapshots = reportSummaryReadSnapshots().sort((a, b) => b.month.localeCompare(a.month));
-  const monthKeys = [...new Set(transactions.map(row => `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, "0")}`))].sort().reverse();
-  const snapshotByMonth = new Map(snapshots.map(snapshot => [snapshot.month, snapshot]));
-  const options = [["LIVE", "CURRENT SHEET (live)"], ...[...new Set([...monthKeys, ...snapshots.map(item => item.month)])].sort().reverse()
-    .map(month => [month, `${reportSummaryDateLabel(new Date(Number(month.slice(0, 4)), Number(month.slice(5, 7)) - 1, 1), { month: "short", year: "numeric" })}${snapshotByMonth.has(month) ? " · saved snapshot" : " · live"}`])];
-  if (!options.some(option => option[0] === reportSummaryHistoryMonth)) reportSummaryHistoryMonth = "LIVE";
-  let rows = transactions;
-  if (reportSummaryHistoryMonth !== "LIVE") {
-    const snapshot = snapshotByMonth.get(reportSummaryHistoryMonth);
-    rows = snapshot
-      ? snapshot.rows.map(row => ({ ...row, date: reportSummaryDate(row.date) })).filter(row => row.date)
-      : transactions.filter(row => `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, "0")}` === reportSummaryHistoryMonth);
-  }
+  const month = history.month || "";
+  const monthLabel = reportSummaryMonthLabel(month);
+  const options = (history.available_months || []).map(key => [key, reportSummaryMonthLabel(key).toLocaleUpperCase()]);
+  if (!options.some(option => option[0] === month)) options.unshift([month, monthLabel.toLocaleUpperCase()]);
+  if (!options.length) options.push([month || "CURRENT", "CURRENT MONTH"]);
+  if (reportSummaryHistoryMonth === "CURRENT") reportSummaryHistoryMonth = month || "CURRENT";
+  if (!options.some(option => option[0] === reportSummaryHistoryMonth)) reportSummaryHistoryMonth = month;
+  const rows = history.rows || [];
   const query = reportSummaryHistorySearch.trim().toLocaleLowerCase();
-  const visible = rows.filter(row => !query || [row.sku, row.description, row.department, row.requestNumber].some(value => String(value || "").toLocaleLowerCase().includes(query)))
-    .sort((a, b) => b.date - a.date || b.requestNumber.localeCompare(a.requestNumber));
-  const distinctDays = new Set(visible.map(row => reportSummaryDateKey(row.date))).size;
+  const visible = rows.filter(row => !query || [row.sku, row.description, row.department].some(value => String(value || "").toLocaleLowerCase().includes(query)))
+    .sort((a, b) => b.date.localeCompare(a.date) || a.sku.localeCompare(b.sku));
+  const distinctDays = new Set(visible.map(row => row.date)).size;
   const totals = visible.reduce((sum, row) => ({ qty: sum.qty + row.qty, amount: sum.amount + row.amount }), { qty: 0, amount: 0 });
   const controls = reportSummaryCreateControls();
-  reportSummaryAddSelect(controls, "↶ VIEW", options, reportSummaryHistoryMonth, value => {
+  reportSummaryAddSelect(controls, "↶ MONTH", options, month, value => {
     reportSummaryHistoryMonth = value;
-    renderReportSummary();
+    reportSummaryData.sales_history = null;
+    reportSummarySalesHistoryLoaded = false;
+    void loadReportSummary();
   }, "Historical data view");
   reportSummaryAddSearch(controls, reportSummaryHistorySearch, "Search SKU, item or department", value => {
     reportSummaryHistorySearch = value;
@@ -2957,57 +2927,25 @@ function reportSummaryRenderHistoryReference(content, transactions) {
   });
   const downloadButton = reportSummaryElement("button", "report-summary-control-button", "⇩  DOWNLOAD");
   downloadButton.type = "button";
-  downloadButton.addEventListener("click", () => reportSummaryDownload("summary-history.csv", reportSummaryCsv(visible), "text/csv;charset=utf-8"));
-  const downloadAllButton = reportSummaryElement("button", "report-summary-control-button ghost", "▣  DOWNLOAD ALL MONTHS");
-  downloadAllButton.type = "button";
-  downloadAllButton.addEventListener("click", () => {
-    const rowsByMonth = new Map();
-    for (const row of transactions) {
-      const month = `${row.date.getFullYear()}-${String(row.date.getMonth() + 1).padStart(2, "0")}`;
-      rowsByMonth.set(month, rowsByMonth.has(month) ? [...rowsByMonth.get(month), row] : [row]);
-    }
-    for (const snapshot of snapshots) {
-      rowsByMonth.set(snapshot.month, snapshot.rows.map(row => ({ ...row, date: reportSummaryDate(row.date) })).filter(row => row.date));
-    }
-    const allRows = [...rowsByMonth.values()].flat();
-    reportSummaryDownload("summary-history-all-months.csv", reportSummaryCsv(allRows), "text/csv;charset=utf-8");
-  });
-  const snapshotButton = reportSummaryElement("button", "report-summary-control-button ghost", "▣  SAVE SNAPSHOT NOW");
-  snapshotButton.type = "button";
-  snapshotButton.addEventListener("click", () => {
-    try {
-      const count = reportSummarySaveSnapshot(transactions);
-      reportSummaryTransientStatus = `Snapshot saved in this browser for ${count} month${count === 1 ? "" : "s"}.`;
-      renderReportSummary();
-    } catch (error) {
-      console.error("Unable to save the summary report snapshot.", error);
-      reportSummaryTransientStatus = `Could not save snapshot: ${error.message}`;
-      renderReportSummary();
-    }
-  });
-  controls.append(downloadButton, downloadAllButton, snapshotButton);
-  const snapshotMeta = snapshotByMonth.get(reportSummaryHistoryMonth);
-  const dateCovered = reportSummaryHistoryMonth === "LIVE" ? "dates on the sheet now"
-    : snapshotMeta?.saved_at ? `saved ${new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(snapshotMeta.saved_at))}` : "current sheet rows for month";
+  downloadButton.addEventListener("click", () => reportSummaryDownload(`sales-history-${month || "current"}.csv`, reportSummaryCsv(visible), "text/csv;charset=utf-8"));
+  controls.append(downloadButton);
   const firstCardEntries = [
-    ["RECORDS", visible.length.toLocaleString("en-US"), reportSummaryHistoryMonth === "LIVE" ? "CURRENT SHEET" : reportSummaryHistoryMonth, "var(--rs-accent)"],
-    ["DAYS COVERED", distinctDays, dateCovered, "#a78bfa"],
+    ["SALES RECORDS", visible.length.toLocaleString("en-US"), monthLabel, "var(--rs-accent)"],
+    ["DAYS WITH SALES", distinctDays, "selected month", "#a78bfa"],
     ["UNITS RELEASED", totals.qty.toLocaleString("en-US"), "", "#4ade80"],
-    ["TOTAL AMOUNT", reportSummaryCurrency(totals.amount), "", "#f472b6"],
+    ["TOTAL SALES", reportSummaryCurrency(totals.amount), "", "#f472b6"],
   ];
   reportSummaryHero(content, firstCardEntries, [
-    reportSummaryNote(reportSummarySnapshotError
-      ? `Could not read saved snapshots: ${reportSummarySnapshotError}`
-      : "History comes from available Released / Received request records. Snapshots are stored in this browser only; they cannot restore entries removed from the workbook."),
+    reportSummaryNote("Actual dated QTY RELEASED and SALES values from the Sales sheet. Request-history estimates are not included."),
     controls,
     reportSummaryElement("span", "report-summary-history-count", `${visible.length.toLocaleString("en-US")} records.`),
   ]);
   const rowsForTable = visible.slice(0, 1000).map(row => [
-    reportSummaryDateLabel(row.date, { month: "short", day: "numeric", year: "numeric" }),
+    reportSummaryDateLabel(reportSummaryDate(row.date), { month: "short", day: "numeric", year: "numeric" }),
     row.sku || "—", row.description || "—", row.department || "—", row.qty,
     reportSummaryCurrency(row.srp), reportSummaryCurrency(row.amount),
   ]);
-  reportSummaryAddSection(content, "HISTORICAL DATA", ["DATE", "SKU CODE", "ITEM DESCRIPTION", "DEPARTMENT", "QTY RELEASED", "SRP", "TOTAL AMOUNT"], rowsForTable, "No release records found for this view.");
+  reportSummaryAddSection(content, "SALES HISTORY", ["DATE", "SKU CODE", "ITEM DESCRIPTION", "DEPARTMENT", "QTY RELEASED", "SRP", "SALES"], rowsForTable, "No sales recorded for this month.");
 }
 
 function reportSummaryRenderReference() {
@@ -3019,21 +2957,24 @@ function reportSummaryRenderReference() {
   if (tab.id === "DAILY_SALES") reportSummaryRenderDailyReference(content, reportSummaryData.sales_daily);
   else if (tab.id === "TOP_RANK") reportSummaryRenderTopRankReference(content);
   else if (tab.id === "MONTH_COMPARE") reportSummaryRenderMonthCompareReference(content, reportSummaryData.month_compare);
+  else if (tab.id === "HISTORICAL_DATA") reportSummaryRenderHistoryReference(content, reportSummaryData.sales_history);
   else {
     const transactions = reportSummaryTransactions();
     if (["CRITICAL_STOCK", "OUT_OF_STOCK", "STOCK_AVAILABILITY"].includes(tab.id)) reportSummaryRenderStockReference(content, tab.id);
     else if (["NEAR_EXPIRATION", "EXPIRATION_MONITORING"].includes(tab.id)) reportSummaryRenderExpiryReference(content, tab.id);
     else if (tab.id === "AGING") reportSummaryRenderAgingReference(content);
-    else if (tab.id === "HISTORICAL_DATA") reportSummaryRenderHistoryReference(content, transactions);
   }
   const clock = document.querySelector("#report-summary-clock");
   if (clock) {
     clock.textContent = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }).format(new Date()).toUpperCase();
     clock.dateTime = new Date().toISOString();
   }
-  document.querySelector("#report-summary-status").textContent = reportSummaryTransientStatus || (reportSummaryData.products_tab
-    ? `LIVE · SALES + ${reportSummaryData.products_tab.toUpperCase()} + REQUEST HISTORY`
-    : "LIVE · WAITING FOR WORKBOOK DATA");
+  const status = reportSummaryTransientStatus || (tab.id === "HISTORICAL_DATA"
+    ? "LIVE · SALES SHEET"
+    : reportSummaryData.products_tab
+      ? `LIVE · SALES + ${reportSummaryData.products_tab.toUpperCase()} + REQUEST HISTORY`
+      : "LIVE · WAITING FOR WORKBOOK DATA");
+  document.querySelector("#report-summary-status").textContent = status;
 }
 
 function renderReportSummaryTabs() {
@@ -3061,6 +3002,7 @@ function renderReportSummaryTabs() {
       renderReportSummary();
       if (tab.id === "TOP_RANK" ? !reportSummaryTopRankLoaded
         : tab.id === "MONTH_COMPARE" ? !reportSummaryMonthCompareLoaded
+        : tab.id === "HISTORICAL_DATA" ? !reportSummarySalesHistoryLoaded
         : tab.id !== "DAILY_SALES" && !reportSummaryOverviewLoaded) {
         void loadReportSummary();
       }
@@ -3079,6 +3021,7 @@ async function loadReportSummary(force = false) {
   const dailySalesOnly = reportSummaryActiveTab === "DAILY_SALES";
   const topRankOnly = reportSummaryActiveTab === "TOP_RANK";
   const monthCompareOnly = reportSummaryActiveTab === "MONTH_COMPARE";
+  const salesHistoryOnly = reportSummaryActiveTab === "HISTORICAL_DATA";
   if (topRankOnly && reportSummaryTopRankLoaded && !force) {
     renderReportSummary();
     return;
@@ -3087,7 +3030,11 @@ async function loadReportSummary(force = false) {
     renderReportSummary();
     return;
   }
-  if (!dailySalesOnly && !topRankOnly && !monthCompareOnly && reportSummaryOverviewLoaded && !force) {
+  if (salesHistoryOnly && reportSummarySalesHistoryLoaded && !force) {
+    renderReportSummary();
+    return;
+  }
+  if (!dailySalesOnly && !topRankOnly && !monthCompareOnly && !salesHistoryOnly && reportSummaryOverviewLoaded && !force) {
     renderReportSummary();
     return;
   }
@@ -3103,8 +3050,11 @@ async function loadReportSummary(force = false) {
     const action = dailySalesOnly ? "report_summary_daily_sales"
       : topRankOnly ? "report_summary_top_rank"
       : monthCompareOnly ? "report_summary_month_compare"
+      : salesHistoryOnly ? "report_summary_sales_history"
       : "report_summary";
-    const result = await requestSheetData(action);
+    const result = await requestSheetData(action, salesHistoryOnly && reportSummaryHistoryMonth !== "CURRENT"
+      ? { month: reportSummaryHistoryMonth }
+      : undefined);
     if (loadId !== reportSummaryLoadId || activePageId !== "report-summary" || currentSession?.user.id !== userId) return;
     if (dailySalesOnly) {
       reportSummaryData.sales_daily = result.sales_daily && typeof result.sales_daily === "object"
@@ -3118,6 +3068,12 @@ async function loadReportSummary(force = false) {
         ? result.month_compare
         : null;
       reportSummaryMonthCompareLoaded = true;
+    } else if (salesHistoryOnly) {
+      reportSummaryData.sales_history = result.sales_history && typeof result.sales_history === "object"
+        ? result.sales_history
+        : null;
+      reportSummaryHistoryMonth = reportSummaryData.sales_history?.month || "CURRENT";
+      reportSummarySalesHistoryLoaded = true;
     } else {
       reportSummaryData = {
         requests: Array.isArray(result.requests) ? result.requests : [],
@@ -3128,6 +3084,7 @@ async function loadReportSummary(force = false) {
           : { daily: [], today_products: [] },
         top_rank: reportSummaryNormalizeTopRank(result.top_rank),
         month_compare: reportSummaryData.month_compare,
+        sales_history: reportSummaryData.sales_history,
       };
       reportSummaryOverviewLoaded = true;
       reportSummaryTopRankLoaded = true;
@@ -3140,6 +3097,8 @@ async function loadReportSummary(force = false) {
         ? `Updated ${updatedAt} · Daily and monthly Sales top rank.`
         : monthCompareOnly
           ? `Updated ${updatedAt} · Month comparison from Sales.`
+          : salesHistoryOnly
+            ? `Updated ${updatedAt} · Sales history from the Sales sheet.`
           : `Updated ${updatedAt} · Sales, ${reportSummaryData.products_tab}, and request history.`;
   } catch (error) {
     if (loadId !== reportSummaryLoadId || currentSession?.user.id !== userId) return;
