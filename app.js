@@ -580,7 +580,7 @@ function renderInventoryFormRows() {
     const tr = document.createElement("tr");
     const values = [
       row.sku_code, row.description, row.uom, row.srp, row.total_on_hand,
-      "", "", "", "", "", "", "",
+      "", row.form_qty, "", "", "", "", "",
     ];
     for (const [index, value] of values.entries()) {
       const cell = document.createElement("td");

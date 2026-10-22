@@ -456,10 +456,26 @@ async function loadInventory(
   const { departments, categories } = await loadInventoryValues(spreadsheetId);
   const department = resolveInventoryDepartment(user, requestedDepartment, departments);
   if (!department) return { department, departments, categories, rows: [] };
-  const values = await readValues(spreadsheetId, department, "B8:X");
+  const [values, dataValues] = await Promise.all([
+    readValues(spreadsheetId, department, "B8:X"),
+    readValues(spreadsheetId, "data", "A2:Y"),
+  ]);
+  const formQtyByKey = new Map<string, string>();
+  for (const row of dataValues) {
+    const sku = String(row[0] ?? "").trim();
+    if (!sku) continue;
+    const key = `${sku.toLocaleLowerCase()}\u0000${String(row[6] ?? "").trim().toLocaleLowerCase()}`;
+    formQtyByKey.set(key, String(row[24] ?? "").trim());
+  }
   const rows = values
     .map((row, index) => inventoryRow(row, index))
-    .filter(row => row.sku_code);
+    .filter(row => row.sku_code)
+    .map(row => ({
+      ...row,
+      form_qty: formQtyByKey.get(
+        `${String(row.sku_code).toLocaleLowerCase()}\u0000${String(row.department).toLocaleLowerCase()}`,
+      ) || "",
+    }));
   return { department, departments, categories, rows };
 }
 
