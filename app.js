@@ -2351,7 +2351,7 @@ function reportSummaryRenderStock(content, stockRows, mode) {
   const scope = document.querySelector("#report-summary-department-filter").selectedOptions[0]?.textContent || "All departments";
   let matches;
   let title;
-  let note = `Source: configured products tab "${reportSummaryData.products_tab}", status column M.`;
+  let note = 'Source: the "data" tab status column (M), matched by SKU and department.';
   if (mode === "CRITICAL_STOCK") {
     matches = stockRows.filter(row => status(row) === "CRITICAL IN STOCK" || status(row) === "LOW STOCK");
     title = "Critical and low stock";
@@ -2763,7 +2763,7 @@ function reportSummaryStockDisplayRows(rows) {
 function reportSummaryRenderStockReference(content, mode) {
   const status = row => String(row.status || "").trim().toLocaleUpperCase();
   const all = reportSummaryData.stock_rows;
-  const source = `Source: the "${reportSummaryData.products_tab}" tab's STATUS column (M).`;
+  const source = 'Source: the "data" tab status column (M), matched by SKU and department.';
   if (mode === "CRITICAL_STOCK") {
     const critical = reportSummaryFilterStockRows(all.filter(row => status(row) === "CRITICAL IN STOCK"));
     const low = reportSummaryFilterStockRows(all.filter(row => status(row) === "LOW STOCK"));

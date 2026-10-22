@@ -2051,12 +2051,20 @@ Deno.serve(async (request: Request) => {
       }
       if (body.action === "report_summary") {
         if (!user.isAdmin) return respond({ error: "Admin access is required to view the summary report." }, 403);
-        const [requests, productRows, salesData, topRank] = await Promise.all([
+        const [requests, productRows, dataRows, salesData, topRank] = await Promise.all([
           loadWorkflowRequests(settings.spreadsheet_id, "all", "", "", true, Object.keys(requestTabs)),
           readValues(settings.spreadsheet_id, settings.products_tab || "data", "A2:N"),
+          readValues(settings.spreadsheet_id, "data", "A2:M"),
           loadDailySales(settings.spreadsheet_id),
           loadTopRank(settings.spreadsheet_id),
         ]);
+        const stockStatusByKey = new Map<string, string>();
+        for (const row of dataRows) {
+          const sku = String(row[0] ?? "").trim();
+          if (!sku) continue;
+          const key = `${sku.toLocaleLowerCase()}\u0000${String(row[6] ?? "").trim().toLocaleLowerCase()}`;
+          stockStatusByKey.set(key, String(row[12] ?? "").trim());
+        }
         const stockRows = productRows
           .filter(row => String(row[0] ?? "").trim() || String(row[1] ?? "").trim())
           .map(row => ({
@@ -2067,7 +2075,9 @@ Deno.serve(async (request: Request) => {
             department: String(row[6] ?? "").trim(),
             srp: String(row[8] ?? "").trim(),
             last_received: String(row[9] ?? "").trim(),
-            status: String(row[12] ?? "").trim(),
+            status: stockStatusByKey.get(
+              `${String(row[0] ?? "").trim().toLocaleLowerCase()}\u0000${String(row[6] ?? "").trim().toLocaleLowerCase()}`,
+            ) || "",
             expiry: String(row[13] ?? "").trim(),
           }));
         return respond({
