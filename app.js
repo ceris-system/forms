@@ -60,9 +60,11 @@ let notificationRefreshTimer = null;
 let currentUnreadNotificationCount = 0;
 let adminUserAccounts = [];
 let activityLogs = [];
+let selectedActivityLogIds = new Set();
 let activityLogOffset = 0;
 let activityLogsHaveMore = false;
 let activityLogLoadId = 0;
+let activityLogDeleteInProgress = false;
 let reportSummaryData = { requests: [], stock_rows: [], products_tab: "", sales_daily: { daily: [], today_products: [] }, top_rank: { daily: { departments: [], products: [] }, monthly: { departments: [], products: [] } } };
 let reportSummaryActiveTab = "DAILY_SALES";
 let reportSummaryTopRankPeriod = "daily";
@@ -1390,13 +1392,22 @@ function renderActivityLogs() {
   if (!activityLogs.length) {
     const row = document.createElement("tr");
     const cell = document.createElement("td");
-    cell.colSpan = 7;
+    cell.colSpan = 8;
     cell.textContent = "No user activity logs found.";
     row.append(cell);
     list.append(row);
   } else {
     for (const entry of activityLogs) {
       const row = document.createElement("tr");
+      const selectionCell = document.createElement("td");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "activity-log-row-select";
+      checkbox.value = String(entry.id);
+      checkbox.checked = selectedActivityLogIds.has(checkbox.value);
+      checkbox.setAttribute("aria-label", `Select activity log for ${entry.username}`);
+      selectionCell.append(checkbox);
+      row.append(selectionCell);
       const values = [
         entry.username,
         entry.department || "—",
@@ -1415,6 +1426,102 @@ function renderActivityLogs() {
     }
   }
   document.querySelector("#load-more-activity-logs").hidden = !activityLogsHaveMore;
+  updateActivityLogSelectionControls();
+}
+
+function updateActivityLogSelectionControls() {
+  const selectAll = document.querySelector("#select-all-activity-logs");
+  const deleteButton = document.querySelector("#delete-activity-logs");
+  const visibleIds = activityLogs.map(entry => String(entry.id));
+  const selectedVisibleCount = visibleIds.filter(id => selectedActivityLogIds.has(id)).length;
+  selectAll.checked = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
+  selectAll.indeterminate = selectedVisibleCount > 0 && selectedVisibleCount < visibleIds.length;
+  selectAll.disabled = visibleIds.length === 0 || activityLogDeleteInProgress;
+  deleteButton.disabled = selectedActivityLogIds.size === 0 || activityLogDeleteInProgress;
+  document.querySelector("#save-activity-logs").disabled = visibleIds.length === 0;
+  document.querySelector("#activity-log-selection-status").textContent =
+    `${selectedActivityLogIds.size} log${selectedActivityLogIds.size === 1 ? "" : "s"} selected. Select all loaded logs or choose individual rows.`;
+}
+
+function saveActivityLogs() {
+  if (!activityLogs.length) return;
+  const escapeCsv = value => {
+    const text = String(value ?? "");
+    const safeText = /^[\s]*[=+\-@]/.test(text) ? `'${text}` : text;
+    return `"${safeText.replace(/"/g, '""')}"`;
+  };
+  const rows = [
+    ["User", "Department", "Activity", "Details", "Result", "Timestamp", "Session"],
+    ...activityLogs.map(entry => [
+      entry.username,
+      entry.department || "",
+      entry.action,
+      entry.details || "",
+      entry.succeeded ? "Success" : "Failed",
+      formatActivityTimestamp(entry.occurred_at),
+      entry.session_id || "",
+    ]),
+  ];
+  const csv = `\uFEFF${rows.map(row => row.map(escapeCsv).join(",")).join("\r\n")}`;
+  const now = new Date();
+  const date = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+  ].join("-");
+  const blobUrl = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = blobUrl;
+  link.download = `User-Logs-History-${date}.csv`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+  document.querySelector("#activity-log-status").textContent =
+    `Saved ${activityLogs.length} loaded activity log${activityLogs.length === 1 ? "" : "s"} to ${link.download}.`;
+}
+
+async function deleteSelectedActivityLogs() {
+  const ids = [...selectedActivityLogIds];
+  if (!ids.length || activityLogDeleteInProgress) return;
+  const confirmed = window.confirm(
+    `Permanently delete ${ids.length} selected activity log${ids.length === 1 ? "" : "s"}? This cannot be undone.`,
+  );
+  if (!confirmed) return;
+
+  const button = document.querySelector("#delete-activity-logs");
+  const status = document.querySelector("#activity-log-status");
+  activityLogDeleteInProgress = true;
+  button.disabled = true;
+  updateActivityLogSelectionControls();
+  let deletedCount = 0;
+  const deletedIds = new Set();
+  try {
+    for (let index = 0; index < ids.length; index += 500) {
+      const result = await callPortalAdmin({
+        action: "activity_logs_delete",
+        log_ids: ids.slice(index, index + 500),
+      });
+      deletedCount += Number(result.deleted_count || 0);
+      for (const id of result.deleted_ids || []) deletedIds.add(String(id));
+    }
+    selectedActivityLogIds.clear();
+    status.textContent = `Deleted ${deletedCount} activity log${deletedCount === 1 ? "" : "s"}.`;
+    await loadActivityLogs();
+  } catch (error) {
+    console.error("Unable to delete selected user activity logs.", error);
+    status.textContent = deletedCount
+      ? `Deleted ${deletedCount} log${deletedCount === 1 ? "" : "s"}, but the remaining logs could not be deleted: ${activityLogErrorMessage(error)}`
+      : `Could not delete selected logs: ${activityLogErrorMessage(error)}`;
+    if (deletedCount) {
+      selectedActivityLogIds = new Set(ids.filter(id => !deletedIds.has(id)));
+      activityLogs = activityLogs.filter(entry => !deletedIds.has(String(entry.id)));
+      renderActivityLogs();
+    }
+  } finally {
+    activityLogDeleteInProgress = false;
+    updateActivityLogSelectionControls();
+  }
 }
 
 function updateActivityUserOptions(logUsers) {
@@ -1441,6 +1548,7 @@ async function loadActivityLogs(append = false) {
   if (!append) {
     activityLogOffset = 0;
     activityLogs = [];
+    selectedActivityLogIds.clear();
     activityLogsHaveMore = false;
     renderActivityLogs();
   }
@@ -3712,6 +3820,22 @@ document.querySelector("#refresh-user-accounts").addEventListener("click", refre
 document.querySelector("#refresh-activity-logs").addEventListener("click", () => void loadActivityLogs());
 document.querySelector("#activity-user-filter").addEventListener("change", () => void loadActivityLogs());
 document.querySelector("#load-more-activity-logs").addEventListener("click", () => void loadActivityLogs(true));
+document.querySelector("#save-activity-logs").addEventListener("click", saveActivityLogs);
+document.querySelector("#delete-activity-logs").addEventListener("click", () => void deleteSelectedActivityLogs());
+document.querySelector("#select-all-activity-logs").addEventListener("change", event => {
+  for (const entry of activityLogs) {
+    const id = String(entry.id);
+    if (event.target.checked) selectedActivityLogIds.add(id);
+    else selectedActivityLogIds.delete(id);
+  }
+  renderActivityLogs();
+});
+document.querySelector("#activity-log-list").addEventListener("change", event => {
+  if (!event.target.matches(".activity-log-row-select")) return;
+  if (event.target.checked) selectedActivityLogIds.add(event.target.value);
+  else selectedActivityLogIds.delete(event.target.value);
+  updateActivityLogSelectionControls();
+});
 document.querySelector("#account-edit-form").addEventListener("submit", saveUserAccount);
 document.querySelector("#edit-user-role").addEventListener("change", () =>
   updateUserFormAccess("edit-user-role", "edit-user-form-access", "edit-allowed-form-types"));

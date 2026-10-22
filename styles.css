@@ -272,9 +272,12 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 #report-summary .report-summary-change { color: var(--change-color, #287245); }
 #report-summary .report-summary-pill { background: color-mix(in srgb, var(--pill-color, var(--rs-accent)) 12%, white); }
 .report-summary-empty td:first-child { text-align: center; }
-.activity-log-controls { display: flex; align-items: flex-end; gap: 10px; }
+.activity-log-controls { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 10px; }
 .activity-log-controls label { display: grid; gap: 5px; color: #67736b; font-size: 10px; font-weight: 600; }
 .activity-log-controls select { min-width: 170px; height: 37px; padding: 0 9px; border: 1px solid #e1e7e2; border-radius: 6px; background: white; color: var(--ink); font-size: 11px; }
+#activity-log-list input[type="checkbox"], #select-all-activity-logs { width: 16px; height: 16px; accent-color: var(--green); cursor: pointer; }
+.activity-log-table th:first-child, .activity-log-table td:first-child { width: 38px; text-align: center; }
+.activity-log-controls button:disabled { cursor: not-allowed; opacity: .55; }
 .stat-card { position: relative; display: flex; min-height: 111px; align-items: flex-start; gap: 13px; overflow: hidden; padding: 17px 18px; border: 1px solid var(--line); border-radius: 10px; background: white; }
 .stat-icon { display: grid; width: 35px; height: 35px; flex: 0 0 auto; place-items: center; border-radius: 9px; font-size: 18px; }
 .lavender { background: #f0eef7; color: #777098; }

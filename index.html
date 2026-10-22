@@ -203,13 +203,16 @@
                   <select id="activity-user-filter"><option value="">All users</option></select>
                 </label>
                 <button class="button button-secondary" id="refresh-activity-logs" type="button">Refresh logs</button>
+                <button class="button button-secondary" id="save-activity-logs" type="button">Save logs</button>
+                <button class="button button-secondary" id="delete-activity-logs" type="button" disabled>Delete selected</button>
               </div>
             </div>
             <button class="button button-secondary" type="button" data-back-to-reports>← Reports &amp; History</button>
             <p class="field-hint" id="activity-log-status" role="status" aria-live="polite"></p>
+            <p class="field-hint" id="activity-log-selection-status" aria-live="polite">0 logs selected. Select all loaded logs or choose individual rows.</p>
             <div class="user-accounts-scroll activity-log-scroll">
               <table class="user-accounts-table activity-log-table">
-                <thead><tr><th>User</th><th>Department</th><th>Activity</th><th>Details</th><th>Result</th><th>Timestamp</th><th>Session</th></tr></thead>
+                <thead><tr><th><input id="select-all-activity-logs" type="checkbox" aria-label="Select all loaded activity logs"></th><th>User</th><th>Department</th><th>Activity</th><th>Details</th><th>Result</th><th>Timestamp</th><th>Session</th></tr></thead>
                 <tbody id="activity-log-list"></tbody>
               </table>
             </div>

@@ -231,6 +231,27 @@ Deno.serve(async (request: Request) => {
         has_more: logs.length > 100,
       });
     }
+    if (body.action === "activity_logs_delete") {
+      if (!isMasterAdmin) return respond({ error: "Only the Master Admin can delete user activity logs." }, 403);
+      if (!Array.isArray(body.log_ids) || body.log_ids.length < 1 || body.log_ids.length > 500) {
+        return respond({ error: "Select between 1 and 500 activity logs to delete." }, 400);
+      }
+      const logIds = [...new Set(body.log_ids.map(value => String(value)))];
+      if (logIds.some(id => !/^[1-9]\d{0,18}$/.test(id))) {
+        return respond({ error: "The selected activity log IDs are invalid." }, 400);
+      }
+      const { data, error } = await adminClient
+        .from("mw_user_activity_logs")
+        .delete()
+        .in("id", logIds)
+        .select("id");
+      if (error) throw error;
+      return respond({
+        ok: true,
+        deleted_count: (data || []).length,
+        deleted_ids: (data || []).map(entry => String(entry.id)),
+      });
+    }
     if (body.action === "complete_password_change") {
       const password = typeof body.password === "string" ? body.password : "";
       if (password.length < 8 || password.length > 256) {
