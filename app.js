@@ -182,11 +182,11 @@ function formatDisplayDate(value) {
   let year;
   let month;
   let day;
-  let match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  let match = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:$|[T\s])/);
   if (match) {
     [, year, month, day] = match;
   } else {
-    match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    match = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:$|[\s,])/);
     if (match) [, month, day, year] = match;
   }
 
