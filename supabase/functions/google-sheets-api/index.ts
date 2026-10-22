@@ -72,7 +72,7 @@ async function getGoogleAccessToken(): Promise<string> {
   const issuedAt = Math.floor(Date.now() / 1000);
   const unsigned = `${base64Url(JSON.stringify({ alg: "RS256", typ: "JWT" }))}.${base64Url(JSON.stringify({
     iss: email,
-    scope: "https://www.googleapis.com/auth/spreadsheets",
+    scope: "https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.readonly",
     aud: "https://oauth2.googleapis.com/token",
     iat: issuedAt,
     exp: issuedAt + 3600,
@@ -121,6 +121,58 @@ async function googleRequest(path: string, options: RequestInit = {}): Promise<R
     invalidateGoogleReadCache(spreadsheetId);
   }
   return result;
+}
+
+async function googleDriveRequest(path: string): Promise<any> {
+  const token = await getGoogleAccessToken();
+  const response = await fetch(`https://www.googleapis.com/drive/v3/${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const text = await response.text();
+  let result: any;
+  try {
+    result = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error("Google Drive returned an invalid archive response.");
+  }
+  if (!response.ok) {
+    const message = result.error?.message || "Google Drive archive request failed.";
+    throw new Error(`${message} Confirm the Drive API is enabled and the service account has Viewer access to the archive folder.`);
+  }
+  return result;
+}
+
+async function listSalesArchiveFiles(): Promise<{ id: string; name: string }[]> {
+  const folderId = Deno.env.get("GOOGLE_SALES_ARCHIVE_FOLDER_ID");
+  if (!folderId) return [];
+  if (!/^[A-Za-z0-9_-]+$/.test(folderId)) throw new Error("The Sales archive folder setting is invalid.");
+  const query = new URLSearchParams({
+    q: `'${folderId}' in parents and trashed = false`,
+    fields: "files(id,name,mimeType)",
+    pageSize: "1000",
+    orderBy: "name",
+    supportsAllDrives: "true",
+    includeItemsFromAllDrives: "true",
+  });
+  const result = await googleDriveRequest(`files?${query}`);
+  if (!Array.isArray(result.files)) throw new Error("Google Drive returned an invalid archive folder listing.");
+  return result.files
+    .filter((file: Record<string, unknown>) => typeof file.name === "string"
+      && /^sales-\d{4}-(0[1-9]|1[0-2])\.json$/.test(file.name)
+      && typeof file.id === "string")
+    .map((file: { id: string; name: string }) => ({ id: file.id, name: file.name }));
+}
+
+async function readSalesArchive(month: string): Promise<Record<string, any> | null> {
+  const expectedName = `sales-${month}.json`;
+  const matches = (await listSalesArchiveFiles()).filter(file => file.name === expectedName);
+  if (!matches.length) return null;
+  if (matches.length > 1) throw new Error(`Multiple ${expectedName} archives exist in the Sales archive folder.`);
+  const archive = await googleDriveRequest(`files/${encodeURIComponent(matches[0].id)}?alt=media`);
+  if (archive.month !== month || !Array.isArray(archive.rows) || !Array.isArray(archive.dates)) {
+    throw new Error(`${expectedName} does not match the required Sales archive format.`);
+  }
+  return archive;
 }
 
 async function googleReadRequest(path: string): Promise<Record<string, any>> {
@@ -1585,9 +1637,14 @@ async function loadMonthSalesComparison(spreadsheetId: string): Promise<{
     if (!date || date < previousMonthStart || date > today) continue;
     dateColumns.push({ date, qtyColumn, salesColumn });
   }
+
+  const previousArchive = await readSalesArchive(previousMonthStart.slice(0, 7));
+  const columnsToRead = previousArchive
+    ? dateColumns.filter(column => column.date >= currentMonthStart)
+    : dateColumns;
   const ranges = [
     a1Range("Sales", "A3:H"),
-    ...dateColumns.flatMap(({ qtyColumn, salesColumn }) => [
+    ...columnsToRead.flatMap(({ qtyColumn, salesColumn }) => [
       a1Range("Sales", `${salesSheetColumn(qtyColumn)}3:${salesSheetColumn(qtyColumn)}`),
       a1Range("Sales", `${salesSheetColumn(salesColumn)}3:${salesSheetColumn(salesColumn)}`),
     ]),
@@ -1612,7 +1669,10 @@ async function loadMonthSalesComparison(spreadsheetId: string): Promise<{
     target.qty += qty;
     target.amount += amount;
   };
-  const hasPreviousData = dateColumns.some(({ date }) => date >= previousMonthStart && date <= previousComparableEnd);
+  const hasPreviousData = previousArchive
+    ? previousArchive.dates.some((date: unknown) => typeof date === "string"
+      && date >= previousMonthStart && date <= previousComparableEnd)
+    : dateColumns.some(({ date }) => date >= previousMonthStart && date <= previousComparableEnd);
 
   productRows.forEach((row, rowIndex) => {
     const sku = String(row[0] ?? "").trim();
@@ -1628,7 +1688,7 @@ async function loadMonthSalesComparison(spreadsheetId: string): Promise<{
     const departmentTotals = department
       ? departments.get(department) || { current: emptyTotals(), previousComparable: emptyTotals() }
       : null;
-    for (const [index, columns] of dateColumns.entries()) {
+    for (const [index, columns] of columnsToRead.entries()) {
       const qty = salesSheetNumber(values[index * 2 + 1]?.[rowIndex]?.[0]);
       const amount = salesSheetNumber(values[index * 2 + 2]?.[rowIndex]?.[0]);
       if (columns.date >= currentMonthStart && columns.date <= today) {
@@ -1647,6 +1707,34 @@ async function loadMonthSalesComparison(spreadsheetId: string): Promise<{
     products.set(sku, product);
     if (department && departmentTotals) departments.set(department, departmentTotals);
   });
+
+  if (previousArchive) {
+    for (const row of previousArchive.rows) {
+      if (!row || typeof row.date !== "string" || row.date < previousMonthStart || row.date > previousMonthFullEnd) continue;
+      const sku = String(row.sku || "").trim();
+      if (!sku) continue;
+      const qty = salesSheetNumber(row.qty);
+      const amount = salesSheetNumber(row.amount);
+      add(previousFull, qty, amount);
+      const product = products.get(sku) || {
+        sku,
+        description: String(row.description || "").trim(),
+        current: emptyTotals(),
+        previousComparable: emptyTotals(),
+      };
+      if (row.date <= previousComparableEnd) {
+        add(previousComparable, qty, amount);
+        add(product.previousComparable, qty, amount);
+      }
+      products.set(sku, product);
+      const department = String(row.department || "").trim();
+      if (department) {
+        const departmentTotals = departments.get(department) || { current: emptyTotals(), previousComparable: emptyTotals() };
+        if (row.date <= previousComparableEnd) add(departmentTotals.previousComparable, qty, amount);
+        departments.set(department, departmentTotals);
+      }
+    }
+  }
 
   const rounded = (totals: { qty: number; amount: number }) => ({
     qty: totals.qty,
@@ -1732,9 +1820,26 @@ async function loadSalesHistory(spreadsheetId: string, requestedMonth: unknown):
     const date = salesSheetDateKey(dateHeaders[salesColumn]) || salesSheetDateKey(dateHeaders[qtyColumn]);
     if (date && date <= todayKey) dateColumns.push({ date, qtyColumn, salesColumn });
   }
-  const availableMonths = [...new Set(dateColumns.map(column => column.date.slice(0, 7)))]
+  const archiveFiles = await listSalesArchiveFiles();
+  const archive = await readSalesArchive(month);
+  const availableMonths = [...new Set([
+    ...dateColumns.map(column => column.date.slice(0, 7)),
+    ...archiveFiles.map(file => file.name.slice("sales-".length, -".json".length)),
+  ])]
     .sort()
     .reverse();
+  if (archive) {
+    const rows = archive.rows.map((row: Record<string, unknown>) => ({
+      date: String(row.date || ""),
+      sku: String(row.sku || ""),
+      description: String(row.description || ""),
+      department: String(row.department || ""),
+      qty: salesSheetNumber(row.qty),
+      srp: salesSheetNumber(row.srp),
+      amount: Math.round(salesSheetNumber(row.amount) * 100) / 100,
+    })).filter((row: Record<string, any>) => row.date.startsWith(`${month}-`) && row.sku);
+    return { month, available_months: availableMonths, rows };
+  }
   const selectedColumns = dateColumns.filter(column => column.date.startsWith(`${month}-`));
   const ranges = [a1Range("Sales", "A3:F")];
   if (selectedColumns.length) {

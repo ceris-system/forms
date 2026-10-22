@@ -12,12 +12,12 @@ Dates displayed in request forms, inventory, approvals, and history use the `MON
 
 ### 1. Configure Google Sheets access
 
-1. In Google Cloud, select the project containing the dedicated MW service account and enable the **Google Sheets API**.
+1. In Google Cloud, select the project containing the dedicated MW service account and enable the **Google Sheets API** and **Google Drive API**.
 2. Create a service-account JSON key and keep the file private. Never upload it to the website, repository, Cloud Shell, or chat.
 3. Open the JSON file locally and copy only `client_email` and `private_key`. In Supabase **Project Settings → Edge Functions → Secrets**, add:
    - `GOOGLE_SERVICE_ACCOUNT_EMAIL`: the JSON file's `client_email`.
    - `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`: the complete `private_key` value, including its `-----BEGIN PRIVATE KEY-----` and `-----END PRIVATE KEY-----` lines. Keep this secret private.
-4. Share the common Google workbook with that service-account email as an **Editor**.
+4. Share the common Google workbook with that service-account email as an **Editor**. Share the dedicated `MW_PORTAL_SALES_ARCHIVE` Drive folder with the same email as a **Viewer**; the service account only reads the completed archives.
 5. Keep the shared lookup lists in these tabs:
    - Product catalog tab, read from row 2 onward and loaded only when **Select products** is opened. It is shown in this order: SKU Code from column A, Product Description from B, UOM from C, Cost from H, SRP from I, Expiration Date from D, Onhand from E, and Total Onhand from F. Column G contains the associated outgoing department; **Select products** only shows rows whose G value matches the selected outgoing department. Rows without both a SKU Code and Product Description are skipped.
    - The outgoing-department dropdown is loaded from unique non-empty values in `AREA!A1:A`. Product selection still matches the chosen department against Products column G.
@@ -56,6 +56,12 @@ Dates displayed in request forms, inventory, approvals, and history use the `MON
    ```
 
    The project ref is the part before `.supabase.co` in the Project URL. `username-login` is public because its job is to create the user's session. The admin and Google Sheets functions require a valid signed-in user.
+5. Configure the archive folder ID as an Edge Function secret, using the ID from its Drive folder link:
+
+   ```sh
+   supabase secrets set GOOGLE_SALES_ARCHIVE_FOLDER_ID=YOUR_ARCHIVE_FOLDER_ID
+   supabase functions deploy google-sheets-api
+   ```
 
 ### 3. Publish the portal
 
@@ -96,7 +102,11 @@ After approval, a request appears under **Pending to release** for a signed-in u
 
 The **Notifications** inbox keeps form-specific updates for the signed-in user. New submissions notify Admins and Master Admins; approval notifies the requester and outgoing department; release notifies the requester and incoming department, except Pull Out completion, which notifies the requester and outgoing department; receipt notifies the requester and outgoing department. Notifications show the request number and form type, link to the relevant workflow page and request, can be marked read individually or all at once, and can be deleted individually from the signed-in user's inbox. The unread badge checks for changes every minute without reloading the dashboard; inbox history is paginated.
 
-The Admin-only **Report Summary** is displayed directly in its workspace and uses the page scroll rather than nested report scroll areas. Its Daily Sales view reads actual daily quantities and sales amounts from the `Sales` tab. The first two rows contain product/date and `QTY RELEASED`/`SALES` headers; product details are in columns A:F, with item rows beginning at row 3. Daily quantities and sales amounts are summed from columns G and H respectively, grouped by SKU code. Month vs Last Month sums the dated `QTY RELEASED`/`SALES` column pairs for each month, groups the results by department and SKU code, and compares month-to-date against the matching days of the previous month. Historical Data lists the actual Sales values for a selected month instead of using estimated released-request values. The chart and totals use actual `SALES` values and do not estimate sales from request history. To keep the page responsive, report sections load Sales, request history, and product details only as needed.
+The Admin-only **Report Summary** is displayed directly in its workspace and uses the page scroll rather than nested report scroll areas. Its Daily Sales view reads actual daily quantities and sales amounts from the `Sales` tab. The first two rows contain product/date and `QTY RELEASED`/`SALES` headers; product details are in columns A:F, with item rows beginning at row 3. Daily quantities and sales amounts are summed from columns G and H respectively, grouped by SKU code. Month vs Last Month sums the dated `QTY RELEASED`/`SALES` column pairs for each month, groups the results by department and SKU code, and compares month-to-date against the matching days of the previous month. When a completed-month archive exists, the comparison uses that archived month for its previous-month totals; otherwise it uses the matching dated columns still present on the live sheet. Historical Data lists the actual Sales values for a selected month, preferring the saved archive for completed months. The chart and totals use actual `SALES` values and do not estimate sales from request history. To keep the page responsive, report sections load Sales, request history, and product details only as needed.
+
+### Automatic Sales history archive
+
+The bound Apps Script file [`google-apps-script/SalesArchive.gs`](./google-apps-script/SalesArchive.gs) saves a JSON snapshot of each completed month into the dedicated `MW_PORTAL_SALES_ARCHIVE` Drive folder. To install it, open the Sales workbook, select **Extensions → Apps Script**, add a separate script file named `SalesArchive`, and paste in that file's code. Keep any existing Apps Script files. Select `installSalesArchiveTrigger` and run it once, then approve the requested spreadsheet and Drive permissions. This creates a time-driven trigger for 2 a.m. on day 1 in the spreadsheet's timezone; it archives the preceding month as `sales-YYYY-MM.json`. The trigger runs as the account that installed it, so that account must be able to edit the workbook and archive folder. The service account needs Viewer access to the archive folder for the portal to read files. The first archive is created by the next trigger run; previous months are not backfilled automatically. To archive the immediately preceding month manually, run `archivePreviousMonthSales` from Apps Script.
 
 The **Inventory** dashboard reads department tabs from row 8 onward, using `AREA!A1:A` for department choices and `DD!A1:A` for adjustment categories. Admins can choose any listed department; regular Users are restricted to their assigned department. The item drawer reads and updates expiration batch 1 date/quantity in columns H/I, batch 2 in J/K, and batch 3 in L/M for the selected row; adjustments write category, quantity, and remarks to columns R:T when provided. The server validates the department, category, batch values, and selected SKU row. Stock received, latest received date, and total available quantity are read-only values from the sheet. The **Inventory Form** can be refreshed and printed.
 
