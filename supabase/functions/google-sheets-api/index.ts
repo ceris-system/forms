@@ -1119,12 +1119,12 @@ async function createFormNotifications(
     received: "my-requests",
   };
   const messages: Record<FormNotificationEvent, string> = {
-    submitted: "A new request is pending approval.",
-    approved: "The request was approved and is ready for release.",
+    submitted: `A new ${formNames[details.formType]} was received for approval. Request: ${details.requestNumber}.`,
+    approved: `${formNames[details.formType]} (${details.requestNumber}) was approved and is ready for release.`,
     released: details.formType === "pull-out"
-      ? "The pull-out request is complete."
-      : "The request was released and is ready to receive.",
-    received: "The request was marked as received.",
+      ? `${formNames[details.formType]} (${details.requestNumber}) was released and is complete.`
+      : `${formNames[details.formType]} (${details.requestNumber}) was released and is ready to receive.`,
+    received: `${formNames[details.formType]} (${details.requestNumber}) was received and completed.`,
   };
   const formName = formNames[details.formType];
   if (!formName) throw new Error("Cannot notify users about an unknown form type.");

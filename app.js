@@ -57,6 +57,8 @@ let notificationLoadId = 0;
 let notificationOffset = 0;
 let notificationRequestToReveal = null;
 let notificationRefreshTimer = null;
+let notificationRealtimeChannel = null;
+let notificationRealtimeUserId = "";
 let currentUnreadNotificationCount = 0;
 let adminUserAccounts = [];
 let activityLogs = [];
@@ -1272,7 +1274,7 @@ function updateSessionUi(session, navigate = true) {
       mustChangePassword: false,
     };
   }
-  updateNotificationPolling(Boolean(signedIn && !currentUserProfile.mustChangePassword));
+  updateNotificationSubscription(Boolean(signedIn && !currentUserProfile.mustChangePassword));
   const accountName = signedIn ? currentUserProfile.username || "Signed-in user" : "Guest";
   document.body.classList.add("user-mode");
   document.querySelector("#toggle-user-mode").textContent = signedIn ? "Sign out" : "Sign in";
@@ -2121,18 +2123,91 @@ function setNotificationCount(count) {
   document.querySelector("#mark-all-notifications-read").disabled = unreadCount === 0;
 }
 
-function updateNotificationPolling(enabled) {
-  if (enabled && !notificationRefreshTimer) {
-    notificationRefreshTimer = window.setInterval(() => {
-      if (document.visibilityState === "visible") {
-        void refreshNotificationCount();
-        void refreshWorkflowCounts();
-      }
-    }, 5 * 60_000);
-  } else if (!enabled && notificationRefreshTimer) {
+function updateNotificationSubscription(enabled) {
+  const userId = enabled ? currentSession?.user.id || "" : "";
+  if (notificationRealtimeChannel && notificationRealtimeUserId !== userId) {
+    const previousChannel = notificationRealtimeChannel;
+    notificationRealtimeChannel = null;
+    notificationRealtimeUserId = "";
+    void supabaseClient?.removeChannel(previousChannel).catch(error => {
+      console.error("Unable to close the previous notifications subscription.", error);
+    });
+  }
+  if (notificationRefreshTimer && (!enabled || notificationRealtimeChannel)) {
     window.clearInterval(notificationRefreshTimer);
     notificationRefreshTimer = null;
   }
+  if (!userId || !supabaseClient) return;
+  if (notificationRealtimeChannel && notificationRealtimeUserId === userId) return;
+
+  notificationRealtimeUserId = userId;
+  notificationRealtimeChannel = supabaseClient
+    .channel(`form-notifications:${userId}`)
+    .on("postgres_changes", {
+      event: "INSERT",
+      schema: "public",
+      table: "mw_form_notifications",
+      filter: `recipient_id=eq.${userId}`,
+    }, payload => {
+      if (currentSession?.user.id !== userId) return;
+      const notification = payload.new;
+      void refreshNotificationCount();
+      void refreshWorkflowCounts();
+      if (activePageId === "notifications") {
+        void loadNotifications();
+        return;
+      }
+      const queueLoaders = {
+        approvals: loadApprovalQueue,
+        "pending-release": loadPendingRelease,
+        "pending-received": loadPendingReceived,
+        "my-requests": loadMyRequests,
+      };
+      const pageByDestination = {
+        approvals: "approvals",
+        "pending-release": "pending-release",
+        "pending-received": "pending-received",
+        "my-requests": "my-requests",
+      };
+      if (pageByDestination[notification.destination_page] === activePageId) {
+        if (notification.request_number) {
+          notificationRequestToReveal = {
+            requestNumber: notification.request_number,
+            destinationPage: notification.destination_page,
+          };
+        }
+        if (queueLoaders[activePageId]) void queueLoaders[activePageId]();
+      }
+    })
+    .subscribe(status => {
+      if (notificationRealtimeUserId !== userId || currentSession?.user.id !== userId) return;
+      if (status === "SUBSCRIBED") {
+        if (notificationRefreshTimer) {
+          window.clearInterval(notificationRefreshTimer);
+          notificationRefreshTimer = null;
+        }
+        void refreshNotificationCount();
+        void refreshWorkflowCounts();
+      } else if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) {
+        console.warn(`Notifications Realtime subscription status: ${status}. Falling back to periodic refresh.`);
+        if (!notificationRefreshTimer) {
+          notificationRefreshTimer = window.setInterval(() => {
+            if (document.visibilityState === "visible") {
+              void refreshNotificationCount();
+              void refreshWorkflowCounts();
+              const queueLoaders = {
+                approvals: loadApprovalQueue,
+                "pending-release": loadPendingRelease,
+                "pending-received": loadPendingReceived,
+                "my-requests": loadMyRequests,
+                notifications: loadNotifications,
+              };
+              if (queueLoaders[activePageId]) void queueLoaders[activePageId]();
+            }
+          }, 60_000);
+        }
+      }
+    });
 }
 
 function setWorkflowCount(selector, count) {
@@ -2177,7 +2252,7 @@ async function refreshNotificationCount() {
     if (currentSession?.user.id !== userId || loadId !== notificationCountLoadId) return;
     const previousCount = currentUnreadNotificationCount;
     setNotificationCount(result.unread_count);
-    if (activePageId === "notifications" && result.unread_count > previousCount) void loadNotifications();
+    if (result.unread_count > previousCount && activePageId === "notifications") void loadNotifications();
   } catch (error) {
     if (currentSession?.user.id !== userId || loadId !== notificationCountLoadId) return;
     console.error("Unable to refresh the unread notification count.", error);
@@ -3789,6 +3864,29 @@ function makeWorkflowActionButton(request, action, card) {
         ? `${remaining} request${remaining === 1 ? "" : "s"}.`
         : "No more requests in this stage.";
       setWorkflowCount(queueDetails.count, remaining);
+      void refreshWorkflowCounts();
+      const isRequestOwner = String(request.submitted_by || "").trim().toLocaleLowerCase() ===
+        String(currentUserProfile.username || "").trim().toLocaleLowerCase();
+      let destinationPage = "";
+      if (action === "approval_queue") destinationPage = "pending-release";
+      else if (action === "pending_release" && isAdmin && request.form_type_id !== "pull-out") {
+        destinationPage = "pending-received";
+      } else if (isRequestOwner && (action === "pending_release" || action === "pending_received")) {
+        destinationPage = "my-requests";
+      }
+      if (destinationPage) {
+        notificationRequestToReveal = {
+          requestNumber: request.request_number,
+          destinationPage,
+        };
+        activatePortalPage(destinationPage);
+      } else if (action === "pending_release" && request.form_type_id !== "pull-out") {
+        status.textContent = "Request released. It is now available in Pending to received for the incoming department.";
+      } else if (action === "pending_release") {
+        status.textContent = "Pull Out request released and completed.";
+      } else if (action === "pending_received") {
+        status.textContent = "Request received. The requester can now see it as complete in My requests.";
+      }
       if (result.notification_warning) window.alert(result.notification_warning);
     } catch (error) {
       console.error("Unable to update request workflow status.", error);
@@ -3864,6 +3962,12 @@ async function submitRequest(event) {
     setRequestNotice(result.notification_warning
       ? `Request ${result.request_number} was saved to Google Sheets. ${result.notification_warning}`
       : `Request ${result.request_number} was saved to Google Sheets.`);
+    saveStatus.textContent = `Request ${result.request_number} submitted. Opening My requests…`;
+    notificationRequestToReveal = {
+      requestNumber: result.request_number,
+      destinationPage: "my-requests",
+    };
+    activatePortalPage("my-requests");
   } catch (error) {
     console.error("Unable to submit request.", error);
     setRequestNotice(`Request was not saved to Google Sheets: ${error.message || "Request failed."}`);
