@@ -191,7 +191,8 @@ h1 { margin-bottom: 8px; font-size: clamp(25px, 3vw, 32px); font-weight: 700; le
 .report-summary-tab-row { display: contents; }
 .report-summary-rank-select { min-height: 29px; max-width: 145px; padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 5px; background: #fff; color: #243447; color-scheme: light; font: 700 9px var(--font); }
 .report-summary-top-rank-select { width: 105px; margin-left: 4px; }
-.report-summary-top-rank-total { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: flex-end; gap: 4px 10px; margin-left: auto; padding-left: 14px; border-left: 1px solid #e1e9ef; text-align: right; }
+.report-summary-top-rank-totals { display: flex; flex: 1; justify-content: flex-end; gap: 14px; margin-left: auto; }
+.report-summary-top-rank-total { display: grid; align-content: center; gap: 4px; padding-left: 14px; border-left: 1px solid #e1e9ef; text-align: right; }
 .report-summary-top-rank-total span { color: #748397; font-size: 8px; font-weight: 700; letter-spacing: .6px; }
 .report-summary-top-rank-total strong { color: #6d5bd0; font-size: 16px; }
 .report-summary-top-rank-total small { color: #748397; font-size: 8px; }
@@ -739,7 +740,8 @@ td { padding: 10px 12px; border-top: 1px solid #f0f1ef; color: #536057; font-siz
   .report-summary-tab { flex-basis: 125px; gap: 4px; padding: 5px; font-size: 9px; }
   .report-summary-tab-icon { width: 20px; height: 20px; font-size: 10px; }
   .report-summary-title { font-size: 10px; }
-  .report-summary-top-rank-total { width: 100%; justify-content: space-between; margin: 3px 0 0; padding: 6px 0 0; border-top: 1px solid #e1e9ef; border-left: 0; text-align: left; }
+  .report-summary-top-rank-totals { width: 100%; justify-content: space-between; gap: 8px; margin: 3px 0 0; padding-top: 6px; border-top: 1px solid #e1e9ef; }
+  .report-summary-top-rank-total { flex: 1; padding: 0; border: 0; text-align: left; }
   .report-summary-hero { padding: 8px; }
   .report-summary-card { min-width: 80px; min-height: 45px; padding: 6px; }
   .report-summary-card strong { font-size: 11px; }

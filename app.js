@@ -2662,17 +2662,28 @@ function reportSummaryRenderTopRankReference(content) {
     reportSummaryRenderReference();
   });
   content.querySelector(".report-summary-hero-top").append(rankSelect);
-  const grandTotal = selectedPeriod.products.reduce((total, row) => ({
+  const departmentTotal = selectedPeriod.departments.reduce((total, row) => ({
+    qty: total.qty + reportSummaryNumber(row[1]),
+    amount: total.amount + reportSummaryNumber(row[2]),
+  }), { qty: 0, amount: 0 });
+  const productTotal = selectedPeriod.products.reduce((total, row) => ({
     qty: total.qty + reportSummaryNumber(row[2]),
     amount: total.amount + reportSummaryNumber(row[3]),
   }), { qty: 0, amount: 0 });
-  const grandTotalDisplay = reportSummaryElement("div", "report-summary-top-rank-total");
-  grandTotalDisplay.append(
-    reportSummaryElement("span", "", `${periodLabel.toLocaleUpperCase()} GRAND TOTAL`),
-    reportSummaryElement("strong", "", reportSummaryCurrency(grandTotal.amount)),
-    reportSummaryElement("small", "", `${grandTotal.qty.toLocaleString("en-US")} units released`),
-  );
-  content.querySelector(".report-summary-hero-top").append(grandTotalDisplay);
+  const grandTotals = reportSummaryElement("div", "report-summary-top-rank-totals");
+  for (const [label, total] of [
+    ["DEPARTMENT GRAND TOTAL", departmentTotal],
+    ["SKU CODE GRAND TOTAL", productTotal],
+  ]) {
+    const summary = reportSummaryElement("div", "report-summary-top-rank-total");
+    summary.append(
+      reportSummaryElement("span", "", label),
+      reportSummaryElement("strong", "", reportSummaryCurrency(total.amount)),
+      reportSummaryElement("small", "", `${total.qty.toLocaleString("en-US")} units released`),
+    );
+    grandTotals.append(summary);
+  }
+  content.querySelector(".report-summary-hero-top").append(grandTotals);
   const departmentPanel = reportSummaryElement("section", "report-summary-panel report-summary-rank-period");
   departmentPanel.append(reportSummarySectionHeading("BY DEPARTMENT", "♛"));
   departmentPanel.append(reportSummaryTable(
