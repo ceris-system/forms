@@ -1443,8 +1443,8 @@ function updateActivityLogSelectionControls() {
     `${selectedActivityLogIds.size} log${selectedActivityLogIds.size === 1 ? "" : "s"} selected. Select all loaded logs or choose individual rows.`;
 }
 
-function saveActivityLogs() {
-  if (!activityLogs.length) return;
+function downloadActivityLogsCsv(logs) {
+  if (!logs.length) throw new Error("There are no activity logs to save for this filter.");
   const escapeCsv = value => {
     const text = String(value ?? "");
     const safeText = /^[\s]*[=+\-@]/.test(text) ? `'${text}` : text;
@@ -1452,7 +1452,7 @@ function saveActivityLogs() {
   };
   const rows = [
     ["User", "Department", "Activity", "Details", "Result", "Timestamp", "Session"],
-    ...activityLogs.map(entry => [
+    ...logs.map(entry => [
       entry.username,
       entry.department || "",
       entry.action,
@@ -1477,8 +1477,42 @@ function saveActivityLogs() {
   link.click();
   link.remove();
   window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
-  document.querySelector("#activity-log-status").textContent =
-    `Saved ${activityLogs.length} loaded activity log${activityLogs.length === 1 ? "" : "s"} to ${link.download}.`;
+  return link.download;
+}
+
+async function saveActivityLogs() {
+  if (!activityLogs.length) return;
+  const saveButton = document.querySelector("#save-activity-logs");
+  const status = document.querySelector("#activity-log-status");
+  const selectedUserId = document.querySelector("#activity-user-filter").value;
+  saveButton.disabled = true;
+  const logs = [];
+  let offset = 0;
+  try {
+    let hasMore = true;
+    while (hasMore) {
+      const result = await callPortalAdmin({
+        action: "activity_logs_read",
+        user_id: selectedUserId,
+        offset,
+        limit: 1000,
+      });
+      logs.push(...(result.logs || []));
+      offset += (result.logs || []).length;
+      hasMore = Boolean(result.has_more);
+      status.textContent = `Preparing log file… ${logs.length} entr${logs.length === 1 ? "y" : "ies"} loaded.`;
+      if (hasMore && offset > 100_000) {
+        throw new Error("The export exceeds the maximum supported activity history size.");
+      }
+    }
+    const filename = downloadActivityLogsCsv(logs);
+    status.textContent = `Saved ${logs.length} activity log${logs.length === 1 ? "" : "s"} to ${filename}.`;
+  } catch (error) {
+    console.error("Unable to save user activity logs.", error);
+    status.textContent = `Could not save activity logs: ${activityLogErrorMessage(error)}`;
+  } finally {
+    saveButton.disabled = activityLogs.length === 0;
+  }
 }
 
 async function deleteSelectedActivityLogs() {

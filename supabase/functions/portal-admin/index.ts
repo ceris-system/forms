@@ -195,9 +195,13 @@ Deno.serve(async (request: Request) => {
     if (body.action === "activity_logs_read") {
       if (!isMasterAdmin) return respond({ error: "Only the Master Admin can view user activity logs." }, 403);
       const requestedOffset = Number(body.offset ?? 0);
+      const requestedLimit = Number(body.limit ?? 100);
       const requestedUserId = typeof body.user_id === "string" ? body.user_id : "";
       if (!Number.isSafeInteger(requestedOffset) || requestedOffset < 0 || requestedOffset > 100_000) {
         return respond({ error: "The activity log page is invalid." }, 400);
+      }
+      if (!Number.isSafeInteger(requestedLimit) || requestedLimit < 1 || requestedLimit > 1000) {
+        return respond({ error: "The activity log page size is invalid." }, 400);
       }
       if (requestedUserId && !/^[0-9a-f-]{36}$/i.test(requestedUserId)) {
         return respond({ error: "Choose a valid user filter." }, 400);
@@ -211,9 +215,12 @@ Deno.serve(async (request: Request) => {
         .order("occurred_at", { ascending: false })
         .limit(2000);
       if (requestedUserId) logsQuery = logsQuery.eq("user_id", requestedUserId);
+      const userOptionsPromise = requestedLimit > 100
+        ? Promise.resolve({ data: [], error: null })
+        : userOptionsQuery;
       const [logsResult, userOptionsResult] = await Promise.all([
-        logsQuery.range(requestedOffset, requestedOffset + 100),
-        userOptionsQuery,
+        logsQuery.range(requestedOffset, requestedOffset + requestedLimit),
+        userOptionsPromise,
       ]);
       if (logsResult.error) throw logsResult.error;
       if (userOptionsResult.error) throw userOptionsResult.error;
@@ -226,9 +233,9 @@ Deno.serve(async (request: Request) => {
       });
       const logs = logsResult.data || [];
       return respond({
-        logs: logs.slice(0, 100),
+        logs: logs.slice(0, requestedLimit),
         users,
-        has_more: logs.length > 100,
+        has_more: logs.length > requestedLimit,
       });
     }
     if (body.action === "activity_logs_delete") {
