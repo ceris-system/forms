@@ -113,7 +113,7 @@ create table if not exists public.mw_google_settings (
   outgoing_departments_tab text not null default 'area',
   incoming_departments_tab text not null default 'area',
   suppliers_tab text not null default 'dd',
-  updated_by uuid not null references auth.users(id),
+  updated_by uuid not null,
   updated_at timestamptz not null default now()
 );
 
@@ -123,7 +123,7 @@ create table if not exists public.mw_sheet_assignments (
     length(trim(output_tab)) between 1 and 100
     and output_tab !~ '[:\\/?*\[\]\r\n]'
   ),
-  updated_by uuid not null references auth.users(id),
+  updated_by uuid not null,
   updated_at timestamptz not null default now()
 );
 create unique index if not exists mw_sheet_assignments_output_tab_unique

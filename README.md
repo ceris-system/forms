@@ -45,8 +45,9 @@ Dates displayed in request forms, inventory, approvals, and history use the `MON
    - [`supabase/migrations/202610170001_user_activity_logs.sql`](./supabase/migrations/202610170001_user_activity_logs.sql)
    - [`supabase/migrations/202610220001_notifications_realtime.sql`](./supabase/migrations/202610220001_notifications_realtime.sql)
    - [`supabase/migrations/202610260001_master_admin_account_types_and_delete_guard.sql`](./supabase/migrations/202610260001_master_admin_account_types_and_delete_guard.sql)
+   - [`supabase/migrations/202610260002_allow_admin_account_deletion.sql`](./supabase/migrations/202610260002_allow_admin_account_deletion.sql)
 
-   These migrations add the sheet-synchronized sequence locks, status workflow, saved notifications, role/form access controls, full access for Master Admin accounts, Supabase-backed user activity logs, secure per-user Realtime delivery, and protection against deleting the last Master Admin. The activity logs do not need a Google Sheets tab. Deploy the updated `portal-admin` and `google-sheets-api` functions and publish the portal files.
+   These migrations add the sheet-synchronized sequence locks, status workflow, saved notifications, role/form access controls, full access for Master Admin accounts, Supabase-backed user activity logs, secure per-user Realtime delivery, protection against deleting the last Master Admin, and deletion-safe audit references for portal settings and assignments. The activity logs do not need a Google Sheets tab. Deploy the updated `portal-admin` and `google-sheets-api` functions and publish the portal files.
 3. Create the Master Admin account in **Authentication → Users** and confirm it. Map its username and grant Master Admin access in **SQL Editor**, replacing the example email:
 
    ```sql
