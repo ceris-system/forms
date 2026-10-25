@@ -4194,7 +4194,7 @@ document.addEventListener("input", event => {
   if (start !== null && end !== null) input.setSelectionRange(start, end);
 });
 document.querySelector("#add-user-form").addEventListener("submit", addUser);
-document.querySelector("#new-user-role").addEventListener("change", updateUserFormAccess);
+document.querySelector("#new-user-role").addEventListener("change", () => updateUserFormAccess());
 document.querySelector("#refresh-user-accounts").addEventListener("click", refreshUserAccounts);
 document.querySelector("#refresh-activity-logs").addEventListener("click", () => void loadActivityLogs());
 document.querySelector("#activity-user-filter").addEventListener("change", () => void loadActivityLogs());
