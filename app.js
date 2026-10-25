@@ -1411,9 +1411,10 @@ async function refreshAdminTools() {
     }
     document.body.classList.add("master-admin-mode");
     panel.hidden = false;
-    const adminRoleOption = document.querySelector(".master-admin-only-option");
-    adminRoleOption.hidden = !isMasterAdmin;
-    adminRoleOption.disabled = !isMasterAdmin;
+    for (const adminRoleOption of document.querySelectorAll(".master-admin-only-option")) {
+      adminRoleOption.hidden = !isMasterAdmin;
+      adminRoleOption.disabled = !isMasterAdmin;
+    }
     await loadAdminState();
     renderUserForms();
     document.querySelector("#account-role").textContent =
@@ -1479,7 +1480,7 @@ function updateUserFormAccess(
 ) {
   const role = document.querySelector(`#${roleSelectId}`).value;
   const formAccess = document.querySelector(`#${formAccessId}`);
-  const isUnrestrictedAdmin = role === "admin";
+  const isUnrestrictedAdmin = role === "admin" || role === "master_admin";
   formAccess.disabled = isUnrestrictedAdmin;
   if (isUnrestrictedAdmin) {
     for (const checkbox of formAccess.querySelectorAll(`input[name="${checkboxName}"]`)) checkbox.checked = true;
@@ -1502,12 +1503,13 @@ function renderUserAccounts() {
   }
 
   status.textContent = `${adminUserAccounts.length} account${adminUserAccounts.length === 1 ? "" : "s"}.`;
+  const masterAdminCount = adminUserAccounts.filter(item => item.is_master_admin).length;
   for (const account of adminUserAccounts) {
     const row = document.createElement("tr");
     const fields = [
       account.username,
       account.department || "—",
-      account.is_master_admin ? "Master Admin" : account.role === "admin" ? "Admin" : "User",
+      account.is_admin_user ? "Admin User" : account.is_master_admin ? "Master Admin" : account.role === "admin" ? "Admin" : "User",
       account.role === "admin"
         ? "All forms"
         : FORM_TYPES.filter(form => (account.allowed_form_types || []).includes(form.id))
@@ -1528,7 +1530,10 @@ function renderUserAccounts() {
     editButton.textContent = "Edit";
     editButton.addEventListener("click", () => openAccountEditor(account));
     actionsCell.append(editButton);
-    if (!account.is_master_admin) {
+    if (
+      account.user_id !== currentSession?.user.id
+      && (!account.is_master_admin || masterAdminCount > 1)
+    ) {
       const deleteButton = document.createElement("button");
       deleteButton.className = "button button-danger";
       deleteButton.type = "button";
@@ -1790,7 +1795,8 @@ function openAccountEditor(account) {
   const dialog = document.querySelector("#account-edit-dialog");
   document.querySelector("#account-edit-form").reset();
   document.querySelector("#edit-user-id").value = account.user_id;
-  document.querySelector("#account-edit-title").textContent = `Edit ${account.is_master_admin ? "Master Admin" : "user"} account`;
+  document.querySelector("#account-edit-title").textContent =
+    `Edit ${account.is_admin_user ? "Admin User" : account.is_master_admin ? "Master Admin" : "user"} account`;
   document.querySelector("#account-edit-username").textContent = account.username;
   const usernameInput = document.querySelector("#edit-user-login");
   usernameInput.value = account.username;
@@ -1812,7 +1818,7 @@ function openAccountEditor(account) {
   document.querySelector("#edit-user-password").disabled = Boolean(account.is_master_admin);
   document.querySelector("#edit-user-password").value = "";
   document.querySelector("#account-edit-status").textContent = account.is_master_admin
-    ? "Master Admin accounts are protected from role changes, password resets, and deletion."
+    ? `${account.is_admin_user ? "Admin User" : "Master Admin"} accounts are protected from username, role, status, and password changes here.`
     : "";
   document.querySelector("#save-account-edit").disabled = false;
   dialog.showModal();
@@ -1852,7 +1858,9 @@ async function saveUserAccount(event) {
       username: document.querySelector("#edit-user-login").value.trim().toLowerCase(),
       department: document.querySelector("#edit-user-department").value,
       role,
-      allowed_form_types: role === "admin" ? FORM_TYPES.map(form => form.id) : allowedFormTypes,
+      allowed_form_types: role === "admin" || role === "master_admin"
+        ? FORM_TYPES.map(form => form.id)
+        : allowedFormTypes,
       status: document.querySelector("#edit-user-status").value,
       password: document.querySelector("#edit-user-password").value,
     });
@@ -1930,7 +1938,7 @@ async function addUser(event) {
       username: document.querySelector("#new-user-username").value.trim().toLowerCase(),
       department: document.querySelector("#new-user-department").value.trim(),
       role,
-      allowed_form_types: role === "admin"
+      allowed_form_types: role === "admin" || role === "master_admin"
         ? FORM_TYPES.map(form => form.id)
         : allowedFormTypes,
       password: document.querySelector("#new-user-password").value,

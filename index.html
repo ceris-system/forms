@@ -330,7 +330,7 @@
             </div>
             </div>
             <div class="section-heading assignment-heading">
-              <div><p class="eyebrow">STAFF ACCOUNTS · MASTER ADMIN</p><h2>Add a user</h2><p class="section-description">Only the Master Admin can create accounts and assign the Admin or User role and allowed forms. An Admin is not a Master Admin and can be deleted from User accounts. Users set a new password when signing in with Default status.</p></div>
+              <div><p class="eyebrow">STAFF ACCOUNTS · MASTER ADMIN</p><h2>Add a user</h2><p class="section-description">Only a Master Admin can create accounts. An Admin User has full Master Admin authority, must have a department, and can select any department in the portal. Users set a new password when signing in with Default status.</p></div>
             </div>
             <form class="add-user-form" id="add-user-form">
               <label class="add-user-field" for="new-user-username">Username
@@ -345,6 +345,7 @@
                 <select id="new-user-role" name="role" required>
                   <option value="user" selected>User — assigned forms only</option>
                   <option class="master-admin-only-option" value="admin">Admin — manage all requests (not Master Admin)</option>
+                  <option class="master-admin-only-option" value="master_admin">Admin User — full Master Admin authority</option>
                 </select>
               </label>
               <label class="add-user-field" for="new-user-password">Temporary password
@@ -367,7 +368,7 @@
               <p class="field-hint add-user-status" id="add-user-status" role="status" aria-live="polite"></p>
             </form>
             <div class="section-heading assignment-heading">
-              <div><p class="eyebrow">ACCOUNT MANAGEMENT · MASTER ADMIN</p><h2>User accounts</h2><p class="section-description">Review accounts and update departments, roles, assigned forms, and status. Admin accounts are regular accounts and can be deleted here. Only Master Admin accounts are protected from deletion.</p></div>
+              <div><p class="eyebrow">ACCOUNT MANAGEMENT · MASTER ADMIN</p><h2>User accounts</h2><p class="section-description">Review accounts and update departments, roles, assigned forms, and status. Other Master Admin accounts can be deleted, but you cannot delete your own account or the last remaining Master Admin.</p></div>
               <button class="button button-secondary" id="refresh-user-accounts" type="button">Refresh accounts</button>
             </div>
             <p class="field-hint" id="user-accounts-status" role="status" aria-live="polite"></p>

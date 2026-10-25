@@ -311,13 +311,18 @@ Deno.serve(async (request: Request) => {
           .select("user_id, username, department, status, role, allowed_form_types")
           .order("username"),
         adminClient.from("mw_sheet_assignments").select("user_id, output_tab"),
-        adminClient.from("mw_portal_admins").select("user_id"),
+        adminClient.from("mw_portal_admins").select("user_id, admin_type"),
       ]);
       if (settingsResult.error) throw settingsResult.error;
       if (usersResult.error) throw usersResult.error;
       if (assignmentsResult.error) throw assignmentsResult.error;
       if (masterAdminsResult.error) throw masterAdminsResult.error;
-      const masterAdminIds = new Set((masterAdminsResult.data || []).map(account => String(account.user_id)));
+      const masterAdminTypes = new Map<string, string>(
+        (masterAdminsResult.data || []).map(account => [
+          String(account.user_id),
+          String(account.admin_type || "master_admin"),
+        ] as const),
+      );
       return respond({
         spreadsheet_url: settingsResult.data?.spreadsheet_url || "",
         products_tab: settingsResult.data?.products_tab || "data",
@@ -326,7 +331,8 @@ Deno.serve(async (request: Request) => {
         suppliers_tab: settingsResult.data?.suppliers_tab || "dd",
         users: (usersResult.data || []).map(account => ({
           ...account,
-          is_master_admin: masterAdminIds.has(String(account.user_id)),
+          is_master_admin: masterAdminTypes.has(String(account.user_id)),
+          is_admin_user: masterAdminTypes.get(String(account.user_id)) === "admin_user",
         })),
         assignments: assignmentsResult.data || [],
       });
@@ -337,7 +343,11 @@ Deno.serve(async (request: Request) => {
       const department = typeof body.department === "string" ? body.department.trim() : "";
       const password = typeof body.password === "string" ? body.password : "";
       const status = body.status === "active" ? "active" : body.status === "default" ? "default" : "";
-      const role = body.role === "admin" ? "admin" : body.role === "user" ? "user" : "";
+      const requestedRole = body.role === "admin" || body.role === "master_admin"
+        ? body.role
+        : body.role === "user" ? "user" : "";
+      const isNewMasterAdmin = requestedRole === "master_admin";
+      const role = isNewMasterAdmin ? "admin" : requestedRole;
       const requestedForms = Array.isArray(body.allowed_form_types)
         ? [...new Set(body.allowed_form_types.filter((value): value is string => typeof value === "string"))]
         : [];
@@ -396,7 +406,28 @@ Deno.serve(async (request: Request) => {
         throw new Error(`The portal username could not be saved, so the new Auth account was removed: ${mappingError.message}`);
       }
 
-      return respond({ ok: true, username, department, status, role, allowed_form_types: formTypes, user_id: created.user.id }, 201);
+      if (isNewMasterAdmin) {
+        const { error: masterAdminError } = await adminClient
+          .from("mw_portal_admins")
+          .insert({ user_id: created.user.id, admin_type: "admin_user" });
+        if (masterAdminError) {
+          const { error: cleanupError } = await adminClient.auth.admin.deleteUser(created.user.id);
+          if (cleanupError) {
+            throw new Error(`The account was created but Master Admin access could not be saved (${masterAdminError.message}); automatic account cleanup failed (${cleanupError.message}). Remove the new account manually.`);
+          }
+          throw new Error(`Master Admin access could not be saved, so the new account was removed: ${masterAdminError.message}`);
+        }
+      }
+
+      return respond({
+        ok: true,
+        username,
+        department,
+        status,
+        role: isNewMasterAdmin ? "master_admin" : role,
+        allowed_form_types: formTypes,
+        user_id: created.user.id,
+      }, 201);
     }
 
     if (body.action === "update_user") {
@@ -511,7 +542,13 @@ Deno.serve(async (request: Request) => {
         .maybeSingle();
       if (targetAdminError) throw targetAdminError;
       if (targetMasterAdmin) {
-        return respond({ error: "Master Admin accounts are protected from deletion." }, 409);
+        const { count, error: countError } = await adminClient
+          .from("mw_portal_admins")
+          .select("user_id", { count: "exact", head: true });
+        if (countError) throw countError;
+        if ((count || 0) <= 1) {
+          return respond({ error: "The last remaining Master Admin account cannot be deleted." }, 409);
+        }
       }
       const { error: deleteError } = await adminClient.auth.admin.deleteUser(userId);
       if (deleteError) throw deleteError;

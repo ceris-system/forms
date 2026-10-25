@@ -100,6 +100,8 @@ set last_value = excluded.last_value;
 
 create table if not exists public.mw_portal_admins (
   user_id uuid primary key references auth.users(id) on delete cascade,
+  admin_type text not null default 'master_admin'
+    check (admin_type in ('master_admin', 'admin_user')),
   created_at timestamptz not null default now()
 );
 
