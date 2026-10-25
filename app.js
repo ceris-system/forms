@@ -1095,7 +1095,7 @@ async function loadRequestLookups(formType) {
   const incoming = document.querySelector("#incoming-department");
   const supplier = document.querySelector("#request-supplier");
   if (incoming) {
-    if (isMasterAdmin) {
+    if (isAdmin) {
       incoming.replaceChildren(new Option("Loading departments…", ""));
       incoming.disabled = true;
     } else {
@@ -1117,7 +1117,7 @@ async function loadRequestLookups(formType) {
     const result = await loadLookupLists();
     if (!isRequestFormOpen() || requestFormPage.dataset.formType !== formType) return;
     populateSelect(outgoing, result.account_departments || [], "department");
-    if (incoming && isMasterAdmin) populateSelect(incoming, result.account_departments || [], "department");
+    if (incoming && isAdmin) populateSelect(incoming, result.account_departments || [], "department");
     if (supplier) populateSelect(supplier, result.suppliers || [], "supplier");
     setRequestNotice(`Signed in as ${currentUserProfile.username || "your account"}.`);
   } catch (error) {
@@ -1125,7 +1125,7 @@ async function loadRequestLookups(formType) {
     if (!isRequestFormOpen() || requestFormPage.dataset.formType !== formType) return;
     outgoing.replaceChildren(new Option("Could not load outgoing departments", ""));
     if (incoming) {
-      if (isMasterAdmin) {
+      if (isAdmin) {
         incoming.replaceChildren(new Option("Could not load departments", ""));
         incoming.disabled = true;
       } else {
@@ -1496,7 +1496,7 @@ function updateUserFormAccess(
   const departmentSelect = document.querySelector(
     `#${roleSelectId === "new-user-role" ? "new-user-department" : "edit-user-department"}`,
   );
-  const departmentIsOptional = role === "master_admin";
+  const departmentIsOptional = role === "admin" || role === "master_admin";
   departmentSelect.required = !departmentIsOptional;
   departmentSelect.options[0].textContent = departmentIsOptional
     ? "No department assigned"

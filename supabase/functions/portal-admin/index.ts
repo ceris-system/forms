@@ -362,9 +362,9 @@ Deno.serve(async (request: Request) => {
       if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
         return respond({ error: "Username must be 3–32 letters, numbers, periods, underscores, or hyphens." }, 400);
       }
-      if ((!department && !isNewMasterAdmin) || department.length > 100) {
+      if ((!department && role !== "admin") || department.length > 100) {
         return respond({
-          error: isNewMasterAdmin
+          error: role === "admin"
             ? "Department must be 100 characters or fewer."
             : "Enter a department (up to 100 characters).",
         }, 400);
