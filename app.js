@@ -1095,8 +1095,13 @@ async function loadRequestLookups(formType) {
   const incoming = document.querySelector("#incoming-department");
   const supplier = document.querySelector("#request-supplier");
   if (incoming) {
-    incoming.replaceChildren(new Option(currentUserProfile.department || "Department not assigned", currentUserProfile.department || ""));
-    incoming.disabled = !currentUserProfile.department;
+    if (isMasterAdmin) {
+      incoming.replaceChildren(new Option("Loading departments…", ""));
+      incoming.disabled = true;
+    } else {
+      incoming.replaceChildren(new Option(currentUserProfile.department || "Department not assigned", currentUserProfile.department || ""));
+      incoming.disabled = !currentUserProfile.department;
+    }
   }
   if (formType === "pull-out" && !isAdmin) {
     outgoing.value = currentUserProfile.department;
@@ -1112,6 +1117,7 @@ async function loadRequestLookups(formType) {
     const result = await loadLookupLists();
     if (!isRequestFormOpen() || requestFormPage.dataset.formType !== formType) return;
     populateSelect(outgoing, result.account_departments || [], "department");
+    if (incoming && isMasterAdmin) populateSelect(incoming, result.account_departments || [], "department");
     if (supplier) populateSelect(supplier, result.suppliers || [], "supplier");
     setRequestNotice(`Signed in as ${currentUserProfile.username || "your account"}.`);
   } catch (error) {
@@ -1119,8 +1125,13 @@ async function loadRequestLookups(formType) {
     if (!isRequestFormOpen() || requestFormPage.dataset.formType !== formType) return;
     outgoing.replaceChildren(new Option("Could not load outgoing departments", ""));
     if (incoming) {
-      incoming.replaceChildren(new Option(currentUserProfile.department || "Department not assigned", currentUserProfile.department || ""));
-      incoming.disabled = !currentUserProfile.department;
+      if (isMasterAdmin) {
+        incoming.replaceChildren(new Option("Could not load departments", ""));
+        incoming.disabled = true;
+      } else {
+        incoming.replaceChildren(new Option(currentUserProfile.department || "Department not assigned", currentUserProfile.department || ""));
+        incoming.disabled = !currentUserProfile.department;
+      }
     }
     if (supplier) supplier.replaceChildren(new Option("Could not load suppliers", ""));
     setRequestNotice(`Could not load form lists: ${error.message}`);
@@ -1482,6 +1493,14 @@ function updateUserFormAccess(
   const formAccess = document.querySelector(`#${formAccessId}`);
   const isUnrestrictedAdmin = role === "admin" || role === "master_admin";
   formAccess.disabled = isUnrestrictedAdmin;
+  const departmentSelect = document.querySelector(
+    `#${roleSelectId === "new-user-role" ? "new-user-department" : "edit-user-department"}`,
+  );
+  const departmentIsOptional = role === "master_admin";
+  departmentSelect.required = !departmentIsOptional;
+  departmentSelect.options[0].textContent = departmentIsOptional
+    ? "No department assigned"
+    : "Select department…";
   if (isUnrestrictedAdmin) {
     for (const checkbox of formAccess.querySelectorAll(`input[name="${checkboxName}"]`)) checkbox.checked = true;
   }
@@ -1530,17 +1549,20 @@ function renderUserAccounts() {
     editButton.textContent = "Edit";
     editButton.addEventListener("click", () => openAccountEditor(account));
     actionsCell.append(editButton);
-    if (
-      account.user_id !== currentSession?.user.id
-      && (!account.is_master_admin || masterAdminCount > 1)
-    ) {
-      const deleteButton = document.createElement("button");
-      deleteButton.className = "button button-danger";
-      deleteButton.type = "button";
-      deleteButton.textContent = "Delete";
+    const deleteButton = document.createElement("button");
+    deleteButton.className = "button button-danger";
+    deleteButton.type = "button";
+    deleteButton.textContent = "Delete";
+    if (account.user_id === currentSession?.user.id) {
+      deleteButton.disabled = true;
+      deleteButton.title = "You cannot delete your own signed-in account.";
+    } else {
       deleteButton.addEventListener("click", () => void deleteUserAccount(account));
-      actionsCell.append(deleteButton);
+      if (account.is_master_admin && masterAdminCount === 1) {
+        deleteButton.title = "Cannot delete the last remaining Master Admin.";
+      }
     }
+    actionsCell.append(deleteButton);
     row.append(actionsCell);
     list.append(row);
   }

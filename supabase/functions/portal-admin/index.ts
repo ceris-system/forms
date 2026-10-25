@@ -362,7 +362,13 @@ Deno.serve(async (request: Request) => {
       if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
         return respond({ error: "Username must be 3–32 letters, numbers, periods, underscores, or hyphens." }, 400);
       }
-      if (!department || department.length > 100) return respond({ error: "Enter a department (up to 100 characters)." }, 400);
+      if ((!department && !isNewMasterAdmin) || department.length > 100) {
+        return respond({
+          error: isNewMasterAdmin
+            ? "Department must be 100 characters or fewer."
+            : "Enter a department (up to 100 characters).",
+        }, 400);
+      }
       if (!status) return respond({ error: "Choose Active or Default status." }, 400);
       if (password.length < 6 || password.length > 256) {
         return respond({ error: "Initial password must be between 6 and 256 characters." }, 400);
@@ -526,7 +532,7 @@ Deno.serve(async (request: Request) => {
       const userId = typeof body.user_id === "string" ? body.user_id : "";
       if (!/^[0-9a-f-]{36}$/i.test(userId)) return respond({ error: "Choose a valid user account." }, 400);
       if (userId === authData.user.id) {
-        return respond({ error: "You cannot delete your own signed-in Master Admin account." }, 409);
+        return respond({ error: "You cannot delete your own signed-in account." }, 409);
       }
       const { data: target, error: targetError } = await adminClient
         .from("login_usernames")
