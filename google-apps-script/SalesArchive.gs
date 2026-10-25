@@ -189,8 +189,35 @@ function salesArchiveDateKey(rawValue, displayValue, timezone) {
   if (rawValue instanceof Date && !isNaN(rawValue.getTime())) {
     return Utilities.formatDate(rawValue, timezone, "yyyy-MM-dd");
   }
-  const text = String(displayValue || rawValue || "").trim();
-  if (!text) return "";
-  const parsed = new Date(text);
-  return isNaN(parsed.getTime()) ? "" : Utilities.formatDate(parsed, timezone, "yyyy-MM-dd");
+
+  const values = [displayValue, rawValue].filter(value => value !== undefined && value !== null && value !== "");
+  for (const value of values) {
+    const text = String(value).trim();
+    if (!text) continue;
+
+    const isoMatch = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+    if (isoMatch) {
+      const year = Number(isoMatch[1]);
+      const month = Number(isoMatch[2]) - 1;
+      const day = Number(isoMatch[3]);
+      const parsed = new Date(Date.UTC(year, month, day, 12, 0, 0));
+      if (!isNaN(parsed.getTime())) return Utilities.formatDate(parsed, timezone, "yyyy-MM-dd");
+    }
+
+    const monthNameMatch = text.match(/^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})$/);
+    if (monthNameMatch) {
+      const month = new Date(Date.parse(monthNameMatch[1] + " 1, " + monthNameMatch[3])).getMonth();
+      const year = Number(monthNameMatch[3]);
+      const day = Number(monthNameMatch[2]);
+      const parsed = new Date(Date.UTC(year, month, day, 12, 0, 0));
+      if (!isNaN(parsed.getTime())) return Utilities.formatDate(parsed, timezone, "yyyy-MM-dd");
+    }
+
+    const parsed = new Date(text);
+    if (!isNaN(parsed.getTime())) {
+      return Utilities.formatDate(parsed, timezone, "yyyy-MM-dd");
+    }
+  }
+
+  return "";
 }
