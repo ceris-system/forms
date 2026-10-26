@@ -618,6 +618,16 @@ Deno.serve(async (request: Request) => {
     return respond({ error: "Unknown administration action." }, 400);
   } catch (error) {
     console.error("Portal administration request failed.", error);
-    return respond({ error: error instanceof Error ? error.message : "Portal administration failed." }, 500);
+    const message = error instanceof Error
+      ? error.message
+      : typeof error === "object" && error !== null && "message" in error && typeof error.message === "string"
+      ? error.message
+      : "Portal administration failed.";
+    if (/column .*admin_type.* does not exist/i.test(message)) {
+      return respond({
+        error: "The Supabase database is missing the Admin User update. Run supabase/migrations/202610260001_master_admin_account_types_and_delete_guard.sql in the Supabase SQL Editor, then refresh accounts.",
+      }, 500);
+    }
+    return respond({ error: message }, 500);
   }
 });
